@@ -22,10 +22,12 @@ class clusDB:
         maxOrbit = 53000
 
         with h5py.File( self.db_name, 'w', libver='latest' ) as fid:
-            mtbl = np.zeros( maxOrbit, dtype='uint16,uint8,uint8,uint16' )
-            mtbl.dtype.names = ('absOrbit','num_cluster','indx_clusDef','bcps')
-            mtbl[:]['absOrbit'] = np.arange( maxOrbit, dtype='uint16' )
-            mtbl[:]['indx_clusDef'] = 2**8-1
+            mtbl = np.zeros( maxOrbit, 
+                             dtype='uint16,uint8,uint8,uint16,uint16' )
+            mtbl.dtype.names = ('orbit','num_clus','indx_Clcon',
+                                'duration', 'num_info')
+            mtbl[:]['orbit'] = np.arange( maxOrbit, dtype='uint16' )
+            mtbl[:]['indx_Clcon'] = 2**8-1
             
             for ns in range(1,71):
                 grp = fid.create_group( "State_%02d" % (ns) )
@@ -51,64 +53,68 @@ class clusDB:
                 ax1 = ds.shape[0]
                 for ni in range(ax1):
                     if (clusDef_db[ni,:] == clusDef).all():
-                        ds_mtbl[mtbl[0],'indx_clusDef'] = ni
+                        ds_mtbl[mtbl[0],'indx_Clcon'] = ni
                         return
 
                 # new cluster definition: extent dataset
                 ds.resize(ax1+1, axis=0)
                 ds[ax1,:] = clusDef
-                ds_mtbl[mtbl[0],'indx_clusDef'] = ax1
+                ds_mtbl[mtbl[0],'indx_Clcon'] = ax1
 
     def fill_mtbl( self ):
         with h5py.File( self.db_name, 'r+' ) as fid:
-            for ns in range(1,71):
+            for ns in range(1, 71):
                 grp = fid['State_%02d' % (ns)]
                 if "clusDef" in grp:
-                    ds_mtbl = grp['metaTable']
-                    num_cluster  = ds_mtbl[:,'num_cluster']
-                    indx_clusDef = ds_mtbl[:,'indx_clusDef']
-                    bcps        = ds_mtbl[:,'bcps']
+                    ds_mtbl  = grp['metaTable']
+                    mtbl_dim = ds_mtbl.size
+
+                    num_clus   = ds_mtbl[:,'num_clus']
+                    indx_Clcon = ds_mtbl[:,'indx_Clcon']
+                    duration   = ds_mtbl[:,'duration']
+                    num_info   = ds_mtbl[:,'num_info']
 
                     # skip all undefined entries at the start
                     nj = 0
-                    while nj < indx_clusDef.size and indx_clusDef[nj] == 255:
+                    while nj < mtbl_dim and indx_Clcon[nj] == 255:
                         nj += 1
 
                     # replace undefined entries
-                    while nj < indx_clusDef.size:
+                    while nj < mtbl_dim:
                         ni = nj
-                        while ni < indx_clusDef.size \
-                                and indx_clusDef[ni] != 255:
+                        while ni < mtbl_dim and indx_Clcon[ni] != 255:
                             ni += 1
 
-                        val_num  = num_cluster[ni-1]
-                        val_indx = indx_clusDef[ni-1]
-                        val_bcps = bcps[ni-1]
+                        val_num_clus = num_clus[ni-1]
+                        val_indx     = indx_Clcon[ni-1]
+                        val_duration = duration[ni-1]
+                        val_num_info = num_info[ni-1]
 
                         nj = ni + 1
-                        while nj < indx_clusDef.size \
-                                and indx_clusDef[nj] == 255:
+                        while nj < mtbl_dim and indx_Clcon[nj] == 255:
                             nj += 1
 
-                        if nj == indx_clusDef.size: break
+                        if nj == mtbl_dim: break
 
-
-                        if indx_clusDef[nj] == val_indx \
-                                and bcps[nj] == val_bcps:
+                        if indx_Clcon[nj] == val_indx \
+                                and duration[nj] == val_duration:
 
                             print( 'State_%02d: ' % (ns), ni, nj, val_indx )
-                            num_cluster[ni:nj]  = val_num
-                            indx_clusDef[ni:nj] = val_indx
-                            bcps[ni:nj]         = val_bcps
+                            num_clus[ni:nj]   = val_num_clus
+                            indx_Clcon[ni:nj] = val_indx
+                            duration[ni:nj]   = val_duration
+                            num_info[ni:nj]   = val_num_info
 
-                    ds_mtbl[:,'num_cluster']  = num_cluster
-                    ds_mtbl[:,'indx_clusDef'] = indx_clusDef
-                    ds_mtbl[:,'bcps']         = bcps
+                    ds_mtbl[:,'num_clus']   = num_clus
+                    ds_mtbl[:,'indx_Clcon'] = indx_Clcon
+                    ds_mtbl[:,'duration']   = duration
+                    ds_mtbl[:,'num_info']   = num_info
                 elif ns == 65:
                     ds_mtbl = grp['metaTable']
-                    ds_mtbl[2204:52867,'num_cluster']  = 40
-                    ds_mtbl[2204:52867,'indx_clusDef'] = 0
-                    ds_mtbl[2204:52867,'bcps']         = 320
+                    ds_mtbl[2204:52867,'num_clus']   = 40
+                    ds_mtbl[2204:52867,'indx_Clcon'] = 0
+                    ds_mtbl[2204:52867,'duration']   = 320
+                    ds_mtbl[2204:52867,'num_info']   = 40
 
                     grp_46 = fid['State_46']
                     ds_46 = grp_46['clusDef']
@@ -210,12 +216,10 @@ if __name__ == '__main__':
     for stateID in np.unique( states['state_id'] ):
         indx = np.where( states['state_id'] == stateID )[0]
         mtbl = ( obj.mph['ABS_ORBIT'], states['num_clus'][indx[0]],
-                 0, states['duration'][indx[0]] )
+                 0, states['duration'][indx[0]], states['num_geo'][indx[0]] )
         Clcon = states['Clcon'][indx[0],:]
         if args.verbose:
             print( stateID, ' - ', indx[0], Clcon.shape )
         obj_db.append( stateID, mtbl, Clcon )
 
     obj.__del__()
-
-    
