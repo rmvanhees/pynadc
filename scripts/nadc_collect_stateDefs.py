@@ -44,22 +44,87 @@ class clusDB:
 
             # check if dataset "clusDef" exists, if not create
             if not "clusDef" in grp:
-                ds = grp.create_dataset( 'clusDef', 
-                                         data=clusDef.reshape(1,64),
-                                         maxshape=(None,64) )
+                ds_clus = grp.create_dataset( 'clusDef', 
+                                              data=clusDef.reshape(1,64),
+                                              maxshape=(None,64) )
             else:
-                ds = grp['clusDef']
-                clusDef_db = ds[:]
-                ax1 = ds.shape[0]
+                ds_clus = grp['clusDef']
+                clusDef_db = ds_clus[:]
+                ax1 = ds_clus.shape[0]
                 for ni in range(ax1):
                     if (clusDef_db[ni,:] == clusDef).all():
                         ds_mtbl[mtbl[0],'indx_Clcon'] = ni
                         return
 
                 # new cluster definition: extent dataset
-                ds.resize(ax1+1, axis=0)
-                ds[ax1,:] = clusDef
+                ds_clus.resize(ax1+1, axis=0)
+                ds_clus[ax1,:] = clusDef
                 ds_mtbl[mtbl[0],'indx_Clcon'] = ax1
+
+    def add_lv0_states( self ):
+        with h5py.File( self.db_name, 'r+' ) as fid:
+
+            grp = fid['State_24']
+            ds_mtbl  = grp['metaTable']
+            mtbl_dim = ds_mtbl.size
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[3034,'indx_Clcon'] == 255):
+                clusDef = ds_clus[0,:]
+                clusDef['pet'] = 1.0
+                clusDef['intg'] = 16
+                clusDef['coaddf'] = 1
+                clusDef['readouts'] = 10
+                clusDef['clus_type'] = 1
+                clusDef['readouts'][0:3] = 1
+                clusDef['pet'][0:3] = 10
+                clusDef['intg'][0:3] = 160
+                indx = np.where(clusDef['chan_id'] == 6)[0]
+                clusDef['pet'][indx] = 0.5
+                indx = np.where(clusDef['chan_id'] == 6)[0][2:11]
+                clusDef['intg'][indx] = 8
+                clusDef['readouts'][indx] = 5
+                indx = np.where(clusDef['chan_id'] == 6)[0][np.array([0,1,11])]
+                clusDef['intg'][indx] = 16
+                clusDef['coaddf'][indx] = 2
+                clusDef['clus_type'][indx] = 2
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[3034,'num_clus'] = 56
+                ds_mtbl[3034,'indx_Clcon'] = clus_dim
+                ds_mtbl[3034,'duration'] = 1280
+                ds_mtbl[3034,'num_info'] = 160
+                clus_dim += 1
+
+            if np.all(ds_mtbl[36873:38267,'indx_Clcon'] == 255):
+                clusDef = ds_clus[2,:]
+                clusDef['pet'] = 1.0
+                clusDef['intg'] = 16
+                clusDef['coaddf'] = 1
+                clusDef['readouts'] = 1
+                clusDef['clus_type'] = 1
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[36873:38267,'num_clus'] = 40
+                ds_mtbl[36873:38267,'indx_Clcon'] = clus_dim
+                ds_mtbl[36873:38267,'duration'] = 1600
+                ds_mtbl[36873:38267,'num_info'] = 100
+                clus_dim += 1
+
+            if np.all(ds_mtbl[47994:48074,'indx_Clcon'] == 255):
+                clusDef = ds_clus[2,:]
+                clusDef['pet'] = 1.0
+                clusDef['intg'] = 16
+                clusDef['coaddf'] = 1
+                clusDef['readouts'] = 1
+                clusDef['clus_type'] = 1
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[47994:48074,'num_clus'] = 40
+                ds_mtbl[47994:48074,'indx_Clcon'] = clus_dim
+                ds_mtbl[47994:48074,'duration'] = 1440
+                ds_mtbl[47994:48074,'num_info'] = 90
+                clus_dim += 1
 
     def fill_mtbl( self ):
         with h5py.File( self.db_name, 'r+' ) as fid:
@@ -124,6 +189,8 @@ class clusDB:
                                              maxshape=(None,64) )
                 else:
                     print( "Info: skipping state %d" % (ns) )
+
+                
         
 #-------------------------SECTION ARGPARSE----------------------------------
 def handleCmdParams():
@@ -171,6 +238,7 @@ if __name__ == '__main__':
     else:
         obj_db = clusDB( args )
         obj_db.fill_mtbl()
+        obj_db.add_lv0_states()
         sys.exit(0)
 
     if not scia_fl:
