@@ -29,7 +29,7 @@ class clusDB:
             mtbl[:]['orbit'] = np.arange( maxOrbit, dtype='uint16' )
             mtbl[:]['indx_Clcon'] = 2**8-1
             
-            for ns in range(1,71):
+            for ns in range(1, 71):
                 grp = fid.create_group( "State_%02d" % (ns) )
                 ds = grp.create_dataset( 'metaTable', data=mtbl,
                                          chunks=(16384 // mtbl.dtype.itemsize,),
@@ -61,7 +61,106 @@ class clusDB:
                 ds_clus[ax1,:] = clusDef
                 ds_mtbl[mtbl[0],'indx_Clcon'] = ax1
 
-    def add_lv0_states( self ):
+    def add_missing_state_14( self ):
+        with h5py.File( self.db_name, 'r+' ) as fid:
+
+            grp = fid['State_14']
+            ds_mtbl  = grp['metaTable']
+            mtbl_dim = ds_mtbl.size
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            orbit_list = [3958,3959,3962,
+                          4086,4087,4088,4089,4091,4092,
+                          4111,4112,4113,4114,
+                          5994]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                grp_15 = fid['State_15']
+                ds_clus = grp_15['clusDef']
+                clusDef = ds_clus[0,:]
+                indx = np.where(clusDef['chan_id'] == 1)[0]
+                clusDef['pet'][indx] = 40.0
+                clusDef['intg'][indx] = 640
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 1
+                indx = np.where(clusDef['chan_id'] == 2)[0]
+                clusDef['pet'][indx] = 40.0
+                clusDef['intg'][indx] = 640
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 1
+                indx = np.where(clusDef['chan_id'] == 3)[0]
+                clusDef['pet'][indx] = 10.0
+                clusDef['intg'][indx] = 640
+                clusDef['coaddf'][indx] = 4
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                indx = np.where(clusDef['chan_id'] == 4)[0]
+                clusDef['pet'][indx] = 4.0
+                clusDef['intg'][indx] = 640
+                clusDef['coaddf'][indx] = 10
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                indx = np.where(clusDef['chan_id'] == 5)[0]
+                clusDef['pet'][indx] = 4.0
+                clusDef['intg'][indx] = 640
+                clusDef['coaddf'][indx] = 10
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                indx = np.where(clusDef['chan_id'] == 6)[0]
+                clusDef['pet'][indx] = 1.0
+                clusDef['intg'][indx] = 640
+                clusDef['coaddf'][indx] = 40
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                indx = np.where(clusDef['chan_id'] == 7)[0]
+                clusDef['pet'][indx] = 1.0
+                clusDef['intg'][indx] = 640
+                clusDef['coaddf'][indx] = 40
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                indx = np.where(clusDef['chan_id'] == 8)[0]
+                clusDef['pet'][indx] = 2.0
+                clusDef['intg'][indx] = 640
+                clusDef['coaddf'][indx] = 20
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 10
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1280
+                ds_mtbl[orbit_list,'num_info'] = 2
+                clus_dim += 1
+
+    def add_missing_state_22( self ):
+        with h5py.File( self.db_name, 'r+' ) as fid:
+
+            grp = fid['State_22']
+            ds_mtbl  = grp['metaTable']
+            mtbl_dim = ds_mtbl.size
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            orbit_list = [4119, 4120, 4121, 4122, 4123, 4124, 4125, 4126, 4127]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                grp_15 = fid['State_15']
+                ds_clus = grp_15['clusDef']
+                clusDef = ds_clus[0,:]
+                indx = np.where(clusDef['chan_id'] > 0)[0]
+                clusDef['pet'][indx] = 1.5
+                clusDef['intg'][indx] = 24
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 1
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 10
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 782
+                ds_mtbl[orbit_list,'num_info'] = 29
+                clus_dim += 1
+
+    def add_missing_state_24( self ):
         with h5py.File( self.db_name, 'r+' ) as fid:
 
             grp = fid['State_24']
@@ -71,14 +170,15 @@ class clusDB:
             clus_dim = ds_clus.shape[0]
             if np.all(ds_mtbl[3034,'indx_Clcon'] == 255):
                 clusDef = ds_clus[0,:]
-                clusDef['pet'] = 1.0
-                clusDef['intg'] = 16
-                clusDef['coaddf'] = 1
-                clusDef['readouts'] = 10
-                clusDef['clus_type'] = 1
-                clusDef['readouts'][0:3] = 1
-                clusDef['pet'][0:3] = 10
+                indx = np.where(clusDef['chan_id'] > 0)[0]
+                clusDef['pet'][indx] = 1.0
+                clusDef['intg'][indx] = 16
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 10
+                clusDef['clus_type'][indx] = 1
+                clusDef['pet'][0:3] = 10.
                 clusDef['intg'][0:3] = 160
+                clusDef['readouts'][0:3] = 1
                 indx = np.where(clusDef['chan_id'] == 6)[0]
                 clusDef['pet'][indx] = 0.5
                 indx = np.where(clusDef['chan_id'] == 6)[0][2:11]
@@ -98,11 +198,12 @@ class clusDB:
 
             if np.all(ds_mtbl[36873:38267,'indx_Clcon'] == 255):
                 clusDef = ds_clus[2,:]
-                clusDef['pet'] = 1.0
-                clusDef['intg'] = 16
-                clusDef['coaddf'] = 1
-                clusDef['readouts'] = 1
-                clusDef['clus_type'] = 1
+                indx = np.where(clusDef['chan_id'] > 0)[0]
+                clusDef['pet'][indx] = 1.0
+                clusDef['intg'][indx] = 16
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 1
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[36873:38267,'num_clus'] = 40
@@ -113,17 +214,101 @@ class clusDB:
 
             if np.all(ds_mtbl[47994:48074,'indx_Clcon'] == 255):
                 clusDef = ds_clus[2,:]
-                clusDef['pet'] = 1.0
-                clusDef['intg'] = 16
-                clusDef['coaddf'] = 1
-                clusDef['readouts'] = 1
-                clusDef['clus_type'] = 1
+                indx = np.where(clusDef['chan_id'] > 0)[0]
+                clusDef['pet'][indx] = 1.0
+                clusDef['intg'][indx] = 16
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 1
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[47994:48074,'num_clus'] = 40
                 ds_mtbl[47994:48074,'indx_Clcon'] = clus_dim
                 ds_mtbl[47994:48074,'duration'] = 1440
                 ds_mtbl[47994:48074,'num_info'] = 90
+                clus_dim += 1
+
+    def add_missing_state_55( self ):
+        with h5py.File( self.db_name, 'r+' ) as fid:
+
+            grp = fid['State_55']
+            ds_mtbl  = grp['metaTable']
+            mtbl_dim = ds_mtbl.size
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[26812:26834,'indx_Clcon'] == 255):
+                clusDef = ds_clus[0,:]
+                indx = np.where(clusDef['chan_id'] > 0)[0]
+                clusDef['pet'][indx] = 1/16.
+                indx = np.where(clusDef['chan_id'] == 1)[0]
+                clusDef['intg'][indx] = 1
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 2
+                clusDef['clus_type'][indx] = 1
+                indx = np.where(clusDef['chan_id'] == 2)[0]
+                clusDef['intg'][indx] = 1
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 2
+                clusDef['clus_type'][indx] = 1
+                indx = np.where(clusDef['chan_id'] == 3)[0]
+                clusDef['intg'][indx] = 2
+                clusDef['coaddf'][indx] = 2
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                indx = np.where(clusDef['chan_id'] == 4)[0]
+                clusDef['intg'][indx] = 2
+                clusDef['coaddf'][indx] = 2
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                indx = np.where(clusDef['chan_id'] == 5)[0]
+                clusDef['intg'][indx] = 2
+                clusDef['coaddf'][indx] = 2
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                indx = np.where(clusDef['chan_id'] == 6)[0]
+                clusDef['intg'][indx] = 2
+                clusDef['coaddf'][indx] = 2
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+                indx = np.where(clusDef['chan_id'] == 7)[0]
+                clusDef['intg'][indx] = 1
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 2
+                clusDef['clus_type'][indx] = 1
+                indx = np.where(clusDef['chan_id'] == 8)[0]
+                clusDef['intg'][indx] = 2
+                clusDef['coaddf'][indx] = 2
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 2
+
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[26812:26834,'num_clus'] = 40
+                ds_mtbl[26812:26834,'indx_Clcon'] = clus_dim
+                ds_mtbl[26812:26834,'duration'] = 640
+                ds_mtbl[26812:26834,'num_info'] = 640
+                clus_dim += 1
+
+            if np.all(ds_mtbl[28917:28920,'indx_Clcon'] == 255):
+                clusDef = ds_clus[0,:]
+                indx = np.where(clusDef['chan_id'] > 0)[0]
+                clusDef['pet'][indx] = 0.5
+                clusDef['intg'][indx] = 8
+                clusDef['coaddf'][indx] = 1
+                clusDef['readouts'][indx] = 1
+                clusDef['clus_type'][indx] = 1
+
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[28917:28920,'num_clus'] = 40
+                ds_mtbl[28917:28920,'indx_Clcon'] = clus_dim
+                ds_mtbl[28917:28920,'duration'] = 1673
+                ds_mtbl[28917:28920,'num_info'] = 186
+
+                ds_mtbl[30836:30850,'num_clus'] = 40
+                ds_mtbl[30836:30850,'indx_Clcon'] = clus_dim
+                ds_mtbl[30836:30850,'duration'] = 1673
+                ds_mtbl[30836:30850,'num_info'] = 186
                 clus_dim += 1
 
     def fill_mtbl( self ):
@@ -174,6 +359,67 @@ class clusDB:
                     ds_mtbl[:,'indx_Clcon'] = indx_Clcon
                     ds_mtbl[:,'duration']   = duration
                     ds_mtbl[:,'num_info']   = num_info
+
+                    if ns == 42 and ds_mtbl[3966,'indx_Clcon'] == 255:
+                        ds_mtbl[3966,'num_clus']   = ds_mtbl[3974,'num_clus']
+                        ds_mtbl[3966,'indx_Clcon'] = ds_mtbl[3974,'indx_Clcon']
+                        ds_mtbl[3966,'duration']   = ds_mtbl[3974,'duration']
+                        ds_mtbl[3966,'num_info']   = ds_mtbl[3974,'num_info']
+
+                    if ns == 62 and ds_mtbl[4055,'indx_Clcon'] == 255:
+                        ds_mtbl[4055,'num_clus']   = ds_mtbl[4056,'num_clus']
+                        ds_mtbl[4055,'indx_Clcon'] = ds_mtbl[4056,'indx_Clcon']
+                        ds_mtbl[4055,'duration']   = ds_mtbl[4056,'duration']
+                        ds_mtbl[4055,'num_info']   = ds_mtbl[4056,'num_info']
+
+                    if ns == 54 and ds_mtbl[5034,'indx_Clcon'] == 255:
+                        ds_mtbl[5034,'num_clus']   = ds_mtbl[5019,'num_clus']
+                        ds_mtbl[5034,'indx_Clcon'] = ds_mtbl[5019,'indx_Clcon']
+                        ds_mtbl[5034,'duration']   = ds_mtbl[5019,'duration']
+                        ds_mtbl[5034,'num_info']   = ds_mtbl[5019,'num_info']
+
+                    if ds_mtbl[6001,'indx_Clcon'] == 255:
+                        ds_mtbl[6001,'num_clus']   = ds_mtbl[6002,'num_clus']
+                        ds_mtbl[6001,'indx_Clcon'] = ds_mtbl[6002,'indx_Clcon']
+                        ds_mtbl[6001,'duration']   = ds_mtbl[6002,'duration']
+                        ds_mtbl[6001,'num_info']   = ds_mtbl[6002,'num_info']
+
+                    if ns == 42 and ds_mtbl[7194,'indx_Clcon'] == 255:
+                        ds_mtbl[7194,'num_clus']   = ds_mtbl[7193,'num_clus']
+                        ds_mtbl[7194,'indx_Clcon'] = ds_mtbl[7193,'indx_Clcon']
+                        ds_mtbl[7194,'duration']   = ds_mtbl[7193,'duration']
+                        ds_mtbl[7194,'num_info']   = ds_mtbl[7193,'num_info']
+
+                    if ns == 44 and ds_mtbl[7193,'indx_Clcon'] == 255:
+                        ds_mtbl[7193,'num_clus']   = ds_mtbl[7194,'num_clus']
+                        ds_mtbl[7193,'indx_Clcon'] = ds_mtbl[7194,'indx_Clcon']
+                        ds_mtbl[7193,'duration']   = ds_mtbl[7194,'duration']
+                        ds_mtbl[7193,'num_info']   = ds_mtbl[7194,'num_info']
+
+                    if ns == 6 and ds_mtbl[7493,'indx_Clcon'] == 255:
+                        ds_mtbl[7493,'num_clus']   = ds_mtbl[7494,'num_clus']
+                        ds_mtbl[7493,'indx_Clcon'] = ds_mtbl[7494,'indx_Clcon']
+                        ds_mtbl[7493,'duration']   = ds_mtbl[7494,'duration']
+                        ds_mtbl[7493,'num_info']   = ds_mtbl[7494,'num_info']
+
+                    if ns == 54 and ds_mtbl[22790,'indx_Clcon'] == 255:
+                        ds_mtbl[22790,'num_clus']   = ds_mtbl[22789,'num_clus']
+                        ds_mtbl[22790,'indx_Clcon'] = ds_mtbl[22789,'indx_Clcon']
+                        ds_mtbl[22790,'duration']   = ds_mtbl[22789,'duration']
+                        ds_mtbl[22790,'num_info']   = ds_mtbl[22789,'num_info']
+
+                    if ds_mtbl[40107,'indx_Clcon'] == 255:
+                        ds_mtbl[40107,'num_clus']   = ds_mtbl[40108,'num_clus']
+                        ds_mtbl[40107,'indx_Clcon'] = ds_mtbl[40108,'indx_Clcon']
+                        ds_mtbl[40107,'duration']   = ds_mtbl[40108,'duration']
+                        ds_mtbl[40107,'num_info']   = ds_mtbl[40108,'num_info']
+
+                    if ns == 28 and ds_mtbl[45187,'indx_Clcon'] == 255:
+                        ds_mtbl[45187,'num_clus']   = ds_mtbl[45186,'num_clus']
+                        ds_mtbl[45187,'indx_Clcon'] = ds_mtbl[45186,'indx_Clcon']
+                        ds_mtbl[45187,'duration']   = ds_mtbl[45186,'duration']
+                        ds_mtbl[45187,'num_info']   = ds_mtbl[45186,'num_info']
+
                 elif ns == 65:
                     ds_mtbl = grp['metaTable']
                     ds_mtbl[2204:52867,'num_clus']   = 40
@@ -190,7 +436,6 @@ class clusDB:
                 else:
                     print( "Info: skipping state %d" % (ns) )
 
-                
         
 #-------------------------SECTION ARGPARSE----------------------------------
 def handleCmdParams():
@@ -237,8 +482,11 @@ if __name__ == '__main__':
                 scia_fl = fileList[0]
     else:
         obj_db = clusDB( args )
+        obj_db.add_missing_state_14()
+        obj_db.add_missing_state_22()
+        obj_db.add_missing_state_24()
+        obj_db.add_missing_state_55()
         obj_db.fill_mtbl()
-        obj_db.add_lv0_states()
         sys.exit(0)
 
     if not scia_fl:
