@@ -75,8 +75,8 @@ class clusDB:
                           5994]
             if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
                 grp_15 = fid['State_15']
-                ds_clus = grp_15['clusDef']
-                clusDef = ds_clus[0,:]
+                ds_15 = grp_15['clusDef']
+                clusDef = ds_15[0,:]
                 indx = np.where(clusDef['chan_id'] == 1)[0]
                 clusDef['pet'][indx] = 40.0
                 clusDef['intg'][indx] = 640
@@ -144,8 +144,8 @@ class clusDB:
             orbit_list = [4119, 4120, 4121, 4122, 4123, 4124, 4125, 4126, 4127]
             if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
                 grp_15 = fid['State_15']
-                ds_clus = grp_15['clusDef']
-                clusDef = ds_clus[0,:]
+                ds_15 = grp_15['clusDef']
+                clusDef = ds_15[0,:]
                 indx = np.where(clusDef['chan_id'] > 0)[0]
                 clusDef['pet'][indx] = 1.5
                 clusDef['intg'][indx] = 24
