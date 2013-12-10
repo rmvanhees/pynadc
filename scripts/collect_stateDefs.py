@@ -74,6 +74,9 @@ import sys
 import numpy as np
 import h5py
 
+PROGNAME = str(sys.argv[0])
+VERSION = '1.0'
+
 class clusDB:
     def __init__( self, args=None, db_name='./nadc_clusDef.h5',
                   verbose=False ):
@@ -87,16 +90,32 @@ class clusDB:
 
     def create( self ):
         """Create and initialize the state definition database."""
+        from time import gmtime, strftime
+
         maxOrbit = 53000
 
         with h5py.File( self.db_name, 'w', libver='latest' ) as fid:
+            #
+            # add global attributes
+            #
+            fid.attrs['title'] = 'Sciamachy state-cluster definition database'
+            fid.attrs['institution'] = 'SRON (EPS)'
+            fid.attrs['history'] = ' '.join(sys.argv)
+            fid.attrs['source'] = 'Sciamachy Level 1b (v7.x)'
+            fid.attrs['program_version'] = VERSION
+            fid.attrs['creation_date'] = strftime('%Y-%m-%d %T %Z', gmtime())
+            #
+            # initialize metaTable dataset
+            #
             mtbl = np.zeros( maxOrbit, 
                              dtype='uint16,uint8,uint8,uint16,uint16' )
             mtbl.dtype.names = ('orbit','num_clus','indx_Clcon',
                                 'duration', 'num_info')
             mtbl[:]['orbit'] = np.arange( maxOrbit, dtype='uint16' )
             mtbl[:]['indx_Clcon'] = 2**8-1
-            
+            #
+            # initialize state-cluster definition dataset
+            #            
             for ns in range(1, 71):
                 grp = fid.create_group( "State_%02d" % (ns) )
                 ds = grp.create_dataset( 'metaTable', data=mtbl,
@@ -135,6 +154,23 @@ class clusDB:
                 ds_clus.resize(ax1+1, axis=0)
                 ds_clus[ax1,:] = clusDef
                 ds_mtbl[mtbl[0],'indx_Clcon'] = ax1
+
+    def add_missing_state_09( self ):
+        """Append OCR state cluster definition.
+
+        Modified states:
+        - stateID=09 added definitions for orbits [3981]
+        """
+        with h5py.File( self.db_name, 'r+' ) as fid:
+
+            grp = fid['State_09']
+            ds_mtbl  = grp['metaTable']
+            orbit_list = [3981]
+            if np.all(ds_mtbl[orbit_list,'num_info'] == 0):
+                ds_mtbl[orbit_list,'num_clus'] = 40
+                ds_mtbl[orbit_list,'indx_Clcon'] = 255
+                ds_mtbl[orbit_list,'duration'] = 918
+                ds_mtbl[orbit_list,'num_info'] = 166
 
     def add_missing_state_10_13( self ):
         """Append OCR state cluster definition.
