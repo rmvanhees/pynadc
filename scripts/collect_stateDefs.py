@@ -18,7 +18,9 @@ Synopsis
 Description
 -----------
 
-Collect state definitions from Sciamachy level 1b products and store in HDF5 database. Missing state definitions for states not written to level 1b products can be added; OCR states are hard-coded in this program or by interpolation  
+Collect state definitions from Sciamachy level 1b products and store in HDF5 
+database. Missing state definitions for states not written to level 1b products
+can be added; OCR states are hard-coded in this program or by interpolation  
 
 Options
 -------
@@ -41,7 +43,7 @@ Options
 Output
 ------
 
-Create or modify HDF5 database with state definitions for Sciamachy level 0 proessing
+Create or modify HDF5 database with state definitions for Sciamachy level 0 processing
 
 Examples
 --------
@@ -75,7 +77,7 @@ import numpy as np
 import h5py
 
 PROGNAME = str(sys.argv[0])
-VERSION = '1.0'
+VERSION = '1.1'
 
 def empty_clusDef():
     clusDef = np.zeros( 64, dtype=
@@ -88,7 +90,6 @@ def empty_clusDef():
 def define_clusDef(nclus, pet, coaddf, readouts):
     clusDef = empty_clusDef()
 
-    clusDef[0:nclus]['clus_id'] = np.arange( 1, nclus+1, dtype='uint8' )
     if nclus == 10:
         clusDef[0:10]['chan_id'] = [
             1, 1, 2, 2, 3, 4, 5, 6, 7, 8
@@ -118,18 +119,43 @@ def define_clusDef(nclus, pet, coaddf, readouts):
             5, 5, 991, 18, 5, 10, 14, 973, 17, 10,
             10, 38, 940, 26, 10, 10, 1004, 10
         ]
+    elif nclus == -56:
+        clusDef[0:56]['chan_id'] = [
+            1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2,
+            3, 3, 3, 3, 3, 3, 3, 3, 3, 
+            4, 4, 4, 4, 4, 4, 4, 4, 
+            5, 5, 5, 5, 5, 5, 5, 
+            6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+            7, 7, 7, 7, 7, 7, 8, 8, 8
+        ]
+        clusDef[0:56]['start']   = [
+            0, 5, 197, 552, 748, 1019, 1019, 834, 170, 76, 0,
+            0, 33, 83, 163, 599, 674, 761, 896, 1019,
+            0, 10, 46, 78, 613, 747, 853, 1019,
+            0, 10, 56, 84, 609, 767, 1019,
+            0, 24, 107, 335, 361, 539, 567, 746, 900, 931, 945, 1014,
+            0, 48, 293, 441, 883, 1014, 0, 10, 1014
+        ]
+        clusDef[0:56]['length']  = [
+            5, 192, 355, 196, 94, 5, 5, 114, 664, 94, 5,
+            10, 50, 80, 436, 75, 87, 135, 34, 5,
+            5, 36, 32, 535, 134, 106, 66, 5,
+            5, 46, 28, 525, 158, 234, 5,
+            10, 83, 228, 26, 178, 28, 179, 154, 31, 14, 52, 10,
+            10, 245, 148, 442, 105, 10, 10, 1004, 10
+        ]
     else:
         clusDef[0:56]['chan_id'] = [
             1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2,
             3, 3, 3, 3, 3, 3, 3, 3, 3, 
             4, 4, 4, 4, 4, 4, 4, 4, 
             5, 5, 5, 5, 5, 5, 5, 
-            6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 
+            6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
             7, 7, 7, 7, 7, 7, 8, 8, 8
         ]
         clusDef[0:56]['start']   = [
             0, 5, 197, 552, 748, 1019, 1019, 834, 170, 76, 0,
-            1, 33, 83, 163, 599, 674, 761, 896, 1019,
+            0, 33, 83, 163, 599, 674, 761, 896, 1019,
             0, 10, 46, 78, 613, 747, 853, 1019,
             0, 10, 56, 84, 609, 767, 1019,
             0, 24, 107, 335, 361, 539, 567, 746, 900, 931, 945, 1014,
@@ -143,6 +169,9 @@ def define_clusDef(nclus, pet, coaddf, readouts):
             10, 83, 228, 26, 178, 28, 179, 154, 31, 14, 52, 10,
             10, 245, 148, 442, 105, 10, 10, 1004, 10
         ]
+    if nclus < 0:
+        nclus *= -1
+    clusDef[0:nclus]['clus_id'] = np.arange( 1, nclus+1, dtype='uint8' )
     clusDef[0:nclus]['pet']  = pet
     clusDef[0:nclus]['intg'] = np.asarray( np.clip(pet, 1/16., 1280) 
                                            * 16 * coaddf, dtype='uint16')
@@ -238,19 +267,60 @@ class clusDB:
         """
         orbit_list = [3033]
         with h5py.File( self.db_name, 'r+' ) as fid:
+            grp = fid['State_08']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1., 1., 1., .25, .25, .25,
+                                 .125, .125, .125, .25, .25,
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 
+                                 1/32., 1/32., 1/32., 1/32., 1/32., 1/32., 
+                                 1/32., 1/32., 
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 1/8., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 .25, .25, .25, .25, .25, .25,
+                                 .25, .25, .25 ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 2, 1, 4,
+                                    8, 4, 2, 1, 4,
+                                    16, 8, 16, 4, 16, 8, 16, 16, 16,
+                                    16, 16, 16, 8, 16, 8, 16, 16,
+                                    8, 8, 8, 4, 8, 8, 8,
+                                    16, 16, 16, 8, 16, 8, 16, 8, 16, 8, 16, 16,
+                                    4, 4, 1, 4, 1, 4,
+                                    4, 1, 4 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 2, 4, 1,
+                                   1, 2, 4, 4, 1,
+                                   1, 2, 1, 4, 1, 2, 1, 1, 1,
+                                   1, 1, 1, 2, 1, 2, 1, 1,
+                                   1, 1, 1, 2, 1, 1, 1,
+                                   1, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1,
+                                   1, 1, 4, 1, 4, 1,
+                                   1, 4, 1 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1040
+                ds_mtbl[orbit_list,'num_info'] = 260
+
             grp = fid['State_10']
             ds_mtbl  = grp['metaTable']
             ds_clus  = grp['clusDef']
             clus_dim = ds_clus.shape[0]
             if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
-                pet = np.array([ 10., 10., 10., .5, .5, .5,
-                                 .5, .5, .5, .5, .5,
-                                 .5, .5, .5, .5, .5, .5, .5, .5, .5,
-                                 .5, .5, .5, .5, .5, .5, .5, .5,
-                                 .5, .5, .5, .5, .5, .5, .5,
+                pet = np.array([ 10., 10., 10., 1., 1., 1.,
+                                 1., 1., 1., 1., 1.,
+                                 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1., 1., 1., 1., 1.,
                                  .5, .5, .5, .5, .5, .5, .5, .5, .5, .5, .5, .5,
-                                 .5, .5, .5, .5, .5, .5,
-                                 .5, .5, .5 ], dtype='uint16')
+                                 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1. ], dtype='float32')
                 coaddf = np.array([ 1, 1, 1, 1, 1, 1,
                                     1, 1, 1, 1, 1,
                                     1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -259,16 +329,16 @@ class clusDB:
                                     2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2,
                                     1, 1, 1, 1, 1, 1,
                                     1, 1, 1 ], dtype='uint8')
-                nread = np.array([ 1, 1, 1, 20, 20, 20,
-                                   20, 20, 20, 20, 20,
-                                   20, 20, 20, 20, 20, 20, 20, 20, 20,
-                                   20, 20, 20, 20, 20, 20, 20, 20,
-                                   20, 20, 20, 20, 20, 20, 20,
+                nread = np.array([ 1, 1, 1, 10, 10, 10,
+                                   10, 10, 10, 10, 10,
+                                   10, 10, 10, 10, 10, 10, 10, 10, 10,
+                                   10, 10, 10, 10, 10, 10, 10, 10,
+                                   10, 10, 10, 10, 10, 10, 10,
                                    10, 10, 20, 20, 20, 20, 
                                    20, 20, 20, 20, 20, 10,
-                                   20, 20, 20, 20, 20, 20,
-                                   20, 20, 20 ], dtype='uint16')
-                clusDef = define_clusDef(56, pet, coaddf, nread)
+                                   10, 10, 10, 10, 10, 10,
+                                   10, 10, 10 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[orbit_list,'num_clus'] = 56
@@ -289,7 +359,7 @@ class clusDB:
                                  .25, .25, .25, .25, .25, .25, 
                                  .25, .25, .25, .25, .25, .25, 
                                  1., 1., 1., 1., 1., 1.,
-                                 1., 1., 1. ], dtype='uint16')
+                                 1., 1., 1. ], dtype='float32')
                 coaddf = np.array([ 1, 1, 1, 1, 1, 1,
                                     1, 1, 1, 1, 1,
                                     4, 4, 1, 1, 1, 1, 1, 1, 4,
@@ -307,13 +377,382 @@ class clusDB:
                                    20, 20, 20, 20, 20, 10,
                                    5, 5, 5, 5, 5, 5,
                                    5, 5, 5 ], dtype='uint16')
-                clusDef = define_clusDef(56, pet, coaddf, nread)
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[orbit_list,'num_clus'] = 56
                 ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
                 ds_mtbl[orbit_list,'duration'] = 1280
                 ds_mtbl[orbit_list,'num_info'] = 320
+
+            grp = fid['State_12']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1., 1., 1., 1., 1., 1.,
+                                 .5, .5, .5, 1., 1.,
+                                 .25, .25, .25, .25, .25, .25, .25, .25, .25,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 .5, .5, .5, .5, .5, .5, .5,
+                                 .25, .25, .25, .25, .25, .25, 
+                                 .25, .25, .25, .25, .25, .25,
+                                 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1,
+                                    2, 2, 2, 1, 1,
+                                    4, 4, 1, 1, 1, 1, 1, 1, 4,
+                                    4, 2, 1, 1, 1, 1, 4, 4,
+                                    1, 1, 1, 1, 1, 1, 1,
+                                    2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2,
+                                    1, 1, 1, 1, 1, 1,
+                                    1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1,
+                                   1, 1, 4, 4, 4, 4, 4, 4, 1,
+                                   2, 4, 8, 8, 8, 8, 2, 2,
+                                   2, 2, 2, 2, 2, 2, 2,
+                                   2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2,
+                                   1, 1, 1, 1, 1, 1,
+                                   1, 1, 1 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1040
+                ds_mtbl[orbit_list,'num_info'] = 520
+
+            grp = fid['State_13']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1., 1., 1., .5, .5, .5,
+                                 .5, .5, .5, .5, .5,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 
+                                 1/8., 1/8., 1/8.,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 .25, .25, .25, .25, .25, .25, .25,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 2,
+                                    2, 2, 1, 1, 2,
+                                    8, 8, 1, 8, 1, 1, 8, 8, 8, 
+                                    8, 8, 8, 1, 8, 1, 8, 8,
+                                    4, 4, 4, 1, 4, 1, 4,
+                                    8, 2, 8, 1, 8, 1, 8, 1, 8, 1, 8, 8,
+                                    1, 1, 1, 1, 1, 1,
+                                    1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 2, 2, 1,
+                                   1, 1, 2, 2, 1,
+                                   1, 1, 8, 1, 8, 8, 1, 1, 1,
+                                   1, 1, 1, 8, 1, 8, 1, 1,
+                                   1, 1, 1, 4, 1, 4, 1,
+                                   1, 4, 1, 8, 1, 8, 1, 8, 1, 8, 1, 1,
+                                   1, 1, 1, 1, 1, 1,
+                                   1, 1, 1 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1040
+                ds_mtbl[orbit_list,'num_info'] = 520
+
+            grp = fid['State_14']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1., 1., 1., .25, .25, .25,
+                                 .25, .25, .25, .25, .25,
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16.,
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16.,
+                                 .25, .25, .25, .25, .25, .25, .25,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 
+                                 .5, .5, .5, .5, .5, .5,
+                                 .5, .5, .5 ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 4,
+                                    4, 4, 1, 1, 4,
+                                    16, 16, 16, 4, 16, 4, 16, 16, 16,
+                                    16, 16, 16, 4, 16, 4, 16, 16,
+                                    4, 4, 4, 1, 4, 2, 4,
+                                    8, 4, 8, 2, 8, 2, 8, 2, 8, 2, 8, 8,
+                                    2, 2, 1, 2, 1, 2,
+                                    2, 1, 2 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 4, 4, 1,
+                                   1, 1, 4, 4, 1,
+                                   1, 1, 1, 4, 1, 4, 1, 1, 1,
+                                   1, 1, 1, 4, 1, 4, 1, 1,
+                                   1, 1, 1, 4, 1, 2, 4,
+                                   1, 2, 1, 4, 1, 4, 1, 4, 1, 4, 1, 1,
+                                   1, 1, 2, 1, 2, 1,
+                                   1, 2, 1 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1040
+                ds_mtbl[orbit_list,'num_info'] = 260
+
+            grp = fid['State_15']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1., 1., 1., .25, .25, .25,
+                                 .25, .25, .25, .25, .25,
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16.,
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16.,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 .5, .5, .5, .5, .5, .5,
+                                 .5, .5, .5 ], dtype='float32')
+                coaddf = np.array([ 5, 1, 1, 2, 1, 20,
+                                    4, 4, 1, 1, 4,
+                                    16, 16, 16, 4, 16, 4, 16, 16, 16,
+                                    16, 16, 16, 4, 16, 4, 16, 16,
+                                    8, 8, 8, 2, 8, 8, 8,
+                                    8, 8, 8, 2, 8, 2, 8, 2, 8, 2, 8, 8,
+                                    2, 2, 1, 2, 1, 2,
+                                    2, 1, 2 ], dtype='uint8')
+                nread = np.array([ 1, 5, 5, 10, 20, 1,
+                                   5, 5, 20, 20, 5,
+                                   5, 5, 5, 20, 5, 20, 5, 5, 5,
+                                   5, 5, 5, 20, 5, 20, 5, 5,
+                                   5, 5, 5, 20, 5, 5, 5,
+                                   5, 5, 5, 20, 5, 20, 5, 20, 5, 20, 5, 5,
+                                   5, 5, 10, 5, 10, 5,
+                                   5, 10, 5 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1040
+                ds_mtbl[orbit_list,'num_info'] = 260
+
+            grp = fid['State_26']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 80., 80., 80., 80., 80., 80.,
+                                 80., 80., 80., 80., 80.,
+                                 80., 80., 80., 80., 80., 80., 80., 80., 80.,
+                                 80., 80., 80., 80., 80., 80., 80., 80.,
+                                 80., 80., 80., 80., 80., 80., 80.,
+                                 10., 10., 10., 10., 10., 10., 
+                                 10., 10., 10., 10., 10., 10.,
+                                 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1,
+                                    1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1, 1, 1,
+                                   8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+                                   80, 80, 80, 80, 80, 80,
+                                   80, 80, 80 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1280
+                ds_mtbl[orbit_list,'num_info'] = 80
+
+            grp = fid['State_34']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1.5, 1.5, 1.5, 3/8., 3/8., 3/8., 
+                                 3/16., 3/16., 3/16., 3/8., 3/8., 3/8., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 3/8., 3/8., 3/8., 3/8., 3/8., 
+                                 3/8., 3/8., 3/8., 3/8., 3/8.,
+                                 3/8., 3/8., 3/8., 3/8., 3/8.,
+                                 3/8., 3/8., 3/8. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 4, 4, 8, 8, 2, 1, 4, 4, 
+                                    24, 24, 6, 24, 24, 24, 24, 6, 24, 24, 
+                                    4, 4, 1, 4, 4, 4, 4, 1, 4, 4, 
+                                    4, 4, 1, 4, 4, 4, 1, 4 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 4, 1, 1, 1, 1, 4, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 1, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 1, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 4, 1 ], dtype='uint16')
+                clusDef = define_clusDef(40, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 40
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 944
+                ds_mtbl[orbit_list,'num_info'] = 140
+
+            grp = fid['State_35']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 
+                                 .75, .75, .75, 1.5, 1.5, 1.5, 
+                                 3/8., 3/8., 3/8., 3/8., 3/8., 
+                                 3/8., 3/8., 3/8., 3/8., 3/8., 
+                                 3/8., 3/8., 3/8., 3/8., 3/8., 
+                                 3/8., 3/8., 3/8., 3/8., 3/8.,
+                                 1.5, 1.5, 1.5, 1.5, 1.5,
+                                 1.5, 1.5, 1.5 ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 
+                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                    1, 1, 1, 1, 1, 1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 
+                                   4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                   4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                   1, 1, 1, 1, 1, 1, 1, 1 ], dtype='uint16')
+                clusDef = define_clusDef(40, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 40
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 944
+                ds_mtbl[orbit_list,'num_info'] = 140
+
+            grp = fid['State_36']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 
+                                 .75, .75, .75, 1.5, 1.5, 1.5, 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 3/16., 3/16., 3/16., 3/16., 3/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16.,
+                                 1.5, 1.5, 1.5, 1.5, 1.5,
+                                 1.5, 1.5, 1.5 ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 
+                                    24, 24, 3, 24, 24, 24, 24, 6, 24, 24, 
+                                    8, 8, 2, 8, 8, 24, 24, 6, 24, 24, 
+                                    1, 1, 1, 1, 1, 1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 
+                                   1, 1, 8, 1, 1, 1, 1, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 1, 4, 1, 1, 
+                                   1, 1, 1, 1, 1, 1, 1, 1 ], dtype='uint16')
+                clusDef = define_clusDef(40, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 40
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 944
+                ds_mtbl[orbit_list,'num_info'] = 280
+
+            grp = fid['State_37']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1.5, 1.5, 1.5, 3/8., 3/8., 3/8., 
+                                 3/8., 3/8., 3/8., 3/8., 3/8., 3/8., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 3/8., 3/8., 3/8., 3/8., 3/8., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16.,
+                                 3/8., 3/8., 3/8., 3/8., 3/8.,
+                                 3/8., 3/8., 3/8. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 2, 4, 4, 4, 4, 1, 1, 4, 4, 
+                                    24, 24, 6, 24, 24, 24, 24, 6, 24, 24, 
+                                    4, 4, 1, 4, 4, 24, 24, 6, 24, 24, 
+                                    4, 4, 1, 4, 4, 4, 1, 4 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 2, 1, 1, 1, 1, 4, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 1, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 1, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 4, 1 ], dtype='uint16')
+                clusDef = define_clusDef(40, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 40
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 944
+                ds_mtbl[orbit_list,'num_info'] = 140
+
+            grp = fid['State_40']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 
+                                 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 
+                                 .75, .75, .75, .75, .75, 
+                                 .75, .75, .75, .75, .75, 
+                                 1.5, 1.5, 1.5, 1.5, 1.5, 
+                                 1.5, 1.5, 1.5, 1.5, 1.5,
+                                 1.5, 1.5, 1.5, 1.5, 1.5,
+                                 1.5, 1.5, 1.5 ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                    1, 1, 1, 1, 1, 1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                   2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                   1, 1, 1, 1, 1, 1, 1, 1 ], dtype='uint16')
+                clusDef = define_clusDef(40, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 40
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 944
+                ds_mtbl[orbit_list,'num_info'] = 70
+
+            grp = fid['State_41']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1.5, 1.5, 1.5, 3/8., 3/8., 3/8., 
+                                 3/16., 3/16., 3/16., 3/8., 3/8., 3/8., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 3/8., 3/8., 3/8., 3/8., 3/8., 
+                                 3/8., 3/8., 3/8., 3/8., 3/8.,
+                                 3/8., 3/8., 3/8., 3/8., 3/8.,
+                                 3/8., 3/8., 3/8. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 4, 4, 8, 8, 2, 1, 4, 4, 
+                                    24, 24, 6, 24, 24, 24, 24, 6, 24, 24, 
+                                    4, 4, 1, 4, 4, 4, 4, 1, 4, 4, 
+                                    4, 4, 1, 4, 4, 4, 1, 4 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 4, 1, 1, 1, 1, 4, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 1, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 1, 4, 1, 1, 
+                                   1, 1, 4, 1, 1, 1, 4, 1 ], dtype='uint16')
+                clusDef = define_clusDef(40, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 40
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 944
+                ds_mtbl[orbit_list,'num_info'] = 140
 
     def add_missing_state_3034( self ):
         """Append OCR state cluster definition.
@@ -323,6 +762,72 @@ class clusDB:
         """
         orbit_list = [3034]
         with h5py.File( self.db_name, 'r+' ) as fid:
+            grp = fid['State_17']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ .25, .25, .25, .25, .25, .25, 
+                                 .25, .25, .25, .25, .25, .25, 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16.,
+                                 .25, .25, .25, .25, .25,
+                                 .5, .5, .5 ], dtype='float32')
+                coaddf = np.array([ 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+                                    16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 
+                                    8, 8, 8, 8, 8, 16, 16, 16, 16, 16, 
+                                    4, 4, 4, 4, 4, 2, 2, 2 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                   1, 1, 1, 1, 1, 1, 1, 1 ], dtype='uint16')
+                clusDef = define_clusDef(40, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 40
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 480
+                ds_mtbl[orbit_list,'num_info'] = 30
+
+            grp = fid['State_23']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 10., 10., 10., 10., 10., 10.,
+                                 10., 10., 10., 10., 10.,
+                                 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1., 1., 1., 1., 1., 1.,
+                                 10., 10., 10., 10., 10., 10., 10.,
+                                 5., 5., 5., 5., 5., 5., 
+                                 5., 5., 5., 5., 5., 5., 
+                                 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1,
+                                    2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1,
+                                    1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1,
+                                   10, 10, 10, 10, 10, 10, 10, 10, 10,
+                                   10, 10, 10, 10, 10, 10, 10, 10,
+                                   1, 1, 1, 1, 1, 1, 1,
+                                   1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+                                   10, 10, 10, 10, 10, 10,
+                                   10, 10, 10 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1280
+                ds_mtbl[orbit_list,'num_info'] = 80
 
             grp = fid['State_24']
             ds_mtbl  = grp['metaTable']
@@ -355,14 +860,236 @@ class clusDB:
                                    20, 20, 20, 20, 20, 10,
                                    10, 10, 10, 10, 10, 10,
                                    10, 10, 10 ], dtype='uint16')
-                clusDef = define_clusDef(56, pet, coaddf, nread)
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[orbit_list,'num_clus'] = 56
                 ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
                 ds_mtbl[orbit_list,'duration'] = 1280
                 ds_mtbl[orbit_list,'num_info'] = 160
-                clus_dim += 1
+
+            grp = fid['State_25']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 5., 5., 5., 1., 1., 1.,
+                                 1., 1., 1., 1., 1.,
+                                 .25, .25, .25, .25, .25, .25, .25, .25, .25,
+                                 .25, .25, .25, .25, .25, .25, .25, .25,
+                                 .5, .5, .5, .5, .5, .5, .5,
+                                 .25, .25, .25, .25, .25, .25,
+                                 .25, .25, .25, .25, .25, .25, 
+                                 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1,
+                                    4, 4, 1, 1, 1, 1, 1, 1, 4,
+                                    2, 1, 1, 1, 1, 1, 2, 2,
+                                    1, 1, 1, 1, 1, 1, 1,
+                                    2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2,
+                                    1, 1, 1, 1, 1, 1,
+                                    1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 5, 5, 5,
+                                   5, 5, 5, 5, 5,
+                                   5, 5, 20, 20, 20, 20, 20, 20, 5,
+                                   10, 20, 20, 20, 20, 20, 10, 10,
+                                   10, 10, 10, 10, 10, 10, 10,
+                                   10, 10, 20, 20, 20, 20, 
+                                   20, 20, 20, 20, 20, 10,
+                                   5, 5, 5, 5, 5, 5,
+                                   5, 5, 5 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1280
+                ds_mtbl[orbit_list,'num_info'] = 320
+
+            grp = fid['State_26']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 80., 80., 80., 80., 80., 80.,
+                                 80., 80., 80., 80., 80.,
+                                 80., 80., 80., 80., 80., 80., 80., 80., 80.,
+                                 80., 80., 80., 80., 80., 80., 80., 80.,
+                                 80., 80., 80., 80., 80., 80., 80.,
+                                 10., 10., 10., 10., 10., 10., 
+                                 10., 10., 10., 10., 10., 10.,
+                                 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                    1, 1, 1, 1, 1, 1,
+                                    1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1, 1, 1,
+                                   8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+                                   80, 80, 80, 80, 80, 80,
+                                   80, 80, 80 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1280
+                ds_mtbl[orbit_list,'num_info'] = 80
+
+            grp = fid['State_42']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1., 1., 1., 1., 1., 1.,
+                                 .5, .5, .5, 1., 1.,
+                                 .25, .25, .25, .25, .25, .25, .25, .25, .25,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 .5, .5, .5, .5, .5, .5, .5,
+                                 .25, .25, .25, .25, .25, .25,
+                                 .25, .25, .25, .25, .25, .25, 
+                                 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1,
+                                    2, 2, 2, 1, 1,
+                                    4, 4, 1, 1, 1, 1, 1, 1, 4,
+                                    4, 2, 1, 1, 1, 1, 4, 4,
+                                    1, 1, 1, 1, 1, 1, 1,
+                                    2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2,
+                                    1, 1, 1, 1, 1, 1,
+                                    1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 1, 1, 1,
+                                   1, 1, 1, 1, 1,
+                                   1, 1, 4, 4, 4, 4, 4, 4, 1,
+                                   2, 4, 8, 8, 8, 8, 2, 2,
+                                   2, 2, 2, 2, 2, 2, 2,
+                                   2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2,
+                                   1, 1, 1, 1, 1, 1,
+                                   1, 1, 1 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1040
+                ds_mtbl[orbit_list,'num_info'] = 520
+
+            grp = fid['State_43']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1., 1., 1., .5, .5, .5,
+                                 .5, .5, .5, .5, .5,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 
+                                 1/8., 1/8., 1/8.,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 .25, .25, .25, .25, .25, .25, .25,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 
+                                 1., 1., 1., 1., 1., 1.,
+                                 1., 1., 1. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 2,
+                                    2, 2, 1, 1, 2,
+                                    8, 8, 1, 8, 1, 1, 8, 8, 8,
+                                    8, 8, 8, 1, 8, 1, 8, 8,
+                                    4, 4, 4, 1, 4, 1, 4,
+                                    8, 2, 8, 1, 8, 1, 8, 1, 8, 1, 8, 8,
+                                    1, 1, 1, 1, 1, 1,
+                                    1, 1, 1 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 2, 2, 1,
+                                   1, 1, 2, 2, 1,
+                                   1, 1, 8, 1, 8, 8, 1, 1, 1,
+                                   1, 1, 1, 8, 1, 8, 1, 1,
+                                   1, 1, 1, 4, 1, 4, 1,
+                                   1, 1, 1, 8, 1, 8, 1, 8, 1, 8, 1, 1,
+                                   1, 1, 1, 1, 1, 1,
+                                   1, 1, 1 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1040
+                ds_mtbl[orbit_list,'num_info'] = 520
+
+            grp = fid['State_44']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1., 1., 1., .25, .25, .25,
+                                 .25, .25, .25, .25, .25,
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16.,
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16.,
+                                 .25, .25, .25, .25, .25, .25, .25,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8.,
+                                 1/8., 1/8., 1/8., 1/8., 1/8., 1/8., 
+                                 .5, .5, .5, .5, .5, .5,
+                                 .5, .5, .5 ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 4,
+                                    4, 4, 1, 1, 4,
+                                    16, 16, 16, 4, 16, 4, 16, 16, 16,
+                                    16, 16, 16, 4, 16, 4, 16, 16,
+                                    4, 4, 4, 1, 4, 2, 4,
+                                    8, 4, 8, 2, 8, 2, 8, 2, 8, 2, 8, 8,
+                                    2, 2, 1, 2, 1, 2,
+                                    2, 1, 2 ], dtype='uint8')
+                nread = np.array([ 1, 1, 1, 4, 4, 1,
+                                   1, 1, 4, 4, 1,
+                                   1, 1, 1, 4, 1, 4, 1, 1, 1,
+                                   1, 1, 1, 4, 1, 4, 1, 1,
+                                   1, 1, 1, 4, 1, 2, 4,
+                                   1, 2, 1, 4, 1, 4, 1, 4, 1, 4, 1, 1,
+                                   1, 1, 2, 1, 2, 1,
+                                   1, 2, 1 ], dtype='uint16')
+                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 56
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1040
+                ds_mtbl[orbit_list,'num_info'] = 260
+
+            grp = fid['State_51']
+            ds_mtbl  = grp['metaTable']
+            ds_clus  = grp['clusDef']
+            clus_dim = ds_clus.shape[0]
+            if np.all(ds_mtbl[orbit_list,'indx_Clcon'] == 255):
+                pet = np.array([ 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/16., 1/16., 1/16., 1/16., 1/16., 
+                                 1/32., 1/32., 1/32., 1/32., 1/32.,
+                                 1/32., 1/32., 1/32., 1/32., 1/32.,
+                                 1/16., 1/16., 1/16. ], dtype='float32')
+                coaddf = np.array([ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+                                    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+                                    1, 1, 1, 1, 1, 2, 2, 2 ], dtype='uint8')
+                nread = np.array([ 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                                   2, 2, 2, 2, 2, 1, 1, 1 ], dtype='uint16')
+                clusDef = define_clusDef(40, pet, coaddf, nread)
+                ds_clus.resize(clus_dim+1, axis=0)
+                ds_clus[clus_dim,:] = clusDef
+                ds_mtbl[orbit_list,'num_clus'] = 40
+                ds_mtbl[orbit_list,'indx_Clcon'] = clus_dim
+                ds_mtbl[orbit_list,'duration'] = 1024
+                ds_mtbl[orbit_list,'num_info'] = 1024
 
     def add_missing_state_09( self ):
         """Append OCR state cluster definition.
