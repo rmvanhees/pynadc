@@ -1288,10 +1288,10 @@ class clusDB:
                 ds_mtbl[36873:38267,'duration'] = 1600
                 ds_mtbl[36873:38267,'num_info'] = 100
 
-                ds_mtbl[47994:48074,'num_clus'] = 40
-                ds_mtbl[47994:48074,'indx_Clcon'] = clus_dim
-                ds_mtbl[47994:48074,'duration'] = 1440
-                ds_mtbl[47994:48074,'num_info'] = 90
+                ds_mtbl[47994:48075,'num_clus'] = 40
+                ds_mtbl[47994:48075,'indx_Clcon'] = clus_dim
+                ds_mtbl[47994:48075,'duration'] = 1440
+                ds_mtbl[47994:48075,'num_info'] = 90
 
     def add_missing_state_25_26( self ):
         """Append OCR state cluster definition.
@@ -1900,7 +1900,7 @@ class clusDB:
                         ds_mtbl[7193,'duration']   = ds_mtbl[7194,'duration']
                         ds_mtbl[7193,'num_info']   = ds_mtbl[7194,'num_info']
 
-                    if ns == 44 and ds_mtbl[4381,'duration'] == 2078:
+                    if ns == 49 and ds_mtbl[4381,'duration'] == 2078:
                         ds_mtbl[4381,'duration']   = 2080
                         ds_mtbl[4381,'num_info']   = 2080
 
