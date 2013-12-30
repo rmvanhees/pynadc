@@ -119,7 +119,7 @@ def define_clusDef(nclus, pet, coaddf, readouts):
             5, 5, 991, 18, 5, 10, 14, 973, 17, 10,
             10, 38, 940, 26, 10, 10, 1004, 10
         ]
-    elif nclus == -56: # only orbits 3033/3034; length[2] = 355 not 335
+    elif nclus == 56:
         clusDef[0:56]['chan_id'] = [
             1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2,
             3, 3, 3, 3, 3, 3, 3, 3, 3, 
@@ -144,33 +144,7 @@ def define_clusDef(nclus, pet, coaddf, readouts):
             10, 83, 228, 26, 178, 28, 179, 154, 31, 14, 52, 10,
             10, 245, 148, 442, 105, 10, 10, 1004, 10
         ]
-    else:
-        clusDef[0:56]['chan_id'] = [
-            1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2,
-            3, 3, 3, 3, 3, 3, 3, 3, 3, 
-            4, 4, 4, 4, 4, 4, 4, 4, 
-            5, 5, 5, 5, 5, 5, 5, 
-            6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
-            7, 7, 7, 7, 7, 7, 8, 8, 8
-        ]
-        clusDef[0:56]['start']   = [
-            0, 5, 197, 552, 748, 1019, 1019, 834, 170, 76, 0,
-            0, 33, 83, 163, 599, 674, 761, 896, 1019,
-            0, 10, 46, 78, 613, 747, 853, 1019,
-            0, 10, 56, 84, 609, 767, 1019,
-            0, 24, 107, 335, 361, 539, 567, 746, 900, 931, 945, 1014,
-            0, 48, 293, 441, 883, 1014, 0, 10, 1014
-        ]
-        clusDef[0:56]['length']  = [
-            5, 192, 335, 196, 94, 5, 5, 114, 664, 94, 5,
-            10, 50, 80, 436, 75, 87, 135, 34, 5,
-            5, 36, 32, 535, 134, 106, 66, 5,
-            5, 46, 28, 525, 158, 234, 5,
-            10, 83, 228, 26, 178, 28, 179, 154, 31, 14, 52, 10,
-            10, 245, 148, 442, 105, 10, 10, 1004, 10
-        ]
-    if nclus < 0:
-        nclus *= -1
+
     clusDef[0:nclus]['clus_id'] = np.arange( 1, nclus+1, dtype='uint8' )
     clusDef[0:nclus]['pet']  = pet
     clusDef[0:nclus]['intg'] = np.asarray( np.clip(pet, 1/16., 1280) 
@@ -300,7 +274,7 @@ class clusDB:
                                    1, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1,
                                    1, 1, 4, 1, 4, 1,
                                    1, 4, 1 ], dtype='uint16')
-                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                clusDef = define_clusDef(56, pet, coaddf, nread)
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[orbit_list,'num_clus'] = 56
@@ -363,7 +337,7 @@ class clusDB:
                                    1, 4, 1, 8, 1, 8, 1, 8, 1, 8, 1, 1,
                                    1, 1, 1, 1, 1, 1,
                                    1, 1, 1 ], dtype='uint16')
-                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                clusDef = define_clusDef(56, pet, coaddf, nread)
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[orbit_list,'num_clus'] = 56
@@ -403,7 +377,7 @@ class clusDB:
                                    1, 2, 1, 4, 1, 4, 1, 4, 1, 4, 1, 1,
                                    1, 1, 2, 1, 2, 1,
                                    1, 2, 1 ], dtype='uint16')
-                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                clusDef = define_clusDef(56, pet, coaddf, nread)
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[orbit_list,'num_clus'] = 56
@@ -449,7 +423,7 @@ class clusDB:
                                    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
                                    80, 80, 80, 80, 80, 80,
                                    80, 80, 80 ], dtype='uint16')
-                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                clusDef = define_clusDef(56, pet, coaddf, nread)
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[orbit_list,'num_clus'] = 56
@@ -634,7 +608,7 @@ class clusDB:
                                    1, 1, 1, 8, 1, 8, 1, 8, 1, 8, 1, 1,
                                    1, 1, 1, 1, 1, 1,
                                    1, 1, 1 ], dtype='uint16')
-                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                clusDef = define_clusDef(56, pet, coaddf, nread)
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[orbit_list,'num_clus'] = 56
@@ -674,7 +648,7 @@ class clusDB:
                                    1, 2, 1, 4, 1, 4, 1, 4, 1, 4, 1, 1,
                                    1, 1, 2, 1, 2, 1,
                                    1, 2, 1 ], dtype='uint16')
-                clusDef = define_clusDef(-56, pet, coaddf, nread)
+                clusDef = define_clusDef(56, pet, coaddf, nread)
                 ds_clus.resize(clus_dim+1, axis=0)
                 ds_clus[clus_dim,:] = clusDef
                 ds_mtbl[orbit_list,'num_clus'] = 56
