@@ -42,7 +42,7 @@ setup(
     download_url = 'https://github.com/rmvanhees/pynadc.git',
     packages=['scia'],
     package_dir={'scia': 'src/scia'},
-    scripts=['scripts/inquire_db2.py', 'scripts/sdmf_calibSMR.py',
+    scripts=['scripts/inquire_scia.py', 'scripts/sdmf_calibSMR.py',
              'scripts/scia_lv0.py', 'scripts/scia_lv1.py',
              'scripts/collect_stateDefs.py']
 )
