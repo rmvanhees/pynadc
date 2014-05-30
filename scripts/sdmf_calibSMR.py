@@ -733,8 +733,7 @@ class SMRcalib:
         pass
 
     def radiance(self, smr, verbose=False):
-        import scia.db as scia_db
-        import scia.lv1 as scia_lv1
+        from pynadc.scia as db,lv1
         '''
         (7) Radiance correction, the light which the telescope recieved in 
         the nadir direction, i.e. all the light comming from the Earth in the 
@@ -758,12 +757,12 @@ class SMRcalib:
 
         # obtain wavelength grid from level 1b product
         orbits = [int(smr.absOrbit)]
-        fileList = scia_db.get_product_by_type( prod_type='1',
-                                                proc_best=True, 
-                                                orbits=orbits )
+        fileList = db.get_product_by_type( prod_type='1',
+                                           proc_best=True, 
+                                           orbits=orbits )
         if len(fileList) > 0:
             try:
-                l1b = scia_lv1.File( fileList[0] )
+                l1b = lv1.File( fileList[0] )
                 l1b.getSRS()
             except scia_l1b.fmtError as e:
                 print( e.msg )

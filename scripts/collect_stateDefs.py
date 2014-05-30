@@ -1558,8 +1558,7 @@ def handleCmdParams():
 #-------------------------SECTION MAIN--------------------------------------
 if __name__ == '__main__':
     import os.path
-    import scia.db as db
-    import scia.lv1 as lv1
+    from pynadc.scia import db,lv1
 
     args = handleCmdParams()
 

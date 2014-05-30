@@ -1,3 +1,10 @@
+# (c) SRON - Netherlands Institute for Space Research (2013).
+# All Rights Reserved.
+# This software is distributed under the BSD 2-clause license.
+
+"""
+Methods to query the NADC Sciamachy SQLite database
+"""
 #
 from __future__ import print_function
 from __future__ import division
@@ -5,12 +12,27 @@ from __future__ import division
 import os.path
 import sqlite3
 
-DB_NAME = '/GOSAT/share/db/sron_gosat.db'
+DB_NAME = '/SCIA/share/db/sron_scia.db'
 
 #---------------------------------------------------------------------------
-def get_product_by_name( args=None, toScreen=False, dbname=DB_NAME, 
-                         product=None, dump=False, debug=False ):
+def get_product_by_name( args=None, dbname=DB_NAME, product=None, 
+                         toScreen=False, dump=False, debug=False ):
     '''
+    Query NADC Sciamachy SQLite database on product name
+
+    Input
+    -----
+    args     : dictionary with keys dbname, product, toScreen, dump, debug
+    dbname   : full path to Sciamachy SQLite database [default: DB_NAME]
+    product  : name of product [value required]
+    toScreen : print query result to standard output [default: False]
+    dump     : return database content about product, instead of full-path
+    debug    : do not query data base, but display SQL query [default: False]
+
+    Output
+    ------
+    return full-path to product [default] or show database content about product
+
     '''
     if args:
         dbname = args.dbname
@@ -22,47 +44,83 @@ def get_product_by_name( args=None, toScreen=False, dbname=DB_NAME,
         print( 'Fatal, can not find SQLite database: %s' % dbname )
         return []
 
-    if product[0:9] == 'GOSATTCAI':
-        query_str = ['SELECT * from tcai__2P']
+    if product[0:10] == 'SCI_NL__0P':
+        table = 'meta__0P'
+    elif product[0:10] == 'SCI_NL__1P':
+        table = 'meta__1P'
     else:
-        query_str = ['SELECT * from tfts__1P']
-    query_str.append(' WHERE name=\'%s\'' % product)
+        table = 'meta__1P'
 
-    if debug:
-        print( ''.join(query_str) )
-        return []
+    if dump:
+        select_str = '*'
+    else:
+        select_str = 'path,name,compression'
+
+    query_str = \
+        'select {} from {} where name=\'{}\''.format(select_str, table, product)
 
     conn = sqlite3.connect( dbname )
-    conn.row_factory = sqlite3.Row
+    if dump:
+        conn.row_factory = sqlite3.Row
     cu = conn.cursor()
-    cu.execute( ''.join(query_str) )
-    row = cu.fetchone()
-    cu.close()
-    conn.close()
-    if row is None: 
+    if debug:
+        print( query_str )
+        cu.close()
+        conn.close()
         return []
+    else:
+        cu.execute( query_str )
+        row = cu.fetchone()
+        if row is None:
+            cu.close()
+            conn.close()
+            return []
 
-    rowList = []
     if toScreen:
         if dump:
             for name in row.keys():
                 print( name, '\t', row[name] )
         else:
-            print( row['path'] + '/' +  row['name'] )
-    else:
-        if dump:
-            rowList.append( row )
-        else:
-            rowList.append( row['path'] + '/' +  row['name'] )
+            if row[2] == 0:
+                print( row[0] + '/' +  row[1] )
+            else:
+                print( row[0] + '/' +  row[1] + '.gz' )
 
-    return rowList
+    if dump:
+        return row
+    else:
+        if row[2] == 0:
+            return row[0] + '/' +  row[1]
+        else:
+            return row[0] + '/' +  row[1] + '.gz'
 
 #---------------------------------------------------------------------------
-def get_product_by_type( args=None, toScreen=False, dbname=DB_NAME, 
-                         prod_type=None, proc_stage=None, proc_best=None,
+def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None, 
+                         proc_stage=None, proc_best=None,
                          orbits=None, date=None, rtime=None, 
-                         dump=False, debug=False ):
+                         toScreen=False, dump=False, debug=False ):
     '''
+    Query NADC Sciamachy SQLite database on product type with data selections
+
+    Input
+    -----
+    args       : dictionary with keys dbname, type, proc, best, orbit, date, 
+                 rtime, toScreen, dump, debug
+    dbname     : full path to Sciamachy SQLite database [default: DB_NAME]
+    prod_type  : level of product, available 0, 1, 2 [value required]
+    prod_stage ; baseline of product (PROC_STAGE): N, R, P, R, U, W, ...
+                 [default: None]
+    prod_best  ; select highest available baseline [default: None]
+    orbit      : select on absolute orbit number [default: None]
+    date       : select on dateTimeStart [default: None]
+    rtime      : select on receiveTime [default: None]
+    toScreen   : print query result to standard output [default: False]
+    debug      : do not query data base, but display SQL query [default: False]
+
+    Output
+    ------
+    return full-path to selected products [default] 
+
     '''
     if args:
         dbname = args.dbname
@@ -75,7 +133,14 @@ def get_product_by_type( args=None, toScreen=False, dbname=DB_NAME,
         dump = args.dump
         debug = args.debug
 
-    query_str = ['select * from meta__%sP' % prod_type]
+    if not os.path.isfile( dbname ):
+        print( 'Fatal, can not find SQLite database: %s' % dbname )
+        return []
+
+    if dump:
+        query_str = ['select * from meta__%sP' % prod_type]
+    else:
+        query_str = ['select path,name,compression from meta__%sP' % prod_type]
     if proc_best:
         if prod_type == '0':
             query_str.append(' as s1 join (select absOrbit,MAX(q_flag)' )
@@ -116,49 +181,33 @@ def get_product_by_type( args=None, toScreen=False, dbname=DB_NAME,
             query_str.append(' and')
 
         dtime = '+1 second'
-        secnd = 0
         year = int(date[0:4])
-        if year < 2002:
-            print( 'You should specify a valid year' )
-            sys.exit(1)
         dtime = '+1 year'
 
         if len( date ) >= 6:
             month = int(date[4:6])
-            if month < 1 or month > 12:
-                print( 'You should specify a valid month' )
-                sys.exit(1)
             dtime = '+1 month'
         else:
             month = 1
 
         if len( date ) >= 8:
             day = int(date[6:8])
-            if day < 1 or day > 31:
-                print( 'You should specify a valid day' )
-                sys.exit(1)
             dtime = '+1 day'
         else:
             day = 1
         
         if len( date ) >= 10:
             hour = int(date[8:10])
-            if hour < 0 or hour > 24:
-                print( 'You should specify a valid hour' )
-                sys.exit(1)
             dtime = '+1 hour'
         else:
             hour = 0
         
         if len( date ) >= 12:
             minu = int(date[10:12])
-            if minu < 0 or minu > 59:
-                print( 'You should specify a valid minute' )
-                sys.exit(1)
             dtime = '+1 minute'
         else:
             minu = 0
-        d1 = '%04d-%02d-%02d %02d:%02d:%02d' % (year,month,day,hour,minu,secnd)
+        d1 = '%04d-%02d-%02d %02d:%02d:%02d' % (year,month,day,hour,minu,0)
 
         mystr = ' dateTimeStart between \'%s\' and datetime(\'%s\',\'%s\')'
         query_str.append(mystr % (d1, d1, dtime))
@@ -191,13 +240,10 @@ def get_product_by_type( args=None, toScreen=False, dbname=DB_NAME,
         print( ''.join(query_str) )
         return []
 
-    if not os.path.isfile( dbname ):
-        print( 'Fatal, can not find SQLite database: %s' % dbname )
-        return []
-
     rowList = []
     conn = sqlite3.connect( dbname )
-    conn.row_factory = sqlite3.Row
+    if dump:
+        conn.row_factory = sqlite3.Row
     cu = conn.cursor()
     cu.execute( ''.join(query_str) )
     for row in cu:
@@ -205,18 +251,18 @@ def get_product_by_type( args=None, toScreen=False, dbname=DB_NAME,
             if dump:
                 print( row )
             else:
-                if row['compression'] == 0:
-                    print( row['path'] + '/' +  row['name'] )
+                if row[2] == 0:
+                    print( row[0] + '/' +  row[1] )
                 else:
-                    print( row['path'] + '/' +  row['name'] + '.gz' )
+                    print( row[0] + '/' +  row[1] + '.gz' )
         else:
             if dump:
                 rowList.append( row )
             else:
-                if row['compression'] == 0:
-                    rowList.append( row['path'] + '/' +  row['name'] )
+                if row[2] == 0:
+                    rowList.append( row[0] + '/' +  row[1] )
                 else:
-                    rowList.append( row['path'] + '/' +  row['name'] + '.gz' )
+                    rowList.append( row[0] + '/' +  row[1] + '.gz' )
                 
     cu.close()
     conn.close()

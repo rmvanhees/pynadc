@@ -3,9 +3,9 @@
 from __future__ import print_function
 from __future__ import division
 
-from pynadc.scia import db
+from pynadc.gosat import db
 
-DB_NAME = '/SCIA/share/db/sron_scia.db'
+DB_NAME = '/GOSAT/share/db/sron_gosat.db'
 
 def scia_orbit_range(string):
     res = [int(str) for str in string.split(',')]
@@ -41,15 +41,13 @@ if __name__ == '__main__':
     parser_type = subparsers.add_parser( 'type',
                                      help='perform selection on product type' )
     parser_type.add_argument( 'type', nargs='?', type=str, 
-                              choices=['0', '1', '2'],
+                              choices=['TCAI_2', 'TFTS_1', 'tcai_2', 'tfts_1'],
                               help='type of product to select' )
-    parser_type.add_argument( '--orbit', type=scia_orbit_range,
-                              help='select entries on orbit number or range' )
-    parser_type.add_argument( '--best', action='store_true', default=False,
-                         help='select latest consolidated products' )
-    parser_type.add_argument( '--proc', type=str, nargs='+',
-                              choices=['B','N','O','P','R','S','U','W'],
-                              help='select entries on ESA processor ID' )
+    obs_opts = ('OB1D', 'OB1N', 'SPOD', 'SPON' )
+    parser_type.add_argument( '--obs_mode', type=str, choices=obs_opts,
+                              help='select FTS entries on observation mode' )
+    parser_type.add_argument( '--prod_version', type=str,
+                              help='select FTS entries on product version' )
     parser_type.add_argument( '--date', type=str,
                          help='''select entries on start time of science data;
          [yyyy]: returns entries between yyyy and (yyyy+1);

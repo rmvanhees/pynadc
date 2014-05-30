@@ -2,7 +2,7 @@
 
 from distutils.core import setup
 
-VERSION = '1.1.0'
+VERSION = '1.1.1'
 
 cls_txt = \
 """
@@ -18,7 +18,7 @@ Operating System :: POSIX :: Linux
 Operating System :: MacOS :: MacOS X
 """
 
-short_desc = "Python Sciamachy read and sqlite3 library"
+short_desc = "Python Sciamachy/GOSAT read and sqlite3 library"
 long_desc = \
 """
 The pynadc package provides (limited) access to Sciamachy level 0 and 1b 
@@ -40,9 +40,10 @@ setup(
     maintainer = 'Richard van Hees',
     maintainer_email = 'rm dot vanhees at gmail dot com',
     download_url = 'https://github.com/rmvanhees/pynadc.git',
-    packages=['scia'],
-    package_dir={'scia': 'src/scia'},
-    scripts=['scripts/inquire_scia.py', 'scripts/sdmf_calibSMR.py',
+    package_dir={'': 'sources'},
+    packages=['pynadc', 'pynadc.scia', 'pynadc.gosat'],
+    scripts=['scripts/inquire_gosat.py', 'scripts/inquire_scia.py', 
+             'scripts/sdmf_calibSMR.py',
              'scripts/scia_lv0.py', 'scripts/scia_lv1.py',
              'scripts/collect_stateDefs.py']
 )
