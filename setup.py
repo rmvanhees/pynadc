@@ -41,9 +41,16 @@ setup(
     maintainer_email = 'rm dot vanhees at gmail dot com',
     download_url = 'https://github.com/rmvanhees/pynadc.git',
     package_dir={'': 'sources'},
-    packages=['pynadc', 'pynadc.scia', 'pynadc.gosat'],
-    scripts=['scripts/inquire_gosat.py', 'scripts/inquire_scia.py', 
-             'scripts/sdmf_calibSMR.py',
-             'scripts/scia_lv0.py', 'scripts/scia_lv1.py',
-             'scripts/collect_stateDefs.py']
+    packages=[ 'pynadc',
+               'pynadc.scia',
+               'pynadc.gosat' ],
+    scripts=[ 'scripts/add_entry_gosat.py',
+              'scripts/add_entry_scia.py',
+              'scripts/collect_stateDefs.py',
+              'scripts/inquire_db.py',
+              'scripts/inquire_gosat.py',
+              'scripts/inquire_scia.py',
+              'scripts/scia_lv0.py',
+              'scripts/scia_lv1.py',
+              'scripts/sdmf_calibSMR.py' ]
 )
