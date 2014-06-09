@@ -1,11 +1,11 @@
-# (c) SRON - Netherlands Institute for Space Research (2013).
+# (c) SRON - Netherlands Institute for Space Research (2014).
 # All Rights Reserved.
 # This software is distributed under the BSD 2-clause license.
 
 """
 Methods to query the NADC GOSAT SQLite database
 """
-#
+
 from __future__ import print_function
 from __future__ import division
 

@@ -5,6 +5,8 @@
 # This software is distributed under the BSD 2-clause license.
 
 """
+DEPRECATED MODULE -- PLEASE CONSIDER USING inquire_scia.py
+
 Perform predefined SQL queries on Sciamachy SQLite database
 
 Synopsis
@@ -100,11 +102,12 @@ def version_message():
 
 #++++++++++++++++++++++++++++++++++++++++++++++++++
 def help_message():
-    print( 'Usage ' + sys.argv[0] 
+    print( '\nDEPRECATED MODULE -- PLEASE CONSIDER USING inquire_scia.py\n\n'
+           + 'Usage ' + sys.argv[0] 
            + ' [--date=] [--orbit=] [--proc[stage]=] [--soft[Version]=]'
-           + ' [--rtime=] [--level= --name=] [--debug] '
-           + ' [[--file [--best]] [--header --list [--caption]]] [dbname]',
-           '\n\t  by default dbname=/SCIA/share/db/sron_scia.db' )
+           + ' [--rtime=] [--level= --name=] [--debug]'
+           + '\n\t [[--file [--best]] [--header --list [--caption]]] [dbname]'
+           + '\n\t by default dbname=/SCIA/share/db/sron_scia.db' )
     sys.exit(0)
 
 #+++++++++++++++++++++++++

@@ -1,4 +1,11 @@
-#
+# (c) SRON - Netherlands Institute for Space Research (2014).
+# All Rights Reserved.
+# This software is distributed under the BSD 2-clause license.
+
+"""
+Methods to read Sciamachy level 1b data products
+"""
+
 from __future__ import print_function
 from __future__ import division
 
