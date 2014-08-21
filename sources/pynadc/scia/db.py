@@ -231,7 +231,6 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
             query_str.append(' s1.absOrbit=s2.absOrbit and s1.q_flag=s2.qflag')
         else:
             query_str.append(' s1.absOrbit=s2.absOrbit and s1.procStage=s2.proc')
-        query_str.append(' order by absOrbit ASC')
     else:
         query_str.append(' order by absOrbit ASC, procStage DESC')
 
