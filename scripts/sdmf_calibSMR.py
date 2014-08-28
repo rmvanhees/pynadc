@@ -79,8 +79,11 @@ def get_h5_RadSensMoni( NDF=True, debug=False ):
     tmp = dset[:].astype('float64')
     obm_s_p = np.empty_like( tmp )
     for nc in range(8):
-        indx = np.arange(nc*1024,(nc+1)*1024)
-        obm_s_p[indx] = np.interp( ref_wl[indx], obm_s_p_wl[indx], tmp[indx] )
+        i_mn = nc * 1024
+        i_mx = i_mn + 1024
+        obm_s_p[i_mn:i_mx] = np.interp( ref_wl[i_mn:i_mx], 
+                                        obm_s_p_wl[i_mn:i_mx], 
+                                        tmp[i_mn:i_mx] )
     del(tmp)
 
     grp = fid['ELEV_p']
@@ -111,8 +114,11 @@ def get_h5_RadSensMoni( NDF=True, debug=False ):
         tmp = dset[:].astype('float64')
         ndf = np.empty_like( tmp )
         for nc in range(8):
-            indx = np.arange(nc*1024,(nc+1)*1024)
-            ndf[indx] = np.interp( ref_wl[indx], ndf_wl[indx], tmp[indx] )
+            i_mn = nc * 1024
+            i_mx = i_mn + 1024
+            ndf[i_mn:i_mx] = np.interp( ref_wl[i_mn:i_mx], 
+                                        ndf_wl[i_mn:i_mx], 
+                                        tmp[i_mn:i_mx] )
         del(tmp)
 
         grp = fid['NDF_s_p']
@@ -123,8 +129,11 @@ def get_h5_RadSensMoni( NDF=True, debug=False ):
         tmp = dset[:].astype('float64')
         ndf_s_p = np.empty_like( tmp )
         for nc in range(8):
-            indx = np.arange(nc*1024,(nc+1)*1024)
-            ndf_s_p[indx] = np.interp(ref_wl[indx], ndf_s_p_wl[indx], tmp[indx])
+            i_mn = nc * 1024
+            i_mx = i_mn + 1024
+            ndf_s_p[i_mn:i_mx] = np.interp( ref_wl[i_mn:i_mx], 
+                                            ndf_s_p_wl[i_mn:i_mx], 
+                                            tmp[i_mn:i_mx])
         del(tmp)
 
         abs_rad *= (2 * ndf / (1 + ndf_s_p))
@@ -232,6 +241,8 @@ class SDMFextractSun:
         dset = grp['metaTable']
         self.mtbl = dset[metaIndx]
         self.absOrbit = self.mtbl['absOrbit']
+        self.obmTemp = self.mtbl['obmTemp']
+        self.detTemp = self.mtbl['detTemp']
 
         dset = grp['pointing']
         pointing = dset[metaIndx]
@@ -327,8 +338,7 @@ class SMRcalib:
         # mask dead pixels
         #
         i_masked = smr.spectra.mask.sum()
-        smr.spectra = ma.masked_where( (smr.spectra == 0),
-                                       smr.spectra, copy=False )
+        smr.spectra = ma.masked_equal( smr.spectra, 0, copy=False )
         if verbose:
             masked = smr.spectra.mask.sum()
             print( '* Info: masked %6.1f pixels/spectrum with zero signal'
@@ -537,8 +547,7 @@ class SMRcalib:
                    % ((masked - i_masked) / float(smr.numSpectra)) )
             i_masked = masked
 
-        smr.spectra = ma.masked_where( (smr.spectra < 1),
-                                        smr.spectra, copy=False )
+        smr.spectra = ma.masked_less( smr.spectra, 1, copy=False )
         if verbose:
             masked = smr.spectra.mask.sum()
             print( '* Info: masked %6.1f pixels/spectrum with too large darks'
@@ -737,7 +746,7 @@ class SMRcalib:
         pass
 
     def radiance(self, smr, verbose=False):
-        from pynadc.scia as db,lv1
+        from pynadc.scia import db,lv1
         '''
         (7) Radiance correction, the light which the telescope recieved in 
         the nadir direction, i.e. all the light comming from the Earth in the 
@@ -810,10 +819,11 @@ class SMRcalib:
             if wv_interp:
                 tmp = radsens.copy()
                 for nc in range(smr.numChannels):
-                    indx = range(nc * smr.channelSize, (nc+1) * smr.channelSize)
-                    radsens[indx] = np.interp( smr.wvlen[indx], 
-                                               smr.rspm['wvlen'][0,indx], 
-                                               tmp[indx] )
+                    i_mn = nc * smr.channelSize
+                    i_mx = i_mn + smr.channelSize
+                    radsens[i_mn:i_mx] = np.interp( smr.wvlen[i_mn:i_mx],
+                                               smr.rspm['wvlen'][0,i_mn:i_mx], 
+                                               tmp[i_mn:i_mx] )
                 del(tmp)
 
             smr.spectra.data[no,:] /= (pet * radsens)
@@ -1057,76 +1067,117 @@ class SMRshow:
             else:
                 self.refCalibID = args.calibration[-2]
 
-    def screen(self, args, smr):
+    def showPixel(self, smr, pixelID):
         import matplotlib.pyplot as plt
 
-        if args.pixel:
-            plt.figure( 1, figsize=(11.69,8.27) )
-            plt.title( 'SMR - State 62 - Orbit %d - Pixel %d'
-                       % (smr.absOrbit, args.pixel) )
-            plt.grid( True )
-            plt.plot( smr.spectra[:,args.pixel], 'b+-' )
-            plt.show()
-            return
+        plt.figure( 1, figsize=(11.69,8.27) )
+        plt.title( 'SMR - State 62 - Orbit %d - Pixel %d'
+                   % (smr.absOrbit, pixelID) )
+        plt.grid( True )
+        plt.plot( smr.spectra[:,pixelID], 'b+-' )
+        plt.show()
+        
+    def showSpectrum(self, args, smr):
+        import matplotlib.pyplot as plt
 
         pixelList = []
         for nch in args.channel:
             pixelList += list(range( (nch-1) * smr.channelSize,
                                      nch * smr.channelSize ))
 
-        if args.effect:
-            fig, axs = plt.subplots( nrows=2, ncols=1, sharex=True, 
-                                     figsize=(11.69,8.27) )
-            ax = axs[0]
-            effect = smr.refSpectra[120,pixelList].copy()
-            if smr.errorType == 'M':
-                str_effect = '%d / %d' % (args.calibration[-2], args.calibration[-1])
-                if smr.smr is None:
-                    effect /= smr.spectra[120,pixelList]
-                else:
-                    effect /= smr.smr[pixelList]
-            elif smr.errorType == 'A':
-                str_effect = '%d - %d' % (args.calibration[-2], args.calibration[-1])
-                if smr.smr is None:
-                    effect -= smr.spectra[120,pixelList]
-                else:
-                    effect -= smr.smr[pixelList]
-            else:
-                pass
-            ax.plot( pixelList, effect, 'b.' )
-            ax.set_xlim( [pixelList[0],pixelList[-1]] )
-            ax.grid( True )
-            ax.set_title( 'SMR - calibration: ' + str_effect )
+        fig = plt.figure( 1, figsize=(11.69,8.27) )
+        fig.text( 0.5, 0.01, 'Temperatures of OBM and Detectors: %6.2f - '
+                  % (smr.obmTemp) + np.array_str(smr.detTemp, precision=2),
+                  fontsize=9, horizontalalignment='center',
+                  verticalalignment='bottom' )
+        plt.title( 'SMR - State 62 - Orbit %d' % smr.absOrbit )
+        plt.grid( True )
 
-            ax = axs[1]
-            if smr.smr is None:
-                ax.plot( pixelList, smr.spectra[120,pixelList], 'b.' )
-            else:
-                ax.plot( pixelList, smr.smr[pixelList], 'b.' )
-            ax.set_xlim( [pixelList[0],pixelList[-1]] )
-            ax.grid( True )
-            ax.set_title( 'SMR - calibration: '
-                          + ','.join(str(x) for x in args.calibration )
-)
-            fig.suptitle( 'SMR - State 62 - Orbit %d'% smr.absOrbit )
+        if smr.wvlen is not None:
+            plt.xlim( [smr.wvlen[pixelList[0]], smr.wvlen[pixelList[-1]]] )
+            plt.xlabel( 'Wavelength (nm)')
+
+            for nch in args.channel:
+                if (nch % 2) == 0:
+                    icol = 'b.'
+                else:
+                    icol = 'r.'
+                i_mx = nch * smr.channelSize
+                i_mn = i_mx - smr.channelSize
+                if smr.smr is None:
+                    plt.plot( smr.wvlen[i_mn:i_mx], 
+                              smr.spectra[120,i_mn:i_mx], icol )
+                else:
+                    plt.plot( smr.wvlen[i_mn:i_mx], smr.smr[i_mn:i_mx], icol )
         else:
-            plt.figure( 1, figsize=(11.69,8.27) )
-            if smr.wvlen is not None:
-                plt.xlim( [smr.wvlen[pixelList[0]], smr.wvlen[pixelList[-1]]] )
-                if smr.smr is None:
-                    plt.plot( smr.wvlen[pixelList], 
-                              smr.spectra[120,pixelList], 'b.' )
-                else:
-                    plt.plot( smr.wvlen[pixelList], smr.smr[pixelList], 'b.' )
+            plt.xlabel( 'Pixel number')
+            plt.xlim( [pixelList[0],pixelList[-1]] )
+
+            if smr.smr is None:
+                plt.plot( pixelList, smr.spectra[120,pixelList], 'b.' )
             else:
-                plt.xlim( [pixelList[0],pixelList[-1]] )
-                if smr.smr is None:
-                    plt.plot( pixelList, smr.spectra[120,pixelList], 'b.' )
-                else:
-                    plt.plot( pixelList, smr.smr[pixelList], 'b.' )
-            plt.title( 'SMR - State 62 - Orbit %d' % smr.absOrbit )
-            plt.grid( True )
+                plt.plot( pixelList, smr.smr[pixelList], 'b.' )
+            plt.ylabel( 'Signal')
+
+        # remove outliers
+        tmp = smr.smr[pixelList].compressed()
+        tmp = tmp[np.isfinite(tmp)]
+        tmp.sort()
+        plt.ylim((0,tmp[99*tmp.size/100]))
+
         plt.show()
+
+    def showEffect(self, args, smr):
+        import matplotlib.pyplot as plt
+
+        pixelList = []
+        for nch in args.channel:
+            pixelList += list(range( (nch-1) * smr.channelSize,
+                                     nch * smr.channelSize ))
+
+        fig, axs = plt.subplots( nrows=2, ncols=1, sharex=True, 
+                                 figsize=(11.69,8.27) )
+        ax = axs[0]
+        effect = smr.refSpectra[120,pixelList].copy()
+        if smr.errorType == 'M':
+            str_effect = '%d / %d' % (args.calibration[-2], args.calibration[-1])
+            if smr.smr is None:
+                effect /= smr.spectra[120,pixelList]
+            else:
+                effect /= smr.smr[pixelList]
+        elif smr.errorType == 'A':
+            str_effect = '%d - %d' % (args.calibration[-2], args.calibration[-1])
+            if smr.smr is None:
+                effect -= smr.spectra[120,pixelList]
+            else:
+                effect -= smr.smr[pixelList]
+        else:
+            pass
+        ax.plot( pixelList, effect, 'b.' )
+        ax.set_xlim( [pixelList[0],pixelList[-1]] )
+        ax.grid( True )
+        ax.set_title( 'SMR - calibration: ' + str_effect )
+
+        ax = axs[1]
+        if smr.smr is None:
+            ax.plot( pixelList, smr.spectra[120,pixelList], 'b.' )
+        else:
+            ax.plot( pixelList, smr.smr[pixelList], 'b.' )
+        ax.set_xlim( [pixelList[0],pixelList[-1]] )
+        ax.grid( True )
+        ax.set_title( 'SMR - calibration: '
+                      + ','.join(str(x) for x in args.calibration )
+)
+        fig.suptitle( 'SMR - State 62 - Orbit %d'% smr.absOrbit )
+        plt.show()
+                
+    def screen(self, args, smr):
+        if args.pixel:
+            self.showPixel( smr, args.pixel )
+        elif args.effect:
+            self.showEffect(args, smr)
+        else:
+            self.showSpectrum(args, smr)
 
 #-------------------------SECTION ARGPARSE----------------------------------
 def handleCmdParams():
