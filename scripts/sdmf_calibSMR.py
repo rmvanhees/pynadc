@@ -828,6 +828,10 @@ class SMRcalib:
 
             smr.spectra.data[no,:] /= (pet * radsens)
 
+        # mask invalid values
+        smr.spectra = ma.masked_less( smr.spectra, 0, copy=False )
+        smr.spectra = ma.masked_invalid( smr.spectra, copy=False )
+
     def combineSpectra(self, smr, verbose=False):
         '''
         (8) Calculate Sun Mean Reference Spectrum
@@ -848,11 +852,12 @@ class SMRcalib:
         smr.errorType = 'A'
 
         # omit first and last spectra
-        smr.smr      = ma.median( smr.spectra[1:-1,:], axis=0 )
+        smr.smr      = ma.mean( smr.spectra[1:-1,:], axis=0 )
+        smr.smrError = ma.std( smr.spectra[1:-1,:], axis=0 )
+        smr.bdpm     = (ma.count_masked( smr.spectra[1:-1,:], axis=0 ) > 0)
+
         smr.smrVar   = np.zeros( smr.numPixels, dtype='float64' )
         smr.smrSlope = np.zeros( smr.numPixels, dtype='float64' )
-        smr.smrError = np.zeros( smr.numPixels, dtype='float64' )
-        smr.bdpm     = (ma.count_masked( smr.spectra[1:-1,:], axis=0 ) > 0)
 
         x = np.arange(238)
         A = np.vstack([x, np.ones(238)]).T
