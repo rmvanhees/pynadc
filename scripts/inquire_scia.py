@@ -53,7 +53,7 @@ if __name__ == '__main__':
     parser_type.add_argument( '--best', action='store_true', default=False,
                          help='select latest consolidated products' )
     parser_type.add_argument( '--proc', type=str, nargs='+',
-                              choices=['B','N','O','P','R','S','U','W'],
+                              choices=['B','N','O','P','R','S','U','W','Y'],
                               help='select entries on ESA processor ID' )
     parser_type.add_argument( '--date', type=str,
                          help='''select entries on start time of science data;
