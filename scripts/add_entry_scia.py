@@ -186,7 +186,7 @@ def read_scia_lv0( sciafl ):
         if not line: break
         nr += 1
 
-        words = line.split( '=' )
+        words = line.decode('ascii').split( '=' )
         if len( words ) < 2: continue
 
         if words[0] == "PRODUCT":
@@ -240,7 +240,7 @@ def read_scia_lv1( sciafl ):
         if not line: break
         nr += 1
 
-        words = line.split( '=' )
+        words = line.decode('ascii').split( '=' )
         if len( words ) < 2: continue
 
         if words[0] == "PRODUCT":
@@ -316,7 +316,7 @@ def read_scia_lv2( sciafl ):
         if not line: break
         nr += 1
 
-        words = line.split( '=' )
+        words = line.decode('ascii').split( '=' )
         if len( words ) < 2: continue
 
         if words[0] == "PRODUCT":
