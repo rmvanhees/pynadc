@@ -154,32 +154,55 @@ def read_gosat_fts( flname ):
     dict_gosat['filePath'] = os.path.dirname( flname )
     dict_gosat['passNumber'] = int(dict_gosat['fileName'][21:24])
     dict_gosat['frameNumber'] = int(dict_gosat['fileName'][24:27])
+    dict_gosat['observationMode'] = dict_gosat['fileName'][31:35]
     dict_gosat['productVersion'] = dict_gosat['fileName'][35:41]
     dict_gosat['receiveDate'] = \
         strftime("%F %T", gmtime(os.path.getctime( flname )))
     dict_gosat['fileSize'] = os.path.getsize( flname )
 
     with h5py.File( flname, mode='r' ) as fid:
-        grp = fid['/Global/MD_Metadata']
-        dset = grp['dateStamp']
-        dict_gosat['creationDate'] = dset[:].tostring()
+        if '/Global' in fid:
+            grp = fid['/Global/MD_Metadata']
+            dset = grp['dateStamp']
+            dict_gosat['creationDate'] = dset[:].tostring()
 
-        grp = fid['/Global/metadata']
-        dset = grp['sensorName']
-        dict_gosat['sensorName'] = dset[:].tostring()
-        dset = grp['algorithmName']
-        dict_gosat['algorithmName'] = dset[:].tostring()
-        dset = grp['algorithmVersion']
-        dict_gosat['algorithmVersion'] = dset[:].tostring()
-        dset = grp['parameterVersion']
-        dict_gosat['paramVersion'] = dset[:].tostring()
-        dset = grp['observationMode']
-        dict_gosat['observationMode'] = dset[:].tostring()
+            grp = fid['/Global/metadata']
+            dset = grp['sensorName']
+            dict_gosat['sensorName'] = dset[:].tostring()
+            dset = grp['algorithmName']
+            dict_gosat['algorithmName'] = dset[:].tostring()
+            dset = grp['algorithmVersion']
+            dict_gosat['algorithmVersion'] = dset[:].tostring()
+            dset = grp['parameterVersion']
+            dict_gosat['paramVersion'] = dset[:].tostring()
+            dset = grp['observationMode']
+            dict_gosat['observationMode'] = dset[:].tostring()
 
-        grp = fid['/ancillary/OrbitData']
-        dset = grp['startDate']
-        dict_gosat['acquisitionDate'] = \
-            "%04d-%02d-%02d %02d:%02d:%09.6f" % dset[0].tolist()
+            grp = fid['/ancillary/OrbitData']
+            dset = grp['startDate']
+            dict_gosat['acquisitionDate'] = \
+                    "%04d-%02d-%02d %02d:%02d:%09.6f" % dset[0].tolist()
+        elif '/globalAttribute' in fid:
+            grp = fid['/globalAttribute/metadata']
+            dset = grp['dateStamp']
+            dict_gosat['creationDate'] = dset[...]
+            
+            grp = fid['/globalAttribute/extensionMetadata']
+            dset = grp['algorithmName']
+            dict_gosat['algorithmName'] = dset[...]
+            dset = grp['algorithmVersion']
+            dict_gosat['algorithmVersion'] = dset[...]
+            dset = grp['parameterVersion']
+            dict_gosat['paramVersion'] = dset[...]
+            dset = grp['sensorName']
+            dict_gosat['sensorName'] = dset[...]
+
+            grp = fid['/ancillary/orbitData']
+            dset = grp['startDate']
+            dict_gosat['acquisitionDate'] = \
+                    "%04d-%02d-%02d %02d:%02d:%09.6f" % dset[0].tolist()
+        else:
+            return {}
 
         grp = fid['/exposureAttribute']
         dset = grp['numPoints_SWIR']
@@ -333,6 +356,11 @@ if __name__ == '__main__':
         print( 'Info: %s is not a regular CAI/FTS product' % gosat_fl )
         sys.exit(0)
 
+    if not dict_gosat:
+        print( 'Info: %s is not a valid CAI/FTS product' % gosat_fl )
+        os.remove( args.input_file )
+        sys.exit(0)
+        
     if args.debug:
         for item in dict_gosat.keys():
             print( item, '\t', dict_gosat[item] )
