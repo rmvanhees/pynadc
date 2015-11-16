@@ -35,6 +35,7 @@ def cre_sqlite_gosat_db( dbname ):
         productCode      char(4)  NOT NULL,
 	productVersion   char(6)  NOT NULL,
         dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
+	acquisitionDate  datetime NOT NULL default '0000-00-00',
 	creationDate     datetime NOT NULL default '0000-00-00',
         receiveDate      datetime NOT NULL default '0000-00-00 00:00:00',
         missingPixelRate integer  NOT NULL,
@@ -57,6 +58,7 @@ def cre_sqlite_gosat_db( dbname ):
 	paramVersion     char(3)  NOT NULL,
 	observationMode  char(4)  NOT NULL,
         dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
+	acquisitionDate  datetime NOT NULL default '0000-00-00',
 	creationDate     datetime NOT NULL default '0000-00-00',
         receiveDate      datetime NOT NULL default '0000-00-00 00:00:00',
         numPoints        integer  NOT NULL,
@@ -85,13 +87,10 @@ def fill_sqlite_rootPaths( dbname ):
           "path" : '/array/slot2A/GOSAT_FTS', 
           "nfs" : '/GOSAT/LV1_01' },
         { "host" : 'shogun', 
-          "path" : '/array/slot2B/GOSAT_FTS', 
+          "path" : '/array/slot2C/GOSAT_FTS', 
           "nfs" : '/GOSAT/LV1_02' },
         { "host" : 'shogun', 
-          "path" : '/array/slot2C/GOSAT_FTS', 
-          "nfs" : '/GOSAT/LV1_03' },
-        { "host" : 'shogun', 
-          "path" : '/array/slot2B/GOSAT_CAI/CAI_L2', 
+          "path" : '/array/slot2A/GOSAT_CAI/CAI_L2', 
           "nfs" : '/GOSAT/LV2_01/CAI_L2' },
         { "host" : 'shikken', 
           "path" : '/array/slot2A/GOSAT_CAI/CAI_L2', 
@@ -115,6 +114,8 @@ def read_gosat_cai( flname ):
     dict_gosat = {}
     dict_gosat['fileName'] = os.path.basename( flname )
     dict_gosat['filePath'] = os.path.dirname( flname )
+    buff = dict_gosat['fileName'][9:21]
+    dict_gosat['acquisitionDate'] = "%s-%s-%s" % (buff[0:4],buff[4:6],buff[6:8])
     dict_gosat['passNumber'] = int(dict_gosat['fileName'][21:24])
     dict_gosat['frameNumber'] = int(dict_gosat['fileName'][24:27])
     dict_gosat['productVersion'] = dict_gosat['fileName'][35:41]
@@ -135,7 +136,7 @@ def read_gosat_cai( flname ):
 
         grp = fid['/frameAttribute']
         dset = grp['frameCenterTime']
-        dict_gosat['acquisitionDate'] = dset[0]
+        dict_gosat['dateTimeStart'] = dset[0]
         dset = grp['missingPixelRate']
         dict_gosat['missingPixelRate'] = dset[0]
         dset = grp['numLine']
@@ -152,6 +153,8 @@ def read_gosat_fts( flname ):
     dict_gosat = {}
     dict_gosat['fileName'] = os.path.basename( flname )
     dict_gosat['filePath'] = os.path.dirname( flname )
+    buff = dict_gosat['fileName'][9:21]
+    dict_gosat['acquisitionDate'] = "%s-%s-%s" % (buff[0:4],buff[4:6],buff[6:8])
     dict_gosat['passNumber'] = int(dict_gosat['fileName'][21:24])
     dict_gosat['frameNumber'] = int(dict_gosat['fileName'][24:27])
     dict_gosat['observationMode'] = dict_gosat['fileName'][31:35]
@@ -180,7 +183,7 @@ def read_gosat_fts( flname ):
 
             grp = fid['/ancillary/OrbitData']
             dset = grp['startDate']
-            dict_gosat['acquisitionDate'] = \
+            dict_gosat['dateTimeStart'] = \
                     "%04d-%02d-%02d %02d:%02d:%09.6f" % dset[0].tolist()
         elif '/globalAttribute' in fid:
             grp = fid['/globalAttribute/metadata']
@@ -199,7 +202,7 @@ def read_gosat_fts( flname ):
 
             grp = fid['/ancillary/orbitData']
             dset = grp['startDate']
-            dict_gosat['acquisitionDate'] = \
+            dict_gosat['dateTimeStart'] = \
                     "%04d-%02d-%02d %02d:%02d:%09.6f" % dset[0].tolist()
         else:
             return {}
@@ -274,19 +277,19 @@ def add_sqlite_gosat( dbname, dict_gosat ):
             ',%(passNumber)d,%(frameNumber)d'\
             ',\'%(productVersion)s\',\'%(algorithmName)s\''\
             ',\'%(algorithmVersion)s\',\'%(paramVersion)s\''\
-            ',\'%(observationMode)s\',\'%(acquisitionDate)s\''\
-            ',\'%(creationDate)s\',\'%(receiveDate)s\''\
+            ',\'%(observationMode)s\',\'%(dateTimeStart)s\''\
+            ',\'%(acquisitionDate)s\',\'%(creationDate)s\',\'%(receiveDate)s\''\
             ',\'{%(numPoints_SWIR)d,%(numPoints_TIR)d}\',%(fileSize)d)'
     elif dict_gosat['sensorName'] == 'TANSO-CAI':
         buffer = dict_gosat["filePath"]
-        indx = buffer.find(dict_gosat["acquisitionDate"][0:4])
+        indx = buffer.find(dict_gosat["dateTimeStart"][0:4])
         rootPath = buffer[0:indx-1]
 
         str_sql = 'insert into tcai__2P values' \
-            '(NULL, \'%(fileName)s\',%(pathID)d'\
+            '(NULL, \'%(fileName)s\',%(pathID)d,%(dateNumber)d'\
             ',%(passNumber)d,%(frameNumber)d,\'%(productCode)s\''\
-            ',\'%(productVersion)s\',\'%(acquisitionDate)s\''\
-            ',\'%(creationDate)s\',\'%(receiveDate)s\''\
+            ',\'%(productVersion)s\',\'%(dateTimeStart)s\''\
+            ',\'%(acquisitionDate)s\',\'%(creationDate)s\',\'%(receiveDate)s\''\
             ',%(missingPixelRate)f,%(numLine)d,%(numPixel)d,%(fileSize)d)'
     else:
         return

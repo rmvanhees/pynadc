@@ -48,12 +48,12 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
     if product[0:9] == 'GOSATTCAI':
         table = 'tcai__2P'
         select_str = \
-            'pathID,printf(\'%s/%s\',strftime(\'%Y/%m/%d\',dateTimeStart),name)'
+            'pathID,printf(\'%s/%s\',strftime(\'%Y/%m/%d\',acquisitionDate),name)'
     else:
         table = 'tfts__1P'
         select_str = \
             'pathID, printf(\'%s/%s/%s/%s\',observationMode,productVersion,'\
-            'strftime(\'%Y/%m/%d\', dateTimeStart),name)'
+            'strftime(\'%Y/%m/%d\', acquisitionDate),name)'
     if dump:
         select_str = '*'
 
@@ -118,7 +118,7 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
                 prod_version, toScreen, dump, debug
     dbname    : full path to GOSAT SQLite database [default: DB_NAME]
     prod_type : type of product, supported TFTS_1 and TCAI_2 [value required]
-    date      : select on dateTimeStart [default: None]
+    date      : select on acquisitionDate [default: None]
     rtime     : select on receiveTime [default: None]
     obs_mode  : (FTS only) select on observationMode: OB1D, OB1N, SPOD, SPON
                 [default: None]
@@ -149,11 +149,11 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
         table = 'tfts__1P'
         select_str = \
             'pathID, printf(\'%s/%s/%s/%s\',observationMode,productVersion,'\
-            'strftime(\'%Y/%m/%d\', dateTimeStart),name)'
+            'strftime(\'%Y/%m/%d\', acquisitionDate),name)'
     else:
         table = 'tcai__2P'
         select_str = \
-            'pathID,printf(\'%s/%s\',strftime(\'%Y/%m/%d\',dateTimeStart),name)'
+            'pathID,printf(\'%s/%s\',strftime(\'%Y/%m/%d\',acquisitionDate),name)'
 
     query_str = \
         ['select {} from {}'.format(select_str, table)]
@@ -189,7 +189,7 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
             minu = 0
         d1 = '%04d-%02d-%02d %02d:%02d:%02d' % (year,month,day,hour,minu,0)
 
-        mystr = ' dateTimeStart between \'%s\' and datetime(\'%s\',\'%s\')'
+        mystr = ' acquisitionDate between \'%s\' and datetime(\'%s\',\'%s\')'
         query_str.append(mystr % (d1, d1, dtime))
 
     if rtime:
