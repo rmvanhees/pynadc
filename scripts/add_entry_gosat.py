@@ -188,17 +188,17 @@ def read_gosat_fts( flname ):
         elif '/globalAttribute' in fid:
             grp = fid['/globalAttribute/metadata']
             dset = grp['dateStamp']
-            dict_gosat['creationDate'] = dset[...]
+            dict_gosat['creationDate'] = dset[:]
             
             grp = fid['/globalAttribute/extensionMetadata']
             dset = grp['algorithmName']
-            dict_gosat['algorithmName'] = dset[...]
+            dict_gosat['algorithmName'] = dset[:]
             dset = grp['algorithmVersion']
-            dict_gosat['algorithmVersion'] = dset[...]
+            dict_gosat['algorithmVersion'] = dset[:]
             dset = grp['parameterVersion']
-            dict_gosat['paramVersion'] = dset[...]
+            dict_gosat['paramVersion'] = dset[:]
             dset = grp['sensorName']
-            dict_gosat['sensorName'] = dset[...]
+            dict_gosat['sensorName'] = dset[:]
 
             grp = fid['/ancillary/orbitData']
             dset = grp['startDate']
@@ -273,7 +273,7 @@ def add_sqlite_gosat( dbname, dict_gosat ):
         rootPath = buffer[0:indx-1]
 
         str_sql = 'insert into tfts__1P values' \
-            '(NULL, \'%(fileName)s\',%(pathID)d'\
+            '(NULL,\'%(fileName)s\',%(pathID)d'\
             ',%(passNumber)d,%(frameNumber)d'\
             ',\'%(productVersion)s\',\'%(algorithmName)s\''\
             ',\'%(algorithmVersion)s\',\'%(paramVersion)s\''\
@@ -286,9 +286,10 @@ def add_sqlite_gosat( dbname, dict_gosat ):
         rootPath = buffer[0:indx-1]
 
         str_sql = 'insert into tcai__2P values' \
-            '(NULL, \'%(fileName)s\',%(pathID)d,%(dateNumber)d'\
-            ',%(passNumber)d,%(frameNumber)d,\'%(productCode)s\''\
-            ',\'%(productVersion)s\',\'%(dateTimeStart)s\''\
+            '(NULL,\'%(fileName)s\',%(pathID)d'\
+            ',%(passNumber)d,%(frameNumber)d'\
+            ',\'%(productCode)s\',\'%(productVersion)s\''\
+            ',\'%(dateTimeStart)s\''\
             ',\'%(acquisitionDate)s\',\'%(creationDate)s\',\'%(receiveDate)s\''\
             ',%(missingPixelRate)f,%(numLine)d,%(numPixel)d,%(fileSize)d)'
     else:
@@ -326,8 +327,7 @@ if __name__ == '__main__':
                          help='remove SQL data of INPUT_FILE from database' )
     parser.add_argument( '--replace', action='store_true', default=False,
                          help='replace SQL data of INPUT_FILE in database' )
-    parser.add_argument( '--dbname', dest='dbname', type=str,
-                         default='sron_gosat.db', 
+    parser.add_argument( '--dbname', dest='dbname', default=b'sron_gosat.db', 
                          help='name of GOSAT/SQLite database' )
     parser.add_argument( 'input_file', nargs='?', type=str,
                          help='read from INPUT_FILE' )
