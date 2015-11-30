@@ -49,7 +49,7 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
     elif product[0:10] == 'SCI_NL__1P':
         table = 'meta__1P'
     else:
-        table = 'meta__1P'
+        table = 'meta__2P'
 
     if dump:
         select_str = '*'

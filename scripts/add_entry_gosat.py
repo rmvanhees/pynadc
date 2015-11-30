@@ -35,7 +35,7 @@ def cre_sqlite_gosat_db( dbname ):
         productCode      char(4)  NOT NULL,
 	productVersion   char(6)  NOT NULL,
         dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
-	acquisitionDate  datetime NOT NULL default '0000-00-00',
+	acquisitionDate  datetime NOT NULL default '0000-00-00 00:00:00',
 	creationDate     datetime NOT NULL default '0000-00-00',
         receiveDate      datetime NOT NULL default '0000-00-00 00:00:00',
         missingPixelRate integer  NOT NULL,
@@ -58,7 +58,7 @@ def cre_sqlite_gosat_db( dbname ):
 	paramVersion     char(3)  NOT NULL,
 	observationMode  char(4)  NOT NULL,
         dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
-	acquisitionDate  datetime NOT NULL default '0000-00-00',
+	acquisitionDate  datetime NOT NULL default '0000-00-00 00:00:00',
 	creationDate     datetime NOT NULL default '0000-00-00',
         receiveDate      datetime NOT NULL default '0000-00-00 00:00:00',
         numPoints        integer  NOT NULL,
@@ -114,8 +114,9 @@ def read_gosat_cai( flname ):
     dict_gosat = {}
     dict_gosat['fileName'] = os.path.basename( flname )
     dict_gosat['filePath'] = os.path.dirname( flname )
-    buff = dict_gosat['fileName'][9:21]
-    dict_gosat['acquisitionDate'] = "%s-%s-%s" % (buff[0:4],buff[4:6],buff[6:8])
+    buff = dict_gosat['fileName'][9:]
+    dict_gosat['acquisitionDate'] = "%s-%s-%s %s:%s:%s" % \
+                                    (buff[0:4],buff[4:6],buff[6:8],buff[8:10],buff[10:12],buff[12:14])
     dict_gosat['passNumber'] = int(dict_gosat['fileName'][21:24])
     dict_gosat['frameNumber'] = int(dict_gosat['fileName'][24:27])
     dict_gosat['productVersion'] = dict_gosat['fileName'][35:41]
@@ -153,8 +154,9 @@ def read_gosat_fts( flname ):
     dict_gosat = {}
     dict_gosat['fileName'] = os.path.basename( flname )
     dict_gosat['filePath'] = os.path.dirname( flname )
-    buff = dict_gosat['fileName'][9:21]
-    dict_gosat['acquisitionDate'] = "%s-%s-%s" % (buff[0:4],buff[4:6],buff[6:8])
+    buff = dict_gosat['fileName'][9:]
+    dict_gosat['acquisitionDate'] = "%s-%s-%s %s:%s:%s" % \
+                                    (buff[0:4],buff[4:6],buff[6:8],buff[8:10],buff[10:12],buff[12:14])
     dict_gosat['passNumber'] = int(dict_gosat['fileName'][21:24])
     dict_gosat['frameNumber'] = int(dict_gosat['fileName'][24:27])
     dict_gosat['observationMode'] = dict_gosat['fileName'][31:35]
@@ -188,17 +190,17 @@ def read_gosat_fts( flname ):
         elif '/globalAttribute' in fid:
             grp = fid['/globalAttribute/metadata']
             dset = grp['dateStamp']
-            dict_gosat['creationDate'] = dset[:]
+            dict_gosat['creationDate'] = dset[...]
             
             grp = fid['/globalAttribute/extensionMetadata']
             dset = grp['algorithmName']
-            dict_gosat['algorithmName'] = dset[:]
+            dict_gosat['algorithmName'] = dset[...]
             dset = grp['algorithmVersion']
-            dict_gosat['algorithmVersion'] = dset[:]
+            dict_gosat['algorithmVersion'] = dset[...]
             dset = grp['parameterVersion']
-            dict_gosat['paramVersion'] = dset[:]
+            dict_gosat['paramVersion'] = dset[...]
             dset = grp['sensorName']
-            dict_gosat['sensorName'] = dset[:]
+            dict_gosat['sensorName'] = dset[...]
 
             grp = fid['/ancillary/orbitData']
             dset = grp['startDate']
@@ -333,7 +335,7 @@ if __name__ == '__main__':
                          help='read from INPUT_FILE' )
     args = parser.parse_args()
 
-    if not h5py.h5f.is_hdf5( args.input_file ):
+    if not h5py.h5f.is_hdf5( np.string_(args.input_file) ):
         print( 'Info: %s is not a HDF5/GOSAT product' % args.input_file )
         sys.exit(0)
 
