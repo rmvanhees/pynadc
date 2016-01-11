@@ -190,17 +190,17 @@ def read_gosat_fts( flname ):
         elif '/globalAttribute' in fid:
             grp = fid['/globalAttribute/metadata']
             dset = grp['dateStamp']
-            dict_gosat['creationDate'] = dset[...]
+            dict_gosat['creationDate'] = np.string_(dset[...]).decode('ascii')
             
             grp = fid['/globalAttribute/extensionMetadata']
             dset = grp['algorithmName']
-            dict_gosat['algorithmName'] = dset[...]
+            dict_gosat['algorithmName'] = np.string_(dset[...]).decode('ascii')
             dset = grp['algorithmVersion']
-            dict_gosat['algorithmVersion'] = dset[...]
+            dict_gosat['algorithmVersion'] = np.string_(dset[...]).decode('ascii')
             dset = grp['parameterVersion']
-            dict_gosat['paramVersion'] = dset[...]
+            dict_gosat['paramVersion'] = np.string_(dset[...]).decode('ascii')
             dset = grp['sensorName']
-            dict_gosat['sensorName'] = dset[...]
+            dict_gosat['sensorName'] = np.string_(dset[...]).decode('ascii')
 
             grp = fid['/ancillary/orbitData']
             dset = grp['startDate']
@@ -295,6 +295,7 @@ def add_sqlite_gosat( dbname, dict_gosat ):
             ',\'%(acquisitionDate)s\',\'%(creationDate)s\',\'%(receiveDate)s\''\
             ',%(missingPixelRate)f,%(numLine)d,%(numPixel)d,%(fileSize)d)'
     else:
+        print( 'Invalid sensor name: ', dict_gosat['sensorName'] )
         return
 
     con = sqlite3.connect( dbname )
@@ -305,9 +306,9 @@ def add_sqlite_gosat( dbname, dict_gosat ):
     cur.execute( str_path_sql % (rootPath,rootPath) )
     row = cur.fetchone()
     if row is not None:
-        dict_gosat["pathID"] = row[0]
+        dict_gosat['pathID'] = row[0]
     else:
-        dict_gosat["pathID"] = 0
+        dict_gosat['pathID'] = 0
 
     ## do actual query
     cur.execute( str_sql % dict_gosat )

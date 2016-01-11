@@ -67,6 +67,7 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
     cu = conn.cursor()
     if debug:
         print( query_str )
+        row = ['/fakePath/toProduct', product]
     else:
         cu.execute( query_str )
         row = cu.fetchone()
@@ -83,14 +84,15 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
             'select {} from rootPaths where pathID={}'.format(case_str, row[0])
         if debug:
             print( query_str )
+            root = [ row[0] ]
         else:
             cu.execute( query_str )
             root = cu.fetchone()
     cu.close()
     conn.close()
 
-    if debug:
-        return []
+    #if debug:
+    #    return []
 
     if toScreen:
         if dump:
