@@ -2,7 +2,7 @@
 
 from distutils.core import setup
 
-VERSION = '1.1.3'
+VERSION = '1.1.4'
 
 cls_txt = \
 """
@@ -42,14 +42,17 @@ setup(
     download_url = 'https://github.com/rmvanhees/pynadc.git',
     package_dir={'': 'sources'},
     packages=[ 'pynadc',
+               'pynadc.gosat',
                'pynadc.scia',
-               'pynadc.gosat' ],
+               'pynadc.tropomi' ],
     scripts=[ 'scripts/add_entry_gosat.py',
               'scripts/add_entry_scia.py',
+              'scripts/add_entry_s5p.py',
               'scripts/collect_stateDefs.py',
               'scripts/inquire_db.py',
               'scripts/inquire_gosat.py',
               'scripts/inquire_scia.py',
+              'scripts/inquire_s5p.py',
               'scripts/scia_lv0.py',
               'scripts/scia_lv1.py',
               'scripts/sdmf_calibSMR.py' ]

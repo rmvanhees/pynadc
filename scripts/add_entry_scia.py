@@ -3,7 +3,9 @@
 # (c) SRON - Netherlands Institute for Space Research (2014).
 # All Rights Reserved.
 # This software is distributed under the BSD 2-clause license.
-
+'''
+Defines class ArchiveScia to add new entries to Sciamachy SQLite database
+'''
 #
 from __future__ import print_function
 from __future__ import division
@@ -17,6 +19,9 @@ from datetime import datetime
 
 #--------------------------------------------------
 def cre_sqlite_scia_db( dbname ):
+    '''
+    function to define database for Sciamachy database and tables
+    '''
     con = sqlite3.connect( dbname )
     cur = con.cursor()
     cur.execute( '''create table meta__0P (
@@ -121,295 +126,392 @@ def cre_sqlite_scia_db( dbname ):
     con.commit()
     con.close()
 
-def get_scia_level( sciafl ):
-    if sciafl[0:10] == 'SCI_NL__0P':
-        level = 0
-    elif sciafl[0:10] == 'SCI_NL__1P':
-        level = 1
-    elif sciafl[0:10] == 'SCI_OL__2P':
-        level = 2
-    elif sciafl[0:10] == 'SCI_NL__2P':
-        level = 2
-    else:
-        print( 'Level of Sciamachy product is unknown' )
-        level = -1
-    return level
-
 #--------------------------------------------------
-def del_sqlite_scia( dbname, sciafl ):
-    level = get_scia_level(sciafl)
-    if level < 0: return
+class ArchiveScia( object ):
+    '''
+    '''
+    def __init__( self, db_name='./sron_scia.db' ):
+        '''
+        '''
+        self.dbname = db_name
+        
+        if not os.path.isfile( db_name ):
+            cre_sqlite_scia_db( db_name )
 
-    con = sqlite3.connect( dbname )
-    cur = con.cursor()
-    query_str = 'select name from meta__%-dP where name=\'%s\''
-    cur.execute( query_str % (level, sciafl) )
-    row = cur.fetchone()
-    if row == None: return
+    #-------------------------
+    def rd_lv0( self, sciafl_full ):
+        '''
+        '''
+        nr = 0
+        dict_meta = {}
+        dict_meta['filePath'] = os.path.dirname( sciafl_full )
+        dict_meta['receiveDate'] = \
+                strftime("%F %T", gmtime(os.path.getctime( sciafl_full )))
+        if sciafl_full.endswith('.gz'):
+            dict_meta['fileName'] = os.path.basename( sciafl_full )[0:-3]
+            dict_meta['compress'] = True
+            fp = gzip.open( sciafl_full, "rb" )
+        else:
+            dict_meta['fileName'] = os.path.basename( sciafl_full )
+            dict_meta['compress'] = False
+            fp = open( sciafl_full, "rb" )
 
-    query_str = 'delete from meta__%-dP where name=\'%s\''
-    cur.execute( query_str % (level, sciafl) )
-    cur.close()
-    con.commit()
-    con.close()
+        while nr < 50:
+            line = fp.readline()
+            if not line:
+                break
+            nr += 1
 
-#--------------------------------------------------
-def check_sqlite_scia( dbname, sciafl ):
-    level = get_scia_level(sciafl)
-    if level < 0: return True
+            words = line.decode('ascii').split( '=' )
+            if len( words ) < 2:
+                continue
 
-    con = sqlite3.connect( dbname )
-    cur = con.cursor()
-    query_str = 'select name from meta__%-dP where name=\'%s\''
-    cur.execute( query_str % (level, sciafl) )
-    row = cur.fetchone()
-    cur.close()
-    con.commit()
-    con.close()
-    if row == None: 
-        return False
-    else:
-        return True
+            if words[0] == "PRODUCT":
+                dict_meta['product'] = words[1][1:-2]
+            elif words[0] == "PROC_STAGE":
+                dict_meta['procStage'] = words[1][0:-1]
+                if dict_meta['procStage'] == 'N':
+                    dict_meta['qualityFlag'] = 'GOOD'
+                    dict_meta['q_flag'] = 5
+                else:
+                    dict_meta['qualityFlag'] = 'CONS'
+                    dict_meta['q_flag'] = 10
+            elif words[0] == "PROC_CENTER":
+                dict_meta['procCenter'] = words[1][1:-2].rstrip()
+            elif words[0] == "PROC_TIME":
+                dt = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
+                if dt.microsecond == 0:
+                    dt = dt.replace( microsecond=randint(0,99999) )
+                dict_meta['procTime'] = dt.strftime( '%Y-%m-%d %H:%M:%S.%f' )
+            elif words[0] == "SOFTWARE_VER":
+                dict_meta['softVersion'] = words[1][1:-2].rstrip()
+            elif words[0] == "SENSING_START":
+                dt1 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
+                dict_meta['dateTimeStart'] = dt1.strftime( '%Y-%m-%d %H:%M:%S' )
+                dict_meta['muSeconds' ] = dt1.microsecond
+            elif words[0] == "SENSING_STOP":
+                dt2 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
+            elif words[0] == "REL_ORBIT":
+                dict_meta['relOrbit'] = int( words[1] )
+            elif words[0] == "ABS_ORBIT":
+                dict_meta['absOrbit'] = int( words[1] )
+            elif words[0] == "TOT_SIZE":
+                dict_meta['fileSize'] = int( words[1][0:21] )
+            elif words[0] == "NUM_DATA_SETS":
+                dict_meta['numDataSets'] = int( words[1] )
+            elif words[0] == "SPH_DESCRIPTOR":
+                break
 
-#--------------------------------------------------
-def read_scia_lv0( sciafl ):
-    nr = 0
-    dict_hdr = {}
+        fp.close()
 
-    if '.gz' in sciafl:
-        fp = gzip.open( sciafl, "rb" )
-    else:
-        fp = open( sciafl, "rb" )
+        dt = dt2 - dt1
+        dict_meta['duration'] = dt.seconds + dt.microseconds / 1e6
+        return dict_meta
+        
+    #-------------------------
+    def rd_lv1( self, sciafl_full ):
+        '''
+        '''
+        nr = 0
+        dict_meta = {}
+        dict_meta['filePath'] = os.path.dirname( sciafl_full )
+        dict_meta['receiveDate'] = \
+                strftime("%F %T", gmtime(os.path.getctime( sciafl_full )))
+        if sciafl_full.endswith('.gz'):
+            dict_meta['fileName'] = os.path.basename( sciafl_full )[0:-3]
+            dict_meta['compress'] = True
+            fp = gzip.open( sciafl_full, "rb" )
+        else:
+            dict_meta['fileName'] = os.path.basename( sciafl_full )
+            dict_meta['compress'] = False
+            fp = open( sciafl_full, "rb" )
 
-    while nr < 50:
-        line = fp.readline()
-        if not line: break
-        nr += 1
+        while nr < 100:
+            line = fp.readline()
+            if not line:
+                break
+            nr += 1
 
-        words = line.decode('ascii').split( '=' )
-        if len( words ) < 2: continue
+            words = line.decode('ascii').split( '=' )
+            if len( words ) < 2:
+                continue
 
-        if words[0] == "PRODUCT":
-            dict_hdr['product'] = words[1][1:-2]
-        elif words[0] == "PROC_STAGE":
-            dict_hdr['procStage'] = words[1][0:-1]
-        elif words[0] == "PROC_CENTER":
-            dict_hdr['procCenter'] = words[1][1:-2].rstrip()
-        elif words[0] == "PROC_TIME":
-            dt = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
-            if dt.microsecond == 0:
-                dt = dt.replace( microsecond=randint(0,99999) )
-            dict_hdr['procTime'] = dt.strftime( '%Y-%m-%d %H:%M:%S.%f' )
-        elif words[0] == "SOFTWARE_VER":
-            dict_hdr['softVersion'] = words[1][1:-2].rstrip()
-        elif words[0] == "SENSING_START":
-            dt1 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
-            dict_hdr['dateTimeStart'] = dt1.strftime( '%Y-%m-%d %H:%M:%S' )
-            dict_hdr['muSeconds' ] = dt1.microsecond
-        elif words[0] == "SENSING_STOP":
-            dt2 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
-        elif words[0] == "REL_ORBIT":
-            dict_hdr['relOrbit'] = int( words[1] )
-        elif words[0] == "ABS_ORBIT":
-            dict_hdr['absOrbit'] = int( words[1] )
-        elif words[0] == "TOT_SIZE":
-            dict_hdr['fileSize'] = int( words[1][0:21] )
-        elif words[0] == "NUM_DATA_SETS":
-            dict_hdr['numDataSets'] = int( words[1] )
-        elif words[0] == "SPH_DESCRIPTOR":
-            break
+            if words[0] == "PRODUCT":
+                dict_meta['product'] = words[1][1:-2]
+            elif words[0] == "PROC_STAGE":
+                dict_meta['procStage'] = words[1][0:-1]
+                if dict_meta['procStage'] == 'N':
+                    dict_meta['qualityFlag'] = 'GOOD'
+                    dict_meta['q_flag'] = 5
+                else:
+                    dict_meta['qualityFlag'] = 'CONS'
+                    dict_meta['q_flag'] = 10
+            elif words[0] == "PROC_CENTER":
+                dict_meta['procCenter'] = words[1][1:-2].rstrip()
+            elif words[0] == "PROC_TIME":
+                dt = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
+                if dt.microsecond == 0:
+                    dt = dt.replace( microsecond=randint(0,99999) )
+                dict_meta['procTime'] = dt.strftime( '%Y-%m-%d %H:%M:%S.%f' )
+            elif words[0] == "SOFTWARE_VER":
+                dict_meta['softVersion'] = words[1][1:-2].rstrip()
+            elif words[0] == "REL_ORBIT":
+                dict_meta['relOrbit'] = int( words[1] )
+            elif words[0] == "ABS_ORBIT":
+                dict_meta['absOrbit'] = int( words[1] )
+            elif words[0] == "TOT_SIZE":
+                dict_meta['fileSize'] = int( words[1][0:21] )
+            elif words[0] == "NUM_DATA_SETS":
+                dict_meta['numDataSets'] = int( words[1] )
+            elif words[0] == "START_TIME":
+                dt1 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
+                dict_meta['dateTimeStart'] = dt1.strftime( '%Y-%m-%d %H:%M:%S' )
+                dict_meta['muSeconds' ] = dt1.microsecond
+            elif words[0] == "STOP_TIME":
+                dt2 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
+            elif words[0] == "KEY_DATA_VERSION":
+                dict_meta['keydataVersion'] = words[1][1:-2].rstrip()
+            elif words[0] == "M_FACTOR_VERSION":
+                dict_meta['mFactorVersion'] = words[1][1:-2].rstrip()
+            elif words[0] == "SPECTRAL_CAL_CHECK_SUM":
+                dict_meta['spectralCal'] = words[1][1:-2].rstrip()
+            elif words[0] == "SATURATED_PIXEL":
+                dict_meta['saturatedPix'] = words[1][1:-2]
+            elif words[0] == "DEAD_PIXEL":
+                dict_meta['deadPixels'] = words[1][1:-2].rstrip()
+            elif words[0] == "NO_OF_NADIR_STATES":
+                dict_meta['nadirStates'] = int( words[1] )
+            elif words[0] == "NO_OF_LIMB_STATES":
+                dict_meta['limbStates'] = int( words[1] )
+            elif words[0] == "NO_OF_OCCULTATION_STATES":
+                dict_meta['occulStates'] = int( words[1] )
+            elif words[0] == "NO_OF_MONI_STATES":
+                dict_meta['monitorStates'] = int( words[1] )
+            elif words[0] == "NO_OF_NOPROC_STATES":
+                dict_meta['noProcStates'] = int( words[1] )
+            elif words[0] == "DS_NAME":
+                break
 
-    fp.close()
+        fp.close()
 
-    dt = dt2 - dt1
-    dict_hdr['duration'] = dt.seconds + dt.microseconds / 1e6
-    return dict_hdr
+        dt = dt2 - dt1
+        dict_meta['duration'] = dt.seconds + dt.microseconds / 1e6
+        return dict_meta
+        
+    #-------------------------
+    def rd_lv2( self, sciafl_full ):
+        '''
+        '''
+        nr = 0
+        dict_meta = {}
+        nadir_products = []
+        limb_products = []
+        dict_meta['filePath'] = os.path.dirname( sciafl_full )
+        dict_meta['receiveDate'] = \
+                strftime("%F %T", gmtime(os.path.getctime( sciafl_full )))
+        if sciafl_full.endswith('.gz'):
+            dict_meta['fileName'] = os.path.basename( sciafl_full )[0:-3]
+            dict_meta['compress'] = True
+            fp = gzip.open( sciafl_full, "rb" )
+        else:
+            dict_meta['fileName'] = os.path.basename( sciafl_full )
+            dict_meta['compress'] = False
+            fp = open( sciafl_full, "rb" )
 
-#++++++++++++++++++++++++++++++++++++++++++++++++++
-def read_scia_lv1( sciafl ):
-    nr = 0
-    dict_hdr = {}
+        while nr < 150:
+            line = fp.readline()
+            if not line:
+                break
+            nr += 1
 
-    if sciafl.find( '.gz' ) != -1:
-        fp = gzip.open( sciafl, "rb" )
-    else:
-        fp = open( sciafl, "rb" )
+            words = line.decode('ascii').split( '=' )
+            if len( words ) < 2:
+                continue
 
-    while nr < 100:
-        line = fp.readline()
-        if not line: break
-        nr += 1
-
-        words = line.decode('ascii').split( '=' )
-        if len( words ) < 2: continue
-
-        if words[0] == "PRODUCT":
-            dict_hdr['product'] = words[1][1:-2]
-        elif words[0] == "PROC_STAGE":
-            dict_hdr['procStage'] = words[1][0:-1]
-        elif words[0] == "PROC_CENTER":
-            dict_hdr['procCenter'] = words[1][1:-2].rstrip()
-        elif words[0] == "PROC_TIME":
-            dt = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
-            if dt.microsecond == 0:
-                dt = dt.replace( microsecond=randint(0,99999) )
-            dict_hdr['procTime'] = dt.strftime( '%Y-%m-%d %H:%M:%S.%f' )
-        elif words[0] == "SOFTWARE_VER":
-            dict_hdr['softVersion'] = words[1][1:-2].rstrip()
-        elif words[0] == "REL_ORBIT":
-            dict_hdr['relOrbit'] = int( words[1] )
-        elif words[0] == "ABS_ORBIT":
-            dict_hdr['absOrbit'] = int( words[1] )
-        elif words[0] == "TOT_SIZE":
-            dict_hdr['fileSize'] = int( words[1][0:21] )
-        elif words[0] == "NUM_DATA_SETS":
-            dict_hdr['numDataSets'] = int( words[1] )
-        elif words[0] == "START_TIME":
-            dt1 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
-            dict_hdr['dateTimeStart'] = dt1.strftime( '%Y-%m-%d %H:%M:%S' )
-            dict_hdr['muSeconds' ] = dt1.microsecond
-        elif words[0] == "STOP_TIME":
-            dt2 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
-        elif words[0] == "KEY_DATA_VERSION":
-            dict_hdr['keydataVersion'] = words[1][1:-2].rstrip()
-        elif words[0] == "M_FACTOR_VERSION":
-            dict_hdr['mFactorVersion'] = words[1][1:-2].rstrip()
-        elif words[0] == "SPECTRAL_CAL_CHECK_SUM":
-            dict_hdr['spectralCal'] = words[1][1:-2].rstrip()
-        elif words[0] == "SATURATED_PIXEL":
-            dict_hdr['saturatedPix'] = words[1][1:-2]
-        elif words[0] == "DEAD_PIXEL":
-            dict_hdr['deadPixels'] = words[1][1:-2].rstrip()
-        elif words[0] == "NO_OF_NADIR_STATES":
-            dict_hdr['nadirStates'] = int( words[1] )
-        elif words[0] == "NO_OF_LIMB_STATES":
-            dict_hdr['limbStates'] = int( words[1] )
-        elif words[0] == "NO_OF_OCCULTATION_STATES":
-            dict_hdr['occulStates'] = int( words[1] )
-        elif words[0] == "NO_OF_MONI_STATES":
-            dict_hdr['monitorStates'] = int( words[1] )
-        elif words[0] == "NO_OF_NOPROC_STATES":
-            dict_hdr['noProcStates'] = int( words[1] )
-        elif words[0] == "DS_NAME":
-            break
-
-    fp.close()
-
-    dt = dt2 - dt1
-    dict_hdr['duration'] = dt.seconds + dt.microseconds / 1e6
-    return dict_hdr
-
-#++++++++++++++++++++++++++++++++++++++++++++++++++
-def read_scia_lv2( sciafl ):
-    nr = 0
-    dict_hdr = {}
-    nadirProducts = []
-    limbProducts = []
-
-    if sciafl.find( '.gz' ) != -1:
-        fp = gzip.open( sciafl, "rb" )
-    else:
-        fp = open( sciafl, "rb" )
-
-    while nr < 150:
-        line = fp.readline()
-        if not line: break
-        nr += 1
-
-        words = line.decode('ascii').split( '=' )
-        if len( words ) < 2: continue
-
-        if words[0] == "PRODUCT":
-            dict_hdr['product'] = words[1][1:-2]
-        elif words[0] == "PROC_STAGE":
-            dict_hdr['procStage'] = words[1][0:-1]
-        elif words[0] == "PROC_CENTER":
-            dict_hdr['procCenter'] = words[1][1:-2].rstrip()
-        elif words[0] == "PROC_TIME":
-            dt = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
-            if dt.microsecond == 0:
-                dt = dt.replace( microsecond=randint(0,99999) )
-            dict_hdr['procTime'] = dt.strftime( '%Y-%m-%d %H:%M:%S.%f' )
-        elif words[0] == "SOFTWARE_VER":
-            dict_hdr['softVersion'] = words[1][1:-2].rstrip()
-        elif words[0] == "REL_ORBIT":
-            dict_hdr['relOrbit'] = int( words[1] )
-        elif words[0] == "ABS_ORBIT":
-            dict_hdr['absOrbit'] = int( words[1] )
-        elif words[0] == "TOT_SIZE":
-            dict_hdr['fileSize'] = int( words[1][0:21] )
-        elif words[0] == "NUM_DATA_SETS":
-            dict_hdr['numDataSets'] = int( words[1] )
-        elif words[0] == "START_TIME":
-            dt1 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
-            dict_hdr['dateTimeStart'] = dt1.strftime( '%Y-%m-%d %H:%M:%S' )
-            dict_hdr['muSeconds' ] = dt1.microsecond
-        elif words[0] == "STOP_TIME":
-            dt2 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
-        elif words[0] == "FITTING_ERROR_SUM":
-            dict_hdr['fittingErrSum'] = words[1][1:-2].rstrip()
-        elif words[0].find( "NAD_FIT_WINDOW_" ) != -1 \
+            if words[0] == "PRODUCT":
+                dict_meta['product'] = words[1][1:-2]
+            elif words[0] == "PROC_STAGE":
+                dict_meta['procStage'] = words[1][0:-1]
+                if dict_meta['procStage'] == 'N':
+                    dict_meta['qualityFlag'] = 'GOOD'
+                    dict_meta['q_flag'] = 5
+                else:
+                    dict_meta['qualityFlag'] = 'CONS'
+                    dict_meta['q_flag'] = 10
+            elif words[0] == "PROC_CENTER":
+                dict_meta['procCenter'] = words[1][1:-2].rstrip()
+            elif words[0] == "PROC_TIME":
+                dt = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
+                if dt.microsecond == 0:
+                    dt = dt.replace( microsecond=randint(0,99999) )
+                dict_meta['procTime'] = dt.strftime( '%Y-%m-%d %H:%M:%S.%f' )
+            elif words[0] == "SOFTWARE_VER":
+                dict_meta['softVersion'] = words[1][1:-2].rstrip()
+            elif words[0] == "REL_ORBIT":
+                dict_meta['relOrbit'] = int( words[1] )
+            elif words[0] == "ABS_ORBIT":
+                dict_meta['absOrbit'] = int( words[1] )
+            elif words[0] == "TOT_SIZE":
+                dict_meta['fileSize'] = int( words[1][0:21] )
+            elif words[0] == "NUM_DATA_SETS":
+                dict_meta['numDataSets'] = int( words[1] )
+            elif words[0] == "START_TIME":
+                dt1 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
+                dict_meta['dateTimeStart'] = dt1.strftime( '%Y-%m-%d %H:%M:%S' )
+                dict_meta['muSeconds' ] = dt1.microsecond
+            elif words[0] == "STOP_TIME":
+                dt2 = datetime.strptime( words[1][1:-2], '%d-%b-%Y %H:%M:%S.%f' )
+            elif words[0] == "FITTING_ERROR_SUM":
+                dict_meta['fittingErrSum'] = words[1][1:-2].rstrip()
+            elif words[0].find( "NAD_FIT_WINDOW_" ) != -1 \
                 and words[1].find( "EMPTY" ) == -1:
-            if nadirProducts: nadirProducts.append( ',' )
-            nadirProducts.append( words[1][1:-2].replace('- ','-').strip() )
-        elif words[0].find( "LIM_FIT_WINDOW_" ) != -1 \
+                if nadir_products:
+                    nadir_products.append( ',' )
+                nadir_products.append( words[1][1:-2].replace('- ','-').strip() )
+            elif words[0].find( "LIM_FIT_WINDOW_" ) != -1 \
                 and words[1].find( "EMPTY" ) == -1:
-            if limbProducts: limbProducts.append( ',' )
-            limbProducts.append( words[1][1:-2].replace('- ','-').strip() )
-        elif words[0] == "DS_NAME":
-            break
-    fp.close()
+                if limb_products:
+                    limb_products.append( ',' )
+                limb_products.append( words[1][1:-2].replace('- ','-').strip() )
+            elif words[0] == "DS_NAME":
+                break
+        fp.close()
 
-    dt = dt2 - dt1
-    dict_hdr['duration'] = dt.seconds + dt.microseconds / 1e6
-    dict_hdr['nadirProducts'] = ''.join( nadirProducts )
-    dict_hdr['limbProducts'] = ''.join( limbProducts )
-    return dict_hdr
+        dt = dt2 - dt1
+        dict_meta['duration'] = dt.seconds + dt.microseconds / 1e6
+        dict_meta['nadirProducts'] = ''.join( nadir_products )
+        dict_meta['limbProducts'] = ''.join( limb_products )
+        return dict_meta
+
+    #-------------------------
+    def check_entry( self, sciafl, verbose=False ):
+        '''
+        '''
+        if sciafl[0:10] == 'SCI_NL__0P':
+            query_str = 'select name from meta__0P where name=\'{}\''.format(sciafl)
+        elif sciafl[0:10] == 'SCI_NL__1P':
+            query_str = 'select name from meta__1P where name=\'{}\''.format(sciafl)
+        elif sciafl[0:10] == 'SCI_OL__2P' or sciafl[0:10] == 'SCI_NL__2P':
+            query_str = 'select name from meta__2P where name=\'{}\''.format(sciafl)
+        else:
+            print( 'Level of Sciamachy product is unknown' )
+            return
+
+        if verbose:
+            print( query_str )
+        
+        con = sqlite3.connect( self.dbname )
+        cur = con.cursor()
+        cur.execute( query_str )
+        row = cur.fetchone()
+        cur.close()
+        con.close()
+        if row == None: 
+            return False
+        else:
+            return True
+    
+    #-------------------------
+    def remove_entry( self, sciafl, verbose=False ):
+        '''
+        '''
+        if not self.check_entry( sciafl ):
+            return
+            
+        if sciafl[0:10] == 'SCI_NL__0P':
+            query_str = 'delete from meta__0P where name=\'{}\''.format(sciafl)
+        elif sciafl[0:10] == 'SCI_NL__1P':
+            query_str = 'delete from meta__1P where name=\'{}\''.format(sciafl)
+        elif sciafl[0:10] == 'SCI_OL__2P' or sciafl[0:10] == 'SCI_NL__2P':
+            query_str = 'delete from meta__2P where name=\'{}\''.format(sciafl)
+        else:
+            print( 'Level of Sciamachy product is unknown' )
+            return
+
+        if verbose:
+            print( query_str )
+            
+        con = sqlite3.connect( self.dbname )
+        cur = con.cursor()
+        cur.execute( query_str )
+        cur.close()
+        con.commit()
+        con.close()
+
+    #-------------------------
+    def add_entry( self, sciafl_full, debug=False ):
+        '''
+        '''
+        sciafl = os.path.basename( sciafl_full )
+        if sciafl[0:10] == 'SCI_NL__0P':
+            str_sql = 'insert into meta__0P values' \
+                      '(\'%(product)s\',\'%(filePath)s\',%(compress)d'\
+                      ',\'%(procStage)s\',\'%(procCenter)s\''\
+                      ',\'%(softVersion)s\',\'%(qualityFlag)s\''\
+                      ',\'%(receiveDate)s\',\'%(procTime)s\''\
+                      ',\'%(dateTimeStart)s\''\
+                      ',%(muSeconds)d,%(duration)f,%(absOrbit)d,%(relOrbit)d'\
+                      ',%(numDataSets)d,%(fileSize)d,%(q_flag)d)'
+            str_sql_meta = str_sql % self.rd_lv0( sciafl_full )
+        elif sciafl[0:10] == 'SCI_NL__1P':
+            str_sql = 'insert into meta__1P values' \
+                      '(\'%(product)s\',\'%(filePath)s\',%(compress)d'\
+                      ',\'%(procStage)s\',\'%(procCenter)s\''\
+                      ',\'%(softVersion)s\',\'%(keydataVersion)s\''\
+                      ',\'%(mFactorVersion)s\',\'%(spectralCal)s\''\
+                      ',\'%(saturatedPix)s\',\'%(deadPixels)s\''\
+                      ',\'%(qualityFlag)s\',\'%(receiveDate)s\''\
+                      ',\'%(procTime)s\',\'%(dateTimeStart)s\''\
+                      ',%(muSeconds)d,%(duration)f,%(absOrbit)d,%(relOrbit)d'\
+                      ',%(numDataSets)d,%(nadirStates)d,%(limbStates)d'\
+                      ',%(occulStates)d,%(monitorStates)d,%(noProcStates)d'\
+                      ',%(fileSize)d)'
+            str_sql_meta = str_sql % self.rd_lv1( sciafl_full )
+        elif sciafl[0:10] == 'SCI_OL__2P' or sciafl[0:10] == 'SCI_NL__2P':
+            str_sql = 'insert into meta__2P values' \
+                      '(\'%(product)s\',\'%(filePath)s\',%(compress)d'\
+                      ',\'%(procStage)s\',\'%(procCenter)s\''\
+                      ',\'%(softVersion)s\',\'%(fittingErrSum)s\''\
+                      ',\'%(qualityFlag)s\',\'%(receiveDate)s\''\
+                      ',\'%(procTime)s\',\'%(dateTimeStart)s\''\
+                      ',%(muSeconds)d,%(duration)f,%(absOrbit)d'\
+                      ',%(relOrbit)d,%(numDataSets)d,\'%(nadirProducts)s\''\
+                      ',\'%(limbProducts)s\',%(fileSize)d)'
+            str_sql_meta = str_sql % self.rd_lv2( sciafl_full )
+        else:
+            print( 'Level of Sciamachy product is unknown' )
+            return
+
+        if debug:
+            print( str_sql_meta )
+        else:
+            con = sqlite3.connect( self.dbname )
+            cur = con.cursor()
+            cur.execute( str_sql_meta )
+            cur.close()
+            con.commit()
+            con.close()
 
 #--------------------------------------------------
-def add_sqlite_scia( dbname, dict_scia ):
-    if dict_scia['procStage'] == 'N':
-        dict_scia['qualityFlag'] = 'GOOD'
-        dict_scia['q_flag'] = 5
-    else:
-        dict_scia['qualityFlag'] = 'CONS'
-        dict_scia['q_flag'] = 10
+def main( dbname, input_file, remove=False, replace=False, debug=False ):
+    '''
+    '''
+    db = ArchiveScia( dbname )
 
-    if dict_scia['level'] == 0:
-        str_sql = 'insert into meta__0P values' \
-            '(\'%(product)s\',\'%(filePath)s\',%(compress)d,\'%(procStage)s\''\
-            ',\'%(procCenter)s\',\'%(softVersion)s\',\'%(qualityFlag)s\''\
-            ',\'%(receiveDate)s\',\'%(procTime)s\',\'%(dateTimeStart)s\''\
-            ',%(muSeconds)d,%(duration)f,%(absOrbit)d,%(relOrbit)d'\
-            ',%(numDataSets)d,%(fileSize)d,%(q_flag)d)'
-    elif dict_scia['level'] == 1:
-        str_sql = 'insert into meta__1P values' \
-            '(\'%(product)s\',\'%(filePath)s\',%(compress)d,\'%(procStage)s\''\
-            ',\'%(procCenter)s\',\'%(softVersion)s\',\'%(keydataVersion)s\''\
-            ',\'%(mFactorVersion)s\',\'%(spectralCal)s\',\'%(saturatedPix)s\''\
-            ',\'%(deadPixels)s\',\'%(qualityFlag)s\''\
-            ',\'%(receiveDate)s\',\'%(procTime)s\',\'%(dateTimeStart)s\''\
-            ',%(muSeconds)d,%(duration)f,%(absOrbit)d,%(relOrbit)d'\
-            ',%(numDataSets)d,%(nadirStates)d,%(limbStates)d,%(occulStates)d'\
-            ',%(monitorStates)d,%(noProcStates)d,%(fileSize)d)'
-    elif dict_scia['level'] == 2:
-        str_sql = 'insert into meta__2P values' \
-            '(\'%(product)s\',\'%(filePath)s\',%(compress)d,\'%(procStage)s\''\
-            ',\'%(procCenter)s\',\'%(softVersion)s\',\'%(fittingErrSum)s\''\
-            ',\'%(qualityFlag)s\',\'%(receiveDate)s\',\'%(procTime)s\''\
-            ',\'%(dateTimeStart)s\',%(muSeconds)d,%(duration)f,%(absOrbit)d'\
-            ',%(relOrbit)d,%(numDataSets)d,\'%(nadirProducts)s\''\
-            ',\'%(limbProducts)s\',%(fileSize)d)'
-    else:
-        return
+    # Check if product is already in database
+    if not debug:
+        sciafl = os.path.basename( input_file )
+        if remove or replace:
+            db.remove_entry( sciafl )
+        elif db.check_entry( sciafl ):
+            print( 'Info: {} is already stored in database'.format(sciafl) )
+            sys.exit(0)
+        if remove:
+            sys.exit(0)
 
-    con = sqlite3.connect( dbname )
-    cur = con.cursor()
-    cur.execute( str_sql % dict_scia )
-    cur.close()
-    con.commit()
-    con.close()
+    db.add_entry( input_file, debug=debug )
 
+    
 #- main code -------------------------------------------------------------------
 if __name__ == '__main__':
     import argparse
@@ -423,56 +525,16 @@ if __name__ == '__main__':
                          help='remove SQL data of INPUT_FILE from database' )
     parser.add_argument( '--replace', action='store_true', default=False,
                          help='replace SQL data of INPUT_FILE in database' )
-    parser.add_argument( '--tmpPath', dest='tempDir', type=str,
-                         default='/dev/shm', 
-			 help='path to directory to store tempory files' )
     parser.add_argument( '--dbname', dest='dbname', type=str,
-                         default='/SCIA/share/db/sron_scia.db', 
+                         default='/SCIA/share/db/sron_scia.db',
 			 help='name of SCIA/SQLite database' )
     parser.add_argument( 'input_file', nargs='?', type=str,
                          help='read from INPUT_FILE' )
     args = parser.parse_args()
 
-    sciafl = os.path.basename( args.input_file )
-    sciaLevel = get_scia_level( sciafl )
-    if sciaLevel < 0:
-        print( 'Info: \'%s\' is not a valid Sciamachy product' % args.input_file )
-        sys.exit(0)
-
     if not os.path.isfile( args.input_file ):
         print( 'Info: \"%s\" is not a valid file' % args.input_file )
         sys.exit(1)
 
-    if not os.path.isfile( args.dbname ):
-        cre_sqlite_scia_db( args.dbname )
-
-    # Check if product is already in database
-    if not args.debug:
-        if args.remove or args.replace:
-            del_sqlite_scia( args.dbname, sciafl )
-        elif check_sqlite_scia( args.dbname, sciafl ):
-            print( 'Info: %s is already stored in database' % sciafl )
-            sys.exit(0)
-        if args.remove: sys.exit(0)
-
-    if sciaLevel == 0:
-        dict_scia = read_scia_lv0( args.input_file )
-    elif sciaLevel == 1:
-        dict_scia = read_scia_lv1( args.input_file )
-    elif sciaLevel == 2:
-        dict_scia = read_scia_lv2( args.input_file )
-    dict_scia['filePath'] = os.path.dirname( args.input_file )
-    dict_scia['fileName'] = os.path.basename( args.input_file )
-    if args.input_file[-3:] == '.gz':
-        dict_scia['compress'] = True
-    else:
-        dict_scia['compress'] = False
-    dict_scia['level'] = sciaLevel
-    dict_scia['receiveDate'] = \
-        strftime("%F %T", gmtime(os.path.getctime( args.input_file )))
-    if args.debug:
-        print( dict_scia )
-        sys.exit(0)
-
-    add_sqlite_scia( args.dbname, dict_scia )
-    sys.exit(0)
+    main( args.dbname, args.input_file,
+          replace=args.replace, remove=args.remove, debug=args.debug )

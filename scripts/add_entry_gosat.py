@@ -115,8 +115,8 @@ def read_gosat_cai( flname ):
     dict_gosat['fileName'] = os.path.basename( flname )
     dict_gosat['filePath'] = os.path.dirname( flname )
     buff = dict_gosat['fileName'][9:]
-    dict_gosat['acquisitionDate'] = "%s-%s-%s %s:%s:%s" % \
-                                    (buff[0:4],buff[4:6],buff[6:8],buff[8:10],buff[10:12],buff[12:14])
+    dict_gosat['acquisitionDate'] = \
+        strftime("%F %T", gmtime(os.path.getmtime( flname )))
     dict_gosat['passNumber'] = int(dict_gosat['fileName'][21:24])
     dict_gosat['frameNumber'] = int(dict_gosat['fileName'][24:27])
     dict_gosat['productVersion'] = dict_gosat['fileName'][35:41]
@@ -155,8 +155,8 @@ def read_gosat_fts( flname ):
     dict_gosat['fileName'] = os.path.basename( flname )
     dict_gosat['filePath'] = os.path.dirname( flname )
     buff = dict_gosat['fileName'][9:]
-    dict_gosat['acquisitionDate'] = "%s-%s-%s %s:%s:%s" % \
-                                    (buff[0:4],buff[4:6],buff[6:8],buff[8:10],buff[10:12],buff[12:14])
+    dict_gosat['acquisitionDate'] = \
+        strftime("%F %T", gmtime(os.path.getmtime( flname )))
     dict_gosat['passNumber'] = int(dict_gosat['fileName'][21:24])
     dict_gosat['frameNumber'] = int(dict_gosat['fileName'][24:27])
     dict_gosat['observationMode'] = dict_gosat['fileName'][31:35]
@@ -169,19 +169,19 @@ def read_gosat_fts( flname ):
         if '/Global' in fid:
             grp = fid['/Global/MD_Metadata']
             dset = grp['dateStamp']
-            dict_gosat['creationDate'] = dset[:].tostring()
+            dict_gosat['creationDate'] = dset[:].tostring().decode('ascii')
 
             grp = fid['/Global/metadata']
             dset = grp['sensorName']
-            dict_gosat['sensorName'] = dset[:].tostring()
+            dict_gosat['sensorName'] = dset[:].tostring().decode('ascii')
             dset = grp['algorithmName']
-            dict_gosat['algorithmName'] = dset[:].tostring()
+            dict_gosat['algorithmName'] = dset[:].tostring().decode('ascii')
             dset = grp['algorithmVersion']
-            dict_gosat['algorithmVersion'] = dset[:].tostring()
+            dict_gosat['algorithmVersion'] = dset[:].tostring().decode('ascii')
             dset = grp['parameterVersion']
-            dict_gosat['paramVersion'] = dset[:].tostring()
+            dict_gosat['paramVersion'] = dset[:].tostring().decode('ascii')
             dset = grp['observationMode']
-            dict_gosat['observationMode'] = dset[:].tostring()
+            dict_gosat['observationMode'] = dset[:].tostring().decode('ascii')
 
             grp = fid['/ancillary/OrbitData']
             dset = grp['startDate']
@@ -344,7 +344,7 @@ if __name__ == '__main__':
         cre_sqlite_gosat_db( args.dbname )
         fill_sqlite_rootPaths( args.dbname )
 
-     # Check if product is already in database
+    # Check if product is already in database
     gosat_fl = os.path.basename( args.input_file )
     if not args.debug:
         if args.remove or args.replace:
