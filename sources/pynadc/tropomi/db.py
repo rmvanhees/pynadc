@@ -2,9 +2,9 @@
 # All Rights Reserved.
 # This software is distributed under the BSD 2-clause license.
 
-"""
+'''
 Methods to query the NADC S5p-Tropomi ICM-database (sqlite)
-"""
+'''
 
 from __future__ import print_function
 from __future__ import division
@@ -16,58 +16,132 @@ import sqlite3
 DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
 
 #---------------------------------------------------------------------------
-def get_product_by_name( args=None, dbname=DB_NAME, product=None, 
-                         query='location', toScreen=False ):
+def show_details_icid( args=None, dbname=DB_NAME, ic_id=None,
+                       check=False, toScreen=False ):
+    '''
+    Query NADC S5p-Tropomi ICM-database on ICID
+
+    '''
+    if args:
+        dbname = args.dbname
+        ic_id  = args.icid
+        check  = args.check
+
+    if not os.path.isfile( dbname ):
+        print( '*** Fatal, can not find SQLite database: {}'.format(dbname) )
+        return ()
+    
+    conn = sqlite3.connect( dbname )
+    conn.row_factory = sqlite3.Row
+    cu = conn.cursor()
+    
+    table = 'ICM_SIR_TBL_ICID'
+    if ic_id is None:
+        query_str = 'select * from {} order by ic_id,ic_version'.format(table)
+        cu.execute( query_str )
+        rows = cu.fetchall()
+
+        row_list = ()
+        for row in rows:
+            row_entry = {}
+            for key_name in row.keys():
+                row_entry[key_name] = row[key_name]
+            row_list += (row_entry,)
+            if toScreen:
+                print( row_entry.values() )
+        
+    else:
+        query_str = 'select * from {} where ic_id={} order by ic_version'.format(table, ic_id)
+        cu.execute( query_str )
+        row = cu.fetchone()
+        if row is None:
+            cu.close()
+            conn.close()
+            return ()
+
+        row_list = {}
+        for key_name in row.keys():
+            row_list[key_name] = row[key_name]
+            if toScreen:
+                print( '{:25}\t{}'.format(key_name, row[key_name]) )
+
+        if check:
+            texp = 1.25 * (65540 + row['int_hold'] - row['int_delay'])
+            dtexp = 1.25 * (row['int_delay'] + 0.5)
+            tdead = row['exposure_period_us'] - texp - dtexp + 5.625
+            treset = (row['exposure_period_us'] - texp - 315) / 1e6
+
+            print( '#---------- {}'.format('Calculated timing parameters for reference:') )
+            print( '{:25}\t{}'.format('exposure_time (us)', texp) )
+            print( '{:25}\t{}'.format('dead_time (us)', tdead) )
+            print( '{:25}\t{}'.format('exposure_shift (us)', dtexp) )
+            print( '{:25}\t{}'.format('reset_time (s)', treset) )
+
+    ## close connection and return result
+    cu.close()
+    conn.close()
+    return row_list
+   
+#---------------------------------------------------------------------------
+def get_product_by_name( args=None, product=None, dbname=DB_NAME, 
+                         mode='location', toScreen=False ):
     '''
     Query NADC S5p-Tropomi ICM-database on product-name. 
-    The following queries are implemented:
-     'location': query the file location
-     'meta':     query the file meta-data
-     'content':  query the file content
 
-    The result(s) of a query will always be returned by this function.
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname, product, query
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                   [default: DB_NAME]
+    - "product"  : name of product
+                   [value required]
+    - "mode"     : defines the returned information:
+        'location' :  query the file location
+        'meta'     :  query the file meta-data
+        'content'  :  query the file content
+                   [default: 'location']
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
+    Output
+    ------
+    [mode='location'], a tuple with:
+      file_path  :  path to ICM_SIR product
+      file_name  :  name of ICM_SIR product
 
-    The parameter "toScreen" controls if the query result is printed on STDOUT
-    
-    Input
-    -----
-    - args     : argparse object with keys dbname, product, query
-    - dbname   : full path to S5p Tropomi SQLite database [default: DB_NAME]
-    - product  : name of product [value required]
-    - query    : location, meta or content [default: location]
-    - toScreen : print query result to standard output [default: False]
+    [mode='meta'], a dictionary with metaTable content
 
+    [mode='content'], a tuple with dictionaries of available datasets
     '''
     if args:
         dbname   = args.dbname
         product  = args.product
-        query    = args.query
+        mode     = args.mode
 
     if product is None:
         print( '*** Fatal, a product-name has to be provided' )
-        return []
+        return ()
 
     if not os.path.isfile( dbname ):
         print( '*** Fatal, can not find SQLite database: %s' % dbname )
-        return []
+        return ()
 
     table = 'ICM_SIR_META'
-    if query == 'location':
+    if mode == 'location':
         query_str = 'select pathID,name from {} where name=\'{}\''.format(table, product)
         conn = sqlite3.connect( dbname )
+        conn.row_factory = sqlite3.Row
         cu = conn.cursor()
         cu.execute( query_str )
         row = cu.fetchone()
         if row is None:
             cu.close()
             conn.close()
-            return []
+            return ()
 
         ## obtain root directories (local or NFS)
         case_str = 'case when hostName == \'{}\''\
             ' then localPath else nfsPath end'.format(socket.gethostname())
-        query_str = \
-            'select {} from ICM_SIR_LOCATION where pathID={}'.format(case_str, row[0])
+        query_str = 'select {} from ICM_SIR_LOCATION where pathID={}'.format(case_str, row[0])
         cu.execute( query_str )
         root = cu.fetchone()
         cu.close()
@@ -76,8 +150,8 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
         if toScreen:
             print( os.path.join(root[0], row[1]) )
 
-        return os.path.join(root[0], row[1])
-    elif query == 'meta' or query == 'content':
+        return (root[0], row[1])
+    elif mode == 'meta' or mode == 'content':
         query_str = 'select * from {} where name=\'{}\''.format(table, product)
         conn = sqlite3.connect( dbname )
         conn.row_factory = sqlite3.Row
@@ -87,87 +161,112 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
         cu.close()
         conn.close()
         if row is None:
-            return []
+            return ()
 
-        metaID = row.__getitem__('metaID')
-        if toScreen:
+        if mode == 'meta':
+            row_list = {}
             for key_name in row.keys():
-                print( key_name, '\t', row[key_name] )
+                row_list[key_name] = row[key_name]
+                if toScreen:
+                    print( key_name, '\t', row[key_name] )
+            return row_list
 
-        if query == 'content':
-            conn = sqlite3.connect( dbname )
-            cu = conn.cursor()
+        ## remainder only when mode == 'content'
+        row_list = ()
+        metaID = row.__getitem__('metaID')
 
-            table = 'ICM_SIR_ANALYSIS'
-            col = 'name, svn_revision, scanline'
-            query_str = 'select {} from {} where metaID={}'.format(col, table, metaID)
-            cu.execute( query_str )
-            rows = cu.fetchall()
+        conn = sqlite3.connect( dbname )
+        conn.row_factory = sqlite3.Row
+        cu = conn.cursor()
+
+        table = 'ICM_SIR_ANALYSIS'
+        if toScreen:
+            print( '#---------- {} ----------'.format(table) )
+        columns = 'name, svn_revision, scanline'
+        query_str = 'select {} from {} where metaID={}'.format(columns, table, metaID)
+        cu.execute( query_str )
+        rows = cu.fetchall()
+        for row in rows:
+            row_entry = {}
+            for key_name in row.keys():
+                row_entry[key_name] = row[key_name]
+            row_list += (row_entry,)
             if toScreen:
-                print( '---------- {} ----------'.format(table) )
-                for row in rows:
-                    print( row )
+                print( row_entry.values() )
             
-            table = 'ICM_SIR_CALIBRATION'
-            col = 'name, dateTimeStart, ic_id, ic_version, scanline'
-            query_str = 'select {} from {} where metaID={}'.format(col, table, metaID)
-            cu.execute( query_str )
-            rows = cu.fetchall()
+        table = 'ICM_SIR_CALIBRATION'
+        if toScreen:
+            print( '#---------- {} ----------'.format(table) )
+        columns = 'name, dateTimeStart, ic_id, ic_version, scanline'
+        query_str = 'select {} from {} where metaID={}'.format(columns, table, metaID)
+        cu.execute( query_str )
+        rows = cu.fetchall()
+        for row in rows:
+            row_entry = {}
+            for key_name in row.keys():
+                row_entry[key_name] = row[key_name]
+            row_list += (row_entry,)
             if toScreen:
-                print( '---------- {} ----------'.format(table) )
-                for row in rows:
-                    print( row )
+                print( row_entry.values() )
 
-            table = 'ICM_SIR_IRRADIANCE'
-            col = 'name, dateTimeStart, ic_id, ic_version, scanline'
-            query_str = 'select {} from {} where metaID={}'.format(col, table, metaID)
-            cu.execute( query_str )
-            rows = cu.fetchall()
+        table = 'ICM_SIR_IRRADIANCE'
+        if toScreen:
+            print( '#---------- {} ----------'.format(table) )
+        columns = 'name, dateTimeStart, ic_id, ic_version, scanline'
+        query_str = 'select {} from {} where metaID={}'.format(columns, table, metaID)
+        cu.execute( query_str )
+        rows = cu.fetchall()
+        for row in rows:
+            row_entry = {}
+            for key_name in row.keys():
+                row_entry[key_name] = row[key_name]
+            row_list += (row_entry,)
             if toScreen:
-                print( '---------- {} ----------'.format(table) )
-                for row in rows:
-                    print( row )
+                print( row_entry.values() )
 
-            table = 'ICM_SIR_RADIANCE'
-            col = 'name, dateTimeStart, ic_id, ic_version, scanline'
-            query_str = 'select {} from {} where metaID={}'.format(col, table, metaID)
-            cu.execute( query_str )
-            rows = cu.fetchall()
+        table = 'ICM_SIR_RADIANCE'
+        if toScreen:
+            print( '#---------- {} ----------'.format(table) )
+        columns = 'name, dateTimeStart, ic_id, ic_version, scanline'
+        query_str = 'select {} from {} where metaID={}'.format(columns, table, metaID)
+        cu.execute( query_str )
+        rows = cu.fetchall()
+        for row in rows:
+            row_entry = {}
+            for key_name in row.keys():
+                row_entry[key_name] = row[key_name]
+            row_list += (row_entry,)
             if toScreen:
-                print( '---------- {} ----------'.format(table) )
-                for row in rows:
-                    print( row )
+                print( row_entry.values() )
 
-            cu.close()
-            conn.close()
+        cu.close()
+        conn.close()
 
-        return row
+        return row_list
     else:
-        print( '*** Fatal, query option not recognized: %s' % query )
-        return []
+        print( '*** Fatal, mode-option not recognized: {}'.format(mode) )
+        return ()
 
 #---------------------------------------------------------------------------
 def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
-                          query='location', toScreen=False ):
+                          mode='location', toScreen=False ):
     '''
     Query NADC S5p-Tropomi ICM-database on reference orbit. 
-    The following queries are implemented:
-     'location': query the file location
-     'meta':     query the file meta-data
-     'content':  query the file content
 
-    The result(s) of a query will always be returned by this function.
-
-    The parameter "toScreen" controls if the query result is printed on STDOUT
-    
-    Input
-    -----
-    - args     : argparse object with keys dbname, product, query
-    - dbname   : full path to S5p Tropomi SQLite database [default: DB_NAME]
-    - orbit    : single value or range [value required]
-    - query    : location, meta or content [default: location]
-    - toScreen : print query result to standard output [default: False]
-
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname, orbit, mode
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                   [default: DB_NAME]
+    - "orbit"    : reference orbit, single value or range
+                   [value required]
+    - "mode"     : defines the returned information:
+        'location' :  query the file location
+        'meta'     :  query the file meta-data
+        'content'  :  query the file content
+                   [default: 'location']
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
     '''
     if orbit is None:
         print( '*** Fatal, no reference orbit provided' )
@@ -179,26 +278,28 @@ def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
 
 #---------------------------------------------------------------------------
 def get_product_by_date( args=None, dbname=DB_NAME, startdate=None,
-                         query='location', toScreen=False ):
+                         mode='location', toScreen=False ):
     '''
     Query NADC S5p-Tropomi ICM-database on start date of measurements. 
-    The following queries are implemented:
-     'location': query the file location
-     'meta':     query the file meta-data
-     'content':  query the file content
 
-    The result(s) of a query will always be returned by this function.
-
-    The parameter "toScreen" controls if the query result is printed on STDOUT
-    
-    Input
-    -----
-    - args      : argparse object with keys dbname, product, query
-    - dbname    : full path to S5p Tropomi SQLite database [default: DB_NAME]
-    - startdate : start date-time of first measurement or range [value required]
-    - query     : location, meta or content [default: location]
-    - toScreen  : print query result to standard output [default: False]
-
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname, startdate, mode
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                   [default: DB_NAME]
+    - "startdate":  select on dateTimeStart of measurements in dataset
+          select a period: date=[dateTime1, dateTime2]
+          select one minute: date=YYMMDDhhmm
+          select one hour: date=YYMMDDhh
+          select one day: date=YYMMDD
+          select one month: date=YYMM
+    - "mode"     : defines the returned information:
+        'location' :  query the file location
+        'meta'     :  query the file meta-data
+        'content'  :  query the file content
+                   [default: 'location']
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
     '''
     if startdate is None:
         print( '*** Fatal, no measurement start date provided' )
@@ -210,26 +311,24 @@ def get_product_by_date( args=None, dbname=DB_NAME, startdate=None,
 
 #---------------------------------------------------------------------------
 def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
-                          query='location', toScreen=False ):
+                          mode='location', toScreen=False ):
     '''
-    Query NADC S5p-Tropomi ICM-database on reference orbit. 
-    The following queries are implemented:
-     'location': query the file location
-     'meta':     query the file meta-data
-     'content':  query the file content
+    Query NADC S5p-Tropomi ICM-database on receive time of the product. 
 
-    The result(s) of a query will always be returned by this function.
-
-    The parameter "toScreen" controls if the query result is printed on STDOUT
-    
-    Input
-    -----
-    - args     : argparse object with keys dbname, product, query
-    - dbname   : full path to S5p Tropomi SQLite database [default: DB_NAME]
-    - rtime    : receive time (or interval) of products  [value required]
-    - query    : location, meta or content [default: location]
-    - toScreen : print query result to standard output [default: False]
-
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname, rtime, mode
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                   [default: DB_NAME]
+    - "rtime"    : receive time (or interval) of products  
+                   [value required]
+    - "mode"     : defines the returned information:
+        'location' :  query the file location
+        'meta'     :  query the file meta-data
+        'content'  :  query the file content
+                   [default: 'location']
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
     '''
     if rtime is None:
         print( '*** Fatal, no receive time provided' )
@@ -240,23 +339,39 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
         return []
 
 #---------------------------------------------------------------------------
-def get_product_by_type( args=None, dbname=DB_NAME, msm_class=None, 
-                         msm_name=None, msm_type=None, msm_icid=None,
-                         msm_texp=None, msm_coadd=None,
-                         orbits=None, data=None, rtime=None,
-                         query='location', toScreen=False ):
+def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
+                         after_dn2v=False, orbit=None, date=None,
+                         mode='location', toScreen=False ):
     '''
     Query NADC Sciamachy SQLite database on product type with data selections
-    Input
-    -----
-    args       : dictionary with keys dbname, ...
-    dbname     : full path to Tropomi SQLite database [default: DB_NAME]
-    msm_class  : 
-    orbit      : select on absolute orbit number [default: None]
-    date       : select on dateTimeStart [default: None]
-    rtime      : select on receiveTime [default: None]
-    toScreen   : print query result to standard output [default: False]
-    debug      : do not query data base, but display SQL query [default: False]
+
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname, dataset, mode
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                   [default: DB_NAME]
+    - "dataset"  : name or abbreviation of dataset, for example
+         'DARK_MODE_1605' : exact name match
+         'DARK_%'  : all dark measurements with different ICIDs
+         '%_1605'  : all measurements with ICID equals 1605
+    - "after_dn2v": select measurement on calibration up to DN2V 
+                   [default: False]
+    - "orbit"     : select on reference orbit number or range
+                   [default: None]
+    - "date"      :  select on dateTimeStart of measurements in dataset
+          select a period: date=[dateTime1, dateTime2]
+          select one minute: date=YYMMDDhhmm
+          select one hour: date=YYMMDDhh
+          select one day: date=YYMMDD
+          select one month: date=YYMM
+                   [default: None]
+    - "mode"     : defines the returned information:
+        'location' :  query the file location
+        'meta'     :  query the file meta-data
+        'content'  :  query the file content
+                   [default: 'location']
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
 
     Output
     ------
@@ -265,25 +380,29 @@ def get_product_by_type( args=None, dbname=DB_NAME, msm_class=None,
     '''
     rows = []
     if args:
-        dbname    = args.dbname
-        msm_class = args.mclass
-        msm_name  = args.msm_name
-        msm_type  = args.msm_type
-        msm_icid  = args.msm_icid 
-        msm_texp  = args.msm_texp
-        msm_coadd = args.msm_coadd
-        #orbits    = args.orbit
-        #date      = args.date
-        #rtime     = args.rtime
-        query     = args.query
+        dbname     = args.dbname
+        dataset    = args.dataset
+        after_dn2v = args.after_dn2v
+        orbit      = args.orbit
+        date       = args.date
+        mode       = args.mode
 
-    if msm_class is None:
+    if dataset is None:
         print( '*** Fatal, no measurement class provided' )
         return []
 
     if not os.path.isfile( dbname ):
         print( 'Fatal, can not find SQLite database: {}'.format(dbname) )
         return []
+
+    table_list = []
+    q_str = "SELECT name FROM sqlite_master WHERE type='table'"
+    conn = sqlite3.connect( dbname )
+    cu  = conn.cursor()
+    cu.execute( q_str )
+    for row in cu:
+        print( row )
+    return []
 
     meta_tbl = 'ICM_SIR_META'
     if msm_class[0:6] == 'analys':

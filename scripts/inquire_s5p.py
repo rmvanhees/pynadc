@@ -21,7 +21,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument( '--dbname', type=str, default=DB_NAME, 
                          help='name of SQLite database' )
-    parser.add_argument( '--query', type=str, default='location',
+    parser.add_argument( '--mode', type=str, default='location',
                          choices=['location', 'meta', 'content'],
                          help='query on product: location, meta-data, content' )
     parser.add_argument( '--debug', action='store_true', default=False,
@@ -37,6 +37,16 @@ if __name__ == '__main__':
                               help='name of entry to select (no path!)' )
     parser_name.set_defaults( func=db.get_product_by_name )
     
+    #-------------------------
+    # define subparsers for queries on product receive time
+    parser_icid = subparsers.add_parser( 'icid',
+                                         help='query ICID information' )
+    parser_icid.add_argument( '--icid', '--ICID', type=int, default=None,
+                              help='show info of given ic_id' )
+    parser_icid.add_argument( '--check', action='store_true', default=False,
+                              help='provide info to check ic_id parameters' )
+    parser_icid.set_defaults( func=db.show_details_icid )
+
     #-------------------------
     # define subparsers for queries on product receive time
     parser_rtime = subparsers.add_parser( 'rtime',
@@ -56,26 +66,19 @@ if __name__ == '__main__':
     parser_orbit.set_defaults( func=db.get_product_by_orbit )
 
     #-------------------------
-    # define subparsers for queries on product type
+    # define subparsers for queries on dataset
     parser_type = subparsers.add_parser( 'type',
-                                     help='perform selection on product type' )
-    parser_type.add_argument( 'mclass', nargs='?', type=str, 
-                              choices=['analys', 'analysis',
-                                       'calib', 'calibration',
-                                       'rad', 'radiance',
-                                       'irrad', 'irradiance' ],
-                              help='type of measurement class to select' )
-    group_msm = parser_type.add_mutually_exclusive_group(required=True)
-    group_msm.add_argument( '--msm_name', type=str,
-                            help='full name of measurement to select' )
-    group_msm.add_argument( '--msm_type', type=str,
-                            help='general name of measurement to select' )
-    group_msm.add_argument( '--msm_icid', type=int,
-                            help='select measurement on ICID' )
-    group_msm.add_argument( '--msm_texp', type=float,
-                            help='select measurement(s) on exposure time' )
-    parser_type.add_argument( '--msm_coadd', type=int,
-                            help='select measurement(s) on co-adding factor' )
+                                help='perform selection on dataset' )
+    parser_type.add_argument( 'dataset', type=str, 
+                              help='name of the dataset' )
+    
+    parser_type.add_argument( '--after_dn2v', action='store_true',
+                              default=False,
+                              help='select dataset calibrated upto after_dn2v' )
+    parser_type.add_argument( '--date', type=str, default=None,
+                              help='select on dateTimeStart of measurements' )
+    parser_type.add_argument( '--orbit', type=int, default=None,
+                              help='select measurement on orbit (range)' )
     parser_type.set_defaults( func=db.get_product_by_type )
     args = parser.parse_args()
     if args.debug:

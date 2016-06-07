@@ -44,17 +44,16 @@ def cre_sqlite_s5p_db( dbname ):
        ic_set                    smallint NOT NULL,
        ic_idx                    smallint NOT NULL,
        processing_class          smallint NOT NULL,
-       master_cycle_period       real NOT NULL,
-       coaddition_period         real NOT NULL,
-       exposure_time             real NOT NULL,
-       msmt_mcp_ft_offset        real NOT NULL,
-       msmt_ft_msmt_start_offset real NOT NULL,
-       msmt_duration             real NOT NULL,
-       reset_time                real NOT NULL,
+       msmt_mcp_ft_offset        real     NOT NULL,
+       reset_time                real     NOT NULL,
+       master_cycle_period_us    integer  NOT NULL,
+       coaddition_period_us      integer  NOT NULL,
+       exposure_time_us          integer  NOT NULL,
+       exposure_period_us        integer  NOT NULL,
        int_hold                  integer  NOT NULL,
        int_delay                 smallint NOT NULL,
-       nr_coadditions            tinyint NOT NULL,
-       clipping                  tinyint NOT NULL,
+       nr_coadditions            tinyint  NOT NULL,
+       clipping                  tinyint  NOT NULL,
        PRIMARY KEY (ic_id, ic_version) )''' )
 
     cur.execute( '''create table ICM_SIR_META (
@@ -170,13 +169,12 @@ def ic_dtype():
                       ('ic_set', np.int16),
                       ('ic_idx', np.int16),
                       ('processing_class', np.int16),
-                      ('master_cycle_period', np.float32),
-                      ('coaddition_period', np.float32),
-                      ('exposure_time', np.float32),
                       ('msmt_mcp_ft_offset', np.float32),
-                      ('msmt_ft_msmt_start_offset', np.float32),
-                      ('msmt_duration', np.float32),
                       ('reset_time', np.float32),
+                      ('master_cycle_period_us', np.int32),
+                      ('coaddition_period_us', np.int32),
+                      ('exposure_time_us', np.int32),
+                      ('exposure_period_us', np.int32),
                       ('int_hold', np.uint32),
                       ('int_delay', np.uint16),
                       ('nr_coadditions', np.int16),
@@ -253,18 +251,18 @@ class ArchiveSirICM( object ):
             if '/BAND7_ANALYSIS' in fid:
                 grp7 = fid['/BAND7_ANALYSIS']
             else:
-                grp7 = -1 
+                grp7 = None
 
             if '/BAND8_ANALYSIS' in fid:
                 grp8 = fid['/BAND8_ANALYSIS']
             else:
-                grp8 = -1
+                grp8 = None
 
             ## Analysis data of both band should be present:
-            if grp7 < 0 and grp8 < 0:
+            if grp7 is None and grp8 is None:
                 return
             
-            if grp7 < 0 or grp8 < 0:
+            if grp7 is None or grp8 is None:
                 print( '*** Fatal analysis results of band 7 or 8 are not present' )
                 return
 
@@ -313,18 +311,18 @@ class ArchiveSirICM( object ):
             if '/BAND7_CALIBRATION' in fid:
                 grp7 = fid['/BAND7_CALIBRATION']
             else:
-                grp7 = -1 
+                grp7 = None
 
             if '/BAND8_CALIBRATION' in fid:
                 grp8 = fid['/BAND8_CALIBRATION']
             else:
-                grp8 = -1
+                grp8 = None
 
             ## Calibration data of both band should be present:
-            if grp7 < 0 and grp8 < 0:
+            if grp7 is None and grp8 is None:
                 return
             
-            if grp7 < 0 or grp8 < 0:
+            if grp7 is None or grp8 is None:
                 print( '*** Fatal calibration results of band 7 or 8 are not present' )
                 return
 
@@ -368,18 +366,18 @@ class ArchiveSirICM( object ):
             if '/BAND7_IRRADIANCE' in fid:
                 grp7 = fid['/BAND7_IRRADIANCE']
             else:
-                grp7 = -1 
+                grp7 = None
 
             if '/BAND8_IRRADIANCE' in fid:
                 grp8 = fid['/BAND8_IRRADIANCE']
             else:
-                grp8 = -1
+                grp8 = None
 
             ## Irradiance data of both band should be present:
-            if grp7 < 0 and grp8 < 0:
+            if grp7 is None and grp8 is None:
                 return
             
-            if grp7 < 0 or grp8 < 0:
+            if grp7 is None or grp8 is None:
                 print( '*** Fatal irradiance results of band 7 or 8 are not present' )
                 return
 
@@ -417,18 +415,18 @@ class ArchiveSirICM( object ):
             if '/BAND7_RADIANCE' in fid:
                 grp7 = fid['/BAND7_RADIANCE']
             else:
-                grp7 = -1 
+                grp7 = None
 
             if '/BAND8_RADIANCE' in fid:
                 grp8 = fid['/BAND8_RADIANCE']
             else:
-                grp8 = -1
+                grp8 = None
 
             ## Radiance data of both band should be present:
-            if grp7 < 0 and grp8 < 0:
+            if grp7 is None and grp8 is None:
                 return
             
-            if grp7 < 0 or grp8 < 0:
+            if grp7 is None or grp8 is None:
                 print( '*** Fatal radiance results of band 7 or 8 are not present' )
                 return
 
@@ -533,10 +531,11 @@ class ArchiveSirICM( object ):
                        ',%(ic_id)d,%(ic_version)d,%(scanline)d)'
 
         str_sql_icid = 'insert into ICM_SIR_TBL_ICID values' \
-                       '(%(ic_id)d,%(ic_version)d,%(ic_set)d,%(ic_idx)d,%(processing_class)d'\
-                       ',%(master_cycle_period)f,%(coaddition_period)f,%(exposure_time)f'\
-                       ',%(msmt_mcp_ft_offset)f,%(msmt_ft_msmt_start_offset)f'\
-                       ',%(msmt_duration)f,%(reset_time)f,%(int_hold)d,%(int_delay)d'\
+                       '(%(ic_id)d,%(ic_version)d,%(ic_set)d,%(ic_idx)d'\
+                       ',%(processing_class)d,%(msmt_mcp_ft_offset)f'\
+                       ',%(reset_time)f,%(master_cycle_period_us)f'\
+                       ',%(coaddition_period_us)f,%(exposure_time_us)f'\
+                       ',%(exposure_period_us)f,%(int_hold)d,%(int_delay)d'\
                        ',%(nr_coadditions)d,%(clipping)d)'
 
         con = sqlite3.connect( self.dbname )
