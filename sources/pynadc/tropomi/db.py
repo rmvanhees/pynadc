@@ -16,73 +16,6 @@ import sqlite3
 DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
 
 #---------------------------------------------------------------------------
-def show_details_icid( args=None, dbname=DB_NAME, ic_id=None,
-                       check=False, toScreen=False ):
-    '''
-    Query NADC S5p-Tropomi ICM-database on ICID
-
-    '''
-    if args:
-        dbname = args.dbname
-        ic_id  = args.icid
-        check  = args.check
-
-    if not os.path.isfile( dbname ):
-        print( '*** Fatal, can not find SQLite database: {}'.format(dbname) )
-        return ()
-    
-    conn = sqlite3.connect( dbname )
-    conn.row_factory = sqlite3.Row
-    cu = conn.cursor()
-    
-    table = 'ICM_SIR_TBL_ICID'
-    if ic_id is None:
-        query_str = 'select * from {} order by ic_id,ic_version'.format(table)
-        cu.execute( query_str )
-        rows = cu.fetchall()
-
-        row_list = ()
-        for row in rows:
-            row_entry = {}
-            for key_name in row.keys():
-                row_entry[key_name] = row[key_name]
-            row_list += (row_entry,)
-            if toScreen:
-                print( row_entry.values() )
-        
-    else:
-        query_str = 'select * from {} where ic_id={} order by ic_version'.format(table, ic_id)
-        cu.execute( query_str )
-        row = cu.fetchone()
-        if row is None:
-            cu.close()
-            conn.close()
-            return ()
-
-        row_list = {}
-        for key_name in row.keys():
-            row_list[key_name] = row[key_name]
-            if toScreen:
-                print( '{:25}\t{}'.format(key_name, row[key_name]) )
-
-        if check:
-            texp = 1.25 * (65540 + row['int_hold'] - row['int_delay'])
-            dtexp = 1.25 * (row['int_delay'] + 0.5)
-            tdead = row['exposure_period_us'] - texp - dtexp + 5.625
-            treset = (row['exposure_period_us'] - texp - 315) / 1e6
-
-            print( '#---------- {}'.format('Calculated timing parameters for reference:') )
-            print( '{:25}\t{}'.format('exposure_time (us)', texp) )
-            print( '{:25}\t{}'.format('dead_time (us)', tdead) )
-            print( '{:25}\t{}'.format('exposure_shift (us)', dtexp) )
-            print( '{:25}\t{}'.format('reset_time (s)', treset) )
-
-    ## close connection and return result
-    cu.close()
-    conn.close()
-    return row_list
-   
-#---------------------------------------------------------------------------
 def get_product_by_name( args=None, product=None, dbname=DB_NAME, 
                          mode='location', toScreen=False ):
     '''
@@ -117,13 +50,11 @@ def get_product_by_name( args=None, product=None, dbname=DB_NAME,
         product  = args.product
         mode     = args.mode
 
-    if product is None:
-        print( '*** Fatal, a product-name has to be provided' )
-        return ()
+    assert product, \
+        '*** Fatal, no product-name provided'
 
-    if not os.path.isfile( dbname ):
-        print( '*** Fatal, can not find SQLite database: %s' % dbname )
-        return ()
+    assert os.path.isfile( dbname ),\
+        '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
     table = 'ICM_SIR_META'
     if mode == 'location':
@@ -268,13 +199,16 @@ def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
     - "toScreen" : controls if the query result is printed on STDOUT 
                    [default: False]
     '''
-    if orbit is None:
-        print( '*** Fatal, no reference orbit provided' )
-        return []
+    if args:
+        dbname     = args.dbname
+        orbit      = args.orbit
+        mode       = args.mode
 
-    if not os.path.isfile( dbname ):
-        print( 'Fatal, can not find SQLite database: {}'.format(dbname) )
-        return []
+    assert orbit, \
+        '*** Fatal, no reference orbit provided'
+
+    assert os.path.isfile( dbname ),\
+        '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
 #---------------------------------------------------------------------------
 def get_product_by_date( args=None, dbname=DB_NAME, startdate=None,
@@ -301,19 +235,22 @@ def get_product_by_date( args=None, dbname=DB_NAME, startdate=None,
     - "toScreen" : controls if the query result is printed on STDOUT 
                    [default: False]
     '''
-    if startdate is None:
-        print( '*** Fatal, no measurement start date provided' )
-        return []
+    if args:
+        dbname     = args.dbname
+        date       = args.date
+        mode       = args.mode
 
-    if not os.path.isfile( dbname ):
-        print( 'Fatal, can not find SQLite database: {}'.format(dbname) )
-        return []
+    assert startdate, \
+        '*** Fatal, no measurement start date provided'
+
+    assert os.path.isfile( dbname ),\
+        '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
 #---------------------------------------------------------------------------
 def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
                           mode='location', toScreen=False ):
     '''
-    Query NADC S5p-Tropomi ICM-database on receive time of the product. 
+    Query NADC S5p-Tropomi ICM-database on receive time of products.
 
     Parameters:
     -----------
@@ -330,13 +267,16 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
     - "toScreen" : controls if the query result is printed on STDOUT 
                    [default: False]
     '''
-    if rtime is None:
-        print( '*** Fatal, no receive time provided' )
-        return []
+    if args:
+        dbname     = args.dbname
+        rtime      = args.rtime
+        mode       = args.mode
 
-    if not os.path.isfile( dbname ):
-        print( 'Fatal, can not find SQLite database: {}'.format(dbname) )
-        return []
+    assert rtime, \
+        '*** Fatal, no receive time of product provided'
+
+    assert os.path.isfile( dbname ),\
+        '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
 #---------------------------------------------------------------------------
 def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
@@ -378,7 +318,6 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
     return full-path to selected products [default] 
 
     '''
-    rows = []
     if args:
         dbname     = args.dbname
         dataset    = args.dataset
@@ -387,92 +326,146 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
         date       = args.date
         mode       = args.mode
 
-    if dataset is None:
-        print( '*** Fatal, no measurement class provided' )
-        return []
+    assert dataset, \
+        '*** Fatal, no dataset name provided'
 
-    if not os.path.isfile( dbname ):
-        print( 'Fatal, can not find SQLite database: {}'.format(dbname) )
-        return []
+    assert os.path.isfile( dbname ),\
+        '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
-    table_list = []
-    q_str = "SELECT name FROM sqlite_master WHERE type='table'"
+    ## define list of tables to find the dataset
+    tables = ()
+    table_list = ('ICM_SIR_ANALYSIS', 'ICM_SIR_CALIBRATION',
+                  'ICM_SIR_IRRADIANCE', 'ICM_SIR_RADIANCE')
+
+    q_str = 'select distinct name, metaID from {} where name like \'{}\''
+    if after_dn2v:
+        q_str += ' and after_dn2v != 0'
+
     conn = sqlite3.connect( dbname )
     cu  = conn.cursor()
-    cu.execute( q_str )
-    for row in cu:
-        print( row )
-    return []
+    for tbl in table_list:
+        cu.execute( q_str.format(tbl, dataset) )
+        rows = cu.fetchall()
+        if len(rows) > 0:
+            tables += ({'nameList' : ', '.join(str(e[0]) for e in rows),
+                        'metaList' : ', '.join(str(e[1]) for e in rows)},)
+    cu.close()
+    conn.close()
 
-    meta_tbl = 'ICM_SIR_META'
-    if msm_class[0:6] == 'analys':
-        class_tbl = 'ICM_SIR_ANALYSIS'
-    elif msm_class[0:5] == 'calib':
-        class_tbl = 'ICM_SIR_CALIBRATION'
-    elif msm_class[0:5] == 'irrad':
-        class_tbl = 'ICM_SIR_IRRADIANCE'
-    elif msm_class[0:3] == 'rad':
-        class_tbl = 'ICM_SIR_RADIANCE'
-    else:
-        print( 'Fatal, unknown measurement class {}'.format(msm_class) )
-        return []
+    if len(tables) == 0:
+        print( '*** Warning, no dataset with name \"{}\" not found'.format(dataset) )
+        return ()
 
-    ## obtain root directories (local or NFS)
-    case_str = 'case when hostName == \'{}\''\
-               ' then localPath else nfsPath end'.format(socket.gethostname())
+    meta_table = 'ICM_SIR_META'
+    if mode == 'location':
+        ## obtain root directories (local or NFS)
+        case_str = 'case when hostName == \'{}\''\
+            ' then localPath else nfsPath end'.format(socket.gethostname())
+        qq_str = 'select {} from ICM_SIR_LOCATION where pathID={}'
 
-    if msm_name is not None:
-        subquery_str = 'select distinct metaID from {} where name like \'{}\''
-        query_str = 'select pathID, name from {} where metaID in ({})'
-        q_str = query_str.format(meta_tbl,
-                                 subquery_str.format(class_tbl, msm_name))
-        print( q_str )
+        q_str = 'select distinct pathID, name from {} where metaID in ({})'
         conn = sqlite3.connect( dbname )
-        cu  = conn.cursor()
+        cu = conn.cursor()
         cuu = conn.cursor()
-        cu.execute( q_str )
 
-        rowList = []
-        for row in cu:
-            qq_str = 'select {} from ICM_SIR_LOCATION where pathID={}'.format(case_str, row[0])
-            cuu.execute( qq_str )
-            root = cuu.fetchone()
-            
-            if toScreen:
-                print( os.path.join(root[0], row[1]) )
-
-    if msm_type is not None:
-        subquery_str = 'select distinct metaID from {} where name like \'{}_%\''
-        query_str = 'select name from {} where metaID in ({})'
-        q_str = query_str.format(meta_tbl,
-                                 subquery_str.format(class_tbl, msm_type))
-        print( q_str )
-        conn = sqlite3.connect( dbname )
-        cu = conn.cursor()
-        cu.execute( q_str )
-        rows = cu.fetchall()
-        if toScreen:
-            for row in rows:
-                print( row[0] )
-        
-    if msm_icid is not None:
-        subquery_str = 'select distinct metaID from {} where ic_id = {}'
-        query_str = 'select name from {} where metaID in ({})'
-        q_str = query_str.format(meta_tbl,
-                                 subquery_str.format(class_tbl, msm_icid))
-        print( q_str )
-        conn = sqlite3.connect( dbname )
-        cu = conn.cursor()
-        cu.execute( q_str )
-        rows = cu.fetchall()
-        if toScreen:
-            for row in rows:
-                print( row[0] )
-
-    if msm_texp is not None:
-        pass
-
-    #if msm_coadd is not None:
-    #    pass
+        row_list = ()
+        for entry in tables:
+            cu.execute( q_str.format(meta_table, entry['metaList']) )
+            for row in cu:
+                cuu.execute( qq_str.format(case_str, row[0]) )
+                root = cuu.fetchone()
+                if toScreen:
+                    print( os.path.join(root[0], row[1]) )
+                row_list += ([root[0], row[1]],)
+        cuu.close()
+        cu.close()
+        conn.close()
+        if len(row_list) == 1:
+            return row_list[0]
+        else:
+            return row_list
     
-    return rows
+    return ()
+
+#---------------------------------------------------------------------------
+def show_details_icid( args=None, dbname=DB_NAME, ic_id=None,
+                       check=False, toScreen=False ):
+    '''
+    Query NADC S5p-Tropomi ICM-database on ICID
+
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname, icid, check 
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                   [default: DB_NAME]
+    - "ic_id"    : select an ICID 
+                   or list all ICID parameters in table ICM_SIR_TBL_ICID
+                   [ic_version to be added in a future release]
+    - "check"    : perform check on ICID parameters
+                   [default: False]
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
+    Output
+    ------
+      file_path  :  path to ICM_SIR product
+      file_name  :  name of ICM_SIR product
+    '''
+    if args:
+        dbname = args.dbname
+        ic_id  = args.icid
+        check  = args.check
+
+    assert os.path.isfile( dbname ),\
+        '*** Fatal, can not find SQLite database: {}'.format(dbname)
+    
+    conn = sqlite3.connect( dbname )
+    conn.row_factory = sqlite3.Row
+    cu = conn.cursor()
+    
+    table = 'ICM_SIR_TBL_ICID'
+    if ic_id is None:
+        query_str = 'select * from {} order by ic_id,ic_version'.format(table)
+        cu.execute( query_str )
+        rows = cu.fetchall()
+
+        row_list = ()
+        for row in rows:
+            row_entry = {}
+            for key_name in row.keys():
+                row_entry[key_name] = row[key_name]
+            row_list += (row_entry,)
+            if toScreen:
+                print( row_entry.values() )
+        
+    else:
+        query_str = 'select * from {} where ic_id={} order by ic_version'.format(table, ic_id)
+        cu.execute( query_str )
+        row = cu.fetchone()
+        if row is None:
+            cu.close()
+            conn.close()
+            return ()
+
+        row_list = {}
+        for key_name in row.keys():
+            row_list[key_name] = row[key_name]
+            if toScreen:
+                print( '{:25}\t{}'.format(key_name, row[key_name]) )
+
+        if check:
+            texp = 1.25 * (65540 + row['int_hold'] - row['int_delay'])
+            dtexp = 1.25 * (row['int_delay'] + 0.5)
+            tdead = row['exposure_period_us'] - texp - dtexp + 5.625
+            treset = (row['exposure_period_us'] - texp - 315) / 1e6
+
+            print( '#---------- {}'.format('Calculated timing parameters for reference:') )
+            print( '{:25}\t{}'.format('exposure_time (us)', texp) )
+            print( '{:25}\t{}'.format('dead_time (us)', tdead) )
+            print( '{:25}\t{}'.format('exposure_shift (us)', dtexp) )
+            print( '{:25}\t{}'.format('reset_time (s)', treset) )
+
+    ## close connection and return result
+    cu.close()
+    conn.close()
+    return row_list
+   

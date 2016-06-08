@@ -78,6 +78,7 @@ def cre_sqlite_s5p_db( dbname ):
        dckdID           integer  PRIMARY KEY AUTOINCREMENT,
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
+       after_dn2v       boolean  DEFAULT 0,     
        svn_revision     integer  NOT NULL,
        scanline         integer  NOT NULL )''' )
     #cur.execute( 'create index dateTimeStartIndex2 on ICM_SIR_ANALYSIS(dateTimeStart)' )
@@ -513,7 +514,7 @@ class ArchiveSirICM( object ):
                        ',%(referenceOrbit)d,%(fileSize)d,0,0,0,0)'
 
         str_sql_analys = 'insert into ICM_SIR_ANALYSIS values' \
-                       '(NULL,%(metaID)d,\'%(name)s\',%(svn_revision)d,%(scanline)d)'
+                       '(NULL,%(metaID)d,\'%(name)s\',0,%(svn_revision)d,%(scanline)d)'
 
         str_sql_calib = 'insert into ICM_SIR_CALIBRATION values' \
                        '(NULL,%(metaID)d,\'%(name)s\',%(after_dn2v)d' \
