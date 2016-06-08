@@ -280,7 +280,7 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
 
 #---------------------------------------------------------------------------
 def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
-                         after_dn2v=False, orbit=None, date=None,
+                         after_dn2v=False, orbit=[], date=None,
                          mode='location', toScreen=False ):
     '''
     Query NADC Sciamachy SQLite database on product type with data selections
@@ -297,9 +297,9 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
     - "after_dn2v": select measurement on calibration up to DN2V 
                    [default: False]
     - "orbit"     : select on reference orbit number or range
-                   [default: None]
+                   [default: empty list]
     - "date"      :  select on dateTimeStart of measurements in dataset
-          select a period: date=[dateTime1, dateTime2]
+          select a period: date=[dateTime1, dateTime2] as "YYYY-MM-DDTHH:MM:SS"
           select one minute: date=YYMMDDhhmm
           select one hour: date=YYMMDDhh
           select one day: date=YYMMDD
@@ -329,6 +329,9 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
     assert dataset, \
         '*** Fatal, no dataset name provided'
 
+    assert isinstance(orbit, (tuple, list)), \
+        '*** Fatal, parameter orbit is not a list or tuple'
+
     assert os.path.isfile( dbname ),\
         '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
@@ -340,7 +343,27 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
     q_str = 'select distinct name, metaID from {} where name like \'{}\''
     if after_dn2v:
         q_str += ' and after_dn2v != 0'
-
+    if date:
+        ll = list(date[0+i:2+i] for i in range(0, len(date), 2))
+        if len(ll) == 2:
+            ll += ['00', '00', '00', '00']
+            dtime = '+1 month'
+        elif len(ll) == 3:
+            ll += ['00', '00', '00']
+            dtime = '+1 day'
+        elif len(ll) == 4:
+            ll += ['00', '00']
+            dtime = '+1 hour'
+        elif len(ll) == 5:
+            ll += ['00']
+            dtime = '+1 minute'
+        else:
+            pass
+        d1 = '20{}-{}-{}T{}:{}:{}'.format(*ll)
+        mystr = ' and dateTimeStart between \'{}\' and datetime(\'{}\',\'{}\')'
+        q_str += mystr.format( d1, d1, dtime )
+        print(q_str)
+        
     conn = sqlite3.connect( dbname )
     cu  = conn.cursor()
     for tbl in table_list:
@@ -363,7 +386,15 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
             ' then localPath else nfsPath end'.format(socket.gethostname())
         qq_str = 'select {} from ICM_SIR_LOCATION where pathID={}'
 
-        q_str = 'select distinct pathID, name from {} where metaID in ({})'
+        if orbit:
+            if len(orbit) == 1:
+                orbit_str = 'referenceOrbit = {}'.format(orbit[0])
+            else:
+                orbit_str = 'referenceOrbit between {} and {}'.format(orbit[0], orbit[1])
+            q_str = 'select distinct pathID, name from {} where ' + orbit_str
+            q_str += ' and metaID in ({})'
+        else:
+            q_str = 'select distinct pathID, name from {} where metaID in ({})'
         conn = sqlite3.connect( dbname )
         cu = conn.cursor()
         cuu = conn.cursor()

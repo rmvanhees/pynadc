@@ -12,6 +12,14 @@ from pynadc.tropomi import db
 
 DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
 
+def __orbit_range__(string):
+    res = [int(str) for str in string.split(',')]
+
+    if len(res) > 2:
+        msg = '%r is not a orbit number or range' % string
+        raise argparse.ArgumentTypeError(msg)
+
+    return res.sort()
 
 #- main code -------------------------------------------------------------------
 if __name__ == '__main__':
@@ -77,7 +85,7 @@ if __name__ == '__main__':
                               help='select dataset calibrated upto after_dn2v' )
     parser_type.add_argument( '--date', type=str, default=None,
                               help='select on dateTimeStart of measurements' )
-    parser_type.add_argument( '--orbit', type=int, default=None,
+    parser_type.add_argument( '--orbit', type=__orbit_range__,
                               help='select measurement on orbit (range)' )
     parser_type.set_defaults( func=db.get_product_by_type )
     args = parser.parse_args()
