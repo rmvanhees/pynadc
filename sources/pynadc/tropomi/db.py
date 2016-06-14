@@ -13,6 +13,8 @@ import socket
 import os.path
 import sqlite3
 
+from tabulate import tabulate
+
 DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
 
 class S5pDB( object ):
@@ -116,7 +118,7 @@ class S5pDB_name( S5pDB ):
                       'ICM_SIR_IRRADIANCE', 'ICM_SIR_RADIANCE')
         for table in table_list:
             if table == 'ICM_SIR_ANALYSIS':
-                columns = 'name, svn_revision, scanline'
+                columns = 'name, validityDate, svn_revision, scanline'
             else:
                 columns = 'name, ic_id, dateTimeStart, scanline'
 
@@ -312,22 +314,29 @@ def get_product_by_name( args=None, product=None, dbname=DB_NAME,
     elif mode == 'meta':
         result = db.meta( product )
         if toScreen:
-            for key_name in result.keys():
+            keys_list = list(result.keys())
+            keys_list.sort()
+            for key_name in keys_list:
                 print( key_name, '\t', result[key_name] )
 
         return result
     elif mode == 'content':
         result = db.content( product )
         if toScreen:
+            table = []
             for res in result:
-                print( res['table'], '\t', res['name'], end='\t' )
+                data = [res['table'], res['name']]
                 if 'dateTimeStart' in res.keys():
-                    print( res['dateTimeStart'], end='\t' )
+                    data.append( res['dateTimeStart'] )
+                if 'validityDate' in res.keys():
+                    data.append( res['validityDate'] )
                 if 'svn_revision' in res.keys():
-                    print( res['svn_revision'], end='\t' )
+                    data.append( res['svn_revision'] )
                 if 'ic_id' in res.keys():
-                    print( res['ic_id'], end='\t' )
-                print( res['scanline'] )
+                    data.append( res['ic_id'] )
+                data.append( res['scanline'] )
+                table.append( data )
+            print( tabulate(table, tablefmt='plain') )
 
         return result
     else:
@@ -539,20 +548,20 @@ def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
         result = db.all()
 
         if toScreen:
-            key_list = list(result[0].keys())
-            key_list.sort()
-            print( '#', ' '.join(key_list) )
-
-            for row in result:
-                for key_name in key_list:
-                    print( row[key_name], end=' ' )
-                print( '')
-
+            newdict={}
+            for k,v in [(key,d[key]) for d in result for key in d]:
+                if k not in newdict: newdict[k]=[v]
+                else: newdict[k].append(v)
+            print( '#', ' '.join(newdict.keys()) )
+            print( tabulate(newdict, tablefmt="plain") )
+            #print( tabulate(newdict, headers="keys") )
     else:
         result = db.one( ic_id )
 
         if toScreen:
-            for key_name in result.keys():
+            keys_list = list(result.keys())
+            keys_list.sort()
+            for key_name in keys_list:
                 print( '{:25}\t{}'.format(key_name, result[key_name]) )
 
         if check:
@@ -562,9 +571,9 @@ def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
             treset = (result['exposure_period_us'] - texp - 315) / 1e6
 
             print( '#---------- {}'.format('Calculated timing parameters for reference:') )
-            print( '{:25}\t{}'.format('exposure_time (us)', texp) )
             print( '{:25}\t{}'.format('dead_time (us)', tdead) )
             print( '{:25}\t{}'.format('exposure_shift (us)', dtexp) )
+            print( '{:25}\t{}'.format('exposure_time (us)', texp) )
             print( '{:25}\t{}'.format('reset_time (s)', treset) )
 
     return result

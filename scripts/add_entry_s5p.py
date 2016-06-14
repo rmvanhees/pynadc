@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# (c) SRON - Netherlands Institute for Space Research (2014).
+# (c) SRON - Netherlands Institute for Space Research (2016).
 # All Rights Reserved.
 # This software is distributed under the BSD 2-clause license.
 '''
@@ -79,6 +79,7 @@ def cre_sqlite_s5p_db( dbname ):
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
        after_dn2v       boolean  DEFAULT 0,     
+       validityDate     datetime NOT NULL default '0000-00-00T00:00:00',
        svn_revision     integer  NOT NULL,
        scanline         integer  NOT NULL )''' )
     #cur.execute( 'create index dateTimeStartIndex2 on ICM_SIR_ANALYSIS(dateTimeStart)' )
@@ -230,6 +231,8 @@ class ArchiveSirICM( object ):
 
         with h5py.File( flname, mode='r' ) as fid:
             self.meta['referenceOrbit'] = fid.attrs['reference_orbit'][0]
+            self.meta['time_coverage_start'] = fid.attrs['time_coverage_start']
+            self.meta['time_coverage_end'] = fid.attrs['time_coverage_end']
             grp = fid['/METADATA/ESA_METADATA/earth_explorer_header/fixed_header']
             dset = grp['source']
             self.meta['creationDate'] = (dset.attrs['Creation_Date'].split(b'=')[1]).decode('ascii')
@@ -270,35 +273,25 @@ class ArchiveSirICM( object ):
             if len(grp7) != len(grp8):
                 print( '*** Fatal analysis results of band 7 or 8 is incomplete' )
                 return
-            
+
+            analysis_dict = {
+                'ANALOG_OFFSET_SWIR' : 'analog_offset_swir_value',
+                'DPQF_MAP' : 'dpqf_map',
+                'LONG_TERM_SWIR' : 'long_term_swir_value',
+                'NOISE' : 'noise' }
+
             ii = 0
             buff = np.zeros( len(grp7), dtype=grp_dtype() )
-            if 'ANALOG_OFFSET_SWIR' in grp7:
-                buff[ii]['name'] = 'ANALOG_OFFSET_SWIR'
-                dset = grp7['ANALOG_OFFSET_SWIR']['analog_offset_swir']
-                buff[ii]['svn_revision'] = dset.attrs['svn_revision']
-                buff[ii]['scanline'] = 1
-                ii += 1
-            if 'DPQF_MAP' in grp7:
-                buff[ii]['name'] = 'DPQF_MAP'
-                dset = grp7['DPQF_MAP']['dpqf_map']
-                buff[ii]['svn_revision'] = dset.attrs['svn_revision']
-                buff[ii]['scanline'] = 1
-                ii += 1
-            if 'LONG_TERM_SWIR' in grp7:
-                buff[ii]['name'] = 'LONG_TERM_SWIR'
-                dset = grp7['LONG_TERM_SWIR']['long_term_swir']
-                buff[ii]['svn_revision'] = dset.attrs['svn_revision']
-                buff[ii]['scanline'] = 1
-                ii += 1
-            if 'NOISE' in grp7:
-                buff[ii]['name'] = 'NOISE'
-                dset = grp7['NOISE']['noise']
-                buff[ii]['svn_revision'] = dset.attrs['svn_revision']
-                buff[ii]['scanline'] = grp7['NOISE']['scanline'].size
-                ii += 1
+            for key in analysis_dict.keys():
+                if key in grp7:
+                    buff[ii]['name'] = key
+                    dset = grp7[key][analysis_dict[key]]
+                    buff[ii]['dateTimeStart'] = self.meta['time_coverage_end']
+                    buff[ii]['svn_revision'] = dset.attrs['svn_revision']
+                    buff[ii]['scanline'] = 1
+                    ii += 1
             if ii < len(grp7):
-                print( '*** Warning analysis results contains unexpected group' )
+                print('*** Warning BAND7_ANALYSIS contains an unexpected group')
 
         self.analys = buff[0:ii]
         if verbose:
@@ -514,7 +507,8 @@ class ArchiveSirICM( object ):
                        ',%(referenceOrbit)d,%(fileSize)d,0,0,0,0)'
 
         str_sql_analys = 'insert into ICM_SIR_ANALYSIS values' \
-                       '(NULL,%(metaID)d,\'%(name)s\',0,%(svn_revision)d,%(scanline)d)'
+                       '(NULL,%(metaID)d,\'%(name)s\',0'\
+                       ',\'%(dateTimeStart)s\',%(svn_revision)d,%(scanline)d)'
 
         str_sql_calib = 'insert into ICM_SIR_CALIBRATION values' \
                        '(NULL,%(metaID)d,\'%(name)s\',%(after_dn2v)d' \
