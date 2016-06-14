@@ -1,4 +1,4 @@
-# (c) SRON - Netherlands Institute for Space Research (2014).
+# (c) SRON - Netherlands Institute for Space Research (2016).
 # All Rights Reserved.
 # This software is distributed under the BSD 2-clause license.
 
@@ -15,6 +15,255 @@ import sqlite3
 
 DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
 
+class S5pDB( object ):
+    '''
+    '''
+    def __init__( self, dbname ):
+        '''
+        '''
+        assert os.path.isfile( dbname ),\
+            '*** Fatal, can not find SQLite database: {}'.format(dbname)
+
+        self.__conn = sqlite3.connect( dbname )
+        cur = self.__conn.cursor()
+        cur.execute( 'PRAGMA foreign_keys = ON' )
+        cur.close()
+
+    def __query_location__( self, cols=None ):
+        case_str = 'case when hostName == \'{}\' then localPath'\
+                   ' else nfsPath end'.format(socket.gethostname())
+        if cols is None:
+            return 'select {} from ICM_SIR_LOCATION'.format(case_str)
+        else:
+            return 'select {},{} from ICM_SIR_LOCATION'.format(case_str, cols)
+        
+    def cursor( self, Row=False ):
+        if Row:
+            self.__conn.row_factory = sqlite3.Row
+        return self.__conn.cursor()
+    
+    def __del__( self ):
+        '''
+        '''
+        self.__conn.close()
+        print( '*** Info: connection to database closed' )
+
+class S5pDB_name( S5pDB ):
+    '''
+    class definition for queries given the ICM_CA_SIR product name
+    '''
+    def __init__( self, dbname ):
+        super().__init__( dbname )
+        
+    def location( self, product ):
+        '''
+        '''
+        table = 'ICM_SIR_META'
+        
+        q1_str = 'select pathID,name from {} where name=\'{}\''.format(table, product)
+        q2_str = self.__query_location__() + ' where pathID={}'
+
+        cur = self.cursor()
+        cur.execute( q1_str )
+        row = cur.fetchone()
+        if row is None:
+            cur.close()
+            return ()
+        else:
+            cur.execute( q2_str.format(row[0]) )
+            root = cur.fetchone()
+            cur.close()
+            return (root[0], row[1])
+    
+    def meta( self, product ):
+        '''
+        '''
+        table = 'ICM_SIR_META'
+        
+        query_str = 'select * from {} where name=\'{}\''.format(table, product)
+
+        cur = self.cursor( Row=True )
+        cur.execute( query_str )
+        row = cur.fetchone()
+        cur.close()
+        if row is None:
+            return ()
+
+        row_list = {}
+        for key_name in row.keys():
+            row_list[key_name] = row[key_name]
+
+        return row_list
+
+    def content( self, product ):
+        '''
+        '''
+        table = 'ICM_SIR_META'
+        
+        q1_str = 'select metaID from {} where name=\'{}\''
+        q2_str = 'select {} from {} where metaID={}'
+
+        cur = self.cursor( Row=True )
+        cur.execute( q1_str.format(table, product) )
+        row = cur.fetchone()
+        if row is None:
+            cur.close()
+            return ()
+        meta_id = row[0]
+
+        row_list = ()
+        table_list = ('ICM_SIR_ANALYSIS', 'ICM_SIR_CALIBRATION',
+                      'ICM_SIR_IRRADIANCE', 'ICM_SIR_RADIANCE')
+        for table in table_list:
+            if table == 'ICM_SIR_ANALYSIS':
+                columns = 'name, svn_revision, scanline'
+            else:
+                columns = 'name, ic_id, dateTimeStart, scanline'
+
+            cur.execute( q2_str.format(columns, table, meta_id) )
+            for row in cur:
+                row_entry = {}
+                row_entry['table'] = table
+                for key_name in row.keys():
+                    row_entry[key_name] = row[key_name]
+                row_list += (row_entry,)
+
+        cur.close()
+        return row_list
+
+
+class S5pDB_icid( S5pDB ):
+    '''
+    class definition for queries on instrument settings
+    '''
+    def __init__( self, dbname ):
+        super().__init__( dbname )
+
+    def all( self ):
+        '''
+        '''
+        table = 'ICM_SIR_TBL_ICID'
+
+        query_str = 'select * from {} order by ic_id,ic_version'.format(table)
+
+        cur = self.cursor( Row=True )
+        cur.execute( query_str )
+        
+        row_list = ()
+        for row in cur:
+            row_entry = {}
+            for key_name in row.keys():
+                row_entry[key_name] = row[key_name]
+            row_list += (row_entry,)
+
+        cur.close()
+        return row_list
+
+    def one( self, ic_id ):
+        '''
+        '''
+        table = 'ICM_SIR_TBL_ICID'
+
+        query_str = 'select * from {} where ic_id={} order by ic_version'
+
+        cur = self.cursor( Row=True )
+        cur.execute( query_str.format(table, ic_id) )
+        row = cur.fetchone()
+        cur.close()
+        if row is None:
+            return ()
+
+        row_list = {}
+        for key_name in row.keys():
+            row_list[key_name] = row[key_name]
+
+        return row_list
+
+class S5pDB_type( S5pDB ):
+    '''
+    '''
+    def __init__( self, dbname, dataset ):
+        super().__init__( dbname )
+        self.tables = ()
+        self.dataset = dataset
+
+    def __query_ds__( self, table, after_dn2v, date ):
+        cols = 'metaID,name,after_dn2v'
+        
+        q_str = 'select {} from {}'.format(cols, table)
+        q_str +=  ' where name like \'{}\''.format(self.dataset)
+
+        if after_dn2v:
+            q_str += ' and after_dn2v != 0'
+        if date:
+            ll = list(date[0+i:2+i] for i in range(0, len(date), 2))
+            if len(ll) == 2:
+                ll += ['00', '00', '00', '00']
+                dtime = '+1 month'
+            elif len(ll) == 3:
+                ll += ['00', '00', '00']
+                dtime = '+1 day'
+            elif len(ll) == 4:
+                ll += ['00', '00']
+                dtime = '+1 hour'
+            elif len(ll) == 5:
+                ll += ['00']
+                dtime = '+1 minute'
+            else:
+                pass
+            d1 = '20{}-{}-{}T{}:{}:{}'.format(*ll)
+            mystr = ' and dateTimeStart between \'{}\' and datetime(\'{}\',\'{}\')'
+            q_str += mystr.format( d1, d1, dtime )
+
+        return q_str
+        
+    def __query_meta__( self, orbit ):
+        table = 'ICM_SIR_META'
+        cols = 'pathID,s1.name as prod_name,s2.name as ds_name,after_dn2v'
+
+        q_str = 'select {} from {}'.format(cols,table)
+        if orbit:
+            if len(orbit) == 1:
+                orbit_str = ' where referenceOrbit = {}'.format(orbit[0])
+            else:
+                orbit_str = ' where referenceOrbit between {} and {}'.format(orbit[0], orbit[1])
+            q_str += orbit_str
+
+        return q_str + ' as s1'
+    
+    def __query_path__( self ):
+        cols = 'prod_name,ds_name,after_dn2v'
+        
+        return self.__query_location__(cols) + ' as s3'
+    
+    def location( self, orbit, after_dn2v, date ):
+        '''
+        '''
+        q1_str = self.__query_path__()
+        q2_str = self.__query_meta__( orbit )
+
+        table_list = ('ICM_SIR_ANALYSIS', 'ICM_SIR_CALIBRATION',
+                      'ICM_SIR_IRRADIANCE', 'ICM_SIR_RADIANCE')
+
+        row_list = ()
+        cur = self.cursor()
+        for table in table_list:
+            q3_str = self.__query_ds__( table, after_dn2v, date )
+            q_str = q1_str + ' join (' + q2_str + ' join (' + q3_str + ')'
+            q_str += ' as s2 on s1.metaID=s2.metaID)'
+            q_str += ' as s4 on s3.pathID=s4.pathID'
+            cur.execute( q_str )
+            rows = cur.fetchall()
+            if len(rows) == 0:
+                continue
+            for e in rows:
+                ee = list(e)
+                ee.append(table)
+                row_list += (ee,)
+           
+        cur.close()
+        return row_list
+    
 #---------------------------------------------------------------------------
 def get_product_by_name( args=None, product=None, dbname=DB_NAME, 
                          mode='location', toScreen=False ):
@@ -53,127 +302,34 @@ def get_product_by_name( args=None, product=None, dbname=DB_NAME,
     assert product, \
         '*** Fatal, no product-name provided'
 
-    assert os.path.isfile( dbname ),\
-        '*** Fatal, can not find SQLite database: {}'.format(dbname)
-
-    table = 'ICM_SIR_META'
+    db = S5pDB_name( dbname )
     if mode == 'location':
-        query_str = 'select pathID,name from {} where name=\'{}\''.format(table, product)
-        conn = sqlite3.connect( dbname )
-        conn.row_factory = sqlite3.Row
-        cu = conn.cursor()
-        cu.execute( query_str )
-        row = cu.fetchone()
-        if row is None:
-            cu.close()
-            conn.close()
-            return ()
-
-        ## obtain root directories (local or NFS)
-        case_str = 'case when hostName == \'{}\''\
-            ' then localPath else nfsPath end'.format(socket.gethostname())
-        query_str = 'select {} from ICM_SIR_LOCATION where pathID={}'.format(case_str, row[0])
-        cu.execute( query_str )
-        root = cu.fetchone()
-        cu.close()
-        conn.close()
-
+        result = db.location( product )
         if toScreen:
-            print( os.path.join(root[0], row[1]) )
+            print( os.path.join(result[0], result[1]) )
 
-        return (root[0], row[1])
-    elif mode == 'meta' or mode == 'content':
-        query_str = 'select * from {} where name=\'{}\''.format(table, product)
-        conn = sqlite3.connect( dbname )
-        conn.row_factory = sqlite3.Row
-        cu = conn.cursor()
-        cu.execute( query_str )
-        row = cu.fetchone()
-        cu.close()
-        conn.close()
-        if row is None:
-            return ()
-
-        if mode == 'meta':
-            row_list = {}
-            for key_name in row.keys():
-                row_list[key_name] = row[key_name]
-                if toScreen:
-                    print( key_name, '\t', row[key_name] )
-            return row_list
-
-        ## remainder only when mode == 'content'
-        row_list = ()
-        metaID = row.__getitem__('metaID')
-
-        conn = sqlite3.connect( dbname )
-        conn.row_factory = sqlite3.Row
-        cu = conn.cursor()
-
-        table = 'ICM_SIR_ANALYSIS'
+        return result
+    elif mode == 'meta':
+        result = db.meta( product )
         if toScreen:
-            print( '#---------- {} ----------'.format(table) )
-        columns = 'name, svn_revision, scanline'
-        query_str = 'select {} from {} where metaID={}'.format(columns, table, metaID)
-        cu.execute( query_str )
-        rows = cu.fetchall()
-        for row in rows:
-            row_entry = {}
-            for key_name in row.keys():
-                row_entry[key_name] = row[key_name]
-            row_list += (row_entry,)
-            if toScreen:
-                print( row_entry.values() )
-            
-        table = 'ICM_SIR_CALIBRATION'
+            for key_name in result.keys():
+                print( key_name, '\t', result[key_name] )
+
+        return result
+    elif mode == 'content':
+        result = db.content( product )
         if toScreen:
-            print( '#---------- {} ----------'.format(table) )
-        columns = 'name, dateTimeStart, ic_id, ic_version, scanline'
-        query_str = 'select {} from {} where metaID={}'.format(columns, table, metaID)
-        cu.execute( query_str )
-        rows = cu.fetchall()
-        for row in rows:
-            row_entry = {}
-            for key_name in row.keys():
-                row_entry[key_name] = row[key_name]
-            row_list += (row_entry,)
-            if toScreen:
-                print( row_entry.values() )
+            for res in result:
+                print( res['table'], '\t', res['name'], end='\t' )
+                if 'dateTimeStart' in res.keys():
+                    print( res['dateTimeStart'], end='\t' )
+                if 'svn_revision' in res.keys():
+                    print( res['svn_revision'], end='\t' )
+                if 'ic_id' in res.keys():
+                    print( res['ic_id'], end='\t' )
+                print( res['scanline'] )
 
-        table = 'ICM_SIR_IRRADIANCE'
-        if toScreen:
-            print( '#---------- {} ----------'.format(table) )
-        columns = 'name, dateTimeStart, ic_id, ic_version, scanline'
-        query_str = 'select {} from {} where metaID={}'.format(columns, table, metaID)
-        cu.execute( query_str )
-        rows = cu.fetchall()
-        for row in rows:
-            row_entry = {}
-            for key_name in row.keys():
-                row_entry[key_name] = row[key_name]
-            row_list += (row_entry,)
-            if toScreen:
-                print( row_entry.values() )
-
-        table = 'ICM_SIR_RADIANCE'
-        if toScreen:
-            print( '#---------- {} ----------'.format(table) )
-        columns = 'name, dateTimeStart, ic_id, ic_version, scanline'
-        query_str = 'select {} from {} where metaID={}'.format(columns, table, metaID)
-        cu.execute( query_str )
-        rows = cu.fetchall()
-        for row in rows:
-            row_entry = {}
-            for key_name in row.keys():
-                row_entry[key_name] = row[key_name]
-            row_list += (row_entry,)
-            if toScreen:
-                print( row_entry.values() )
-
-        cu.close()
-        conn.close()
-
-        return row_list
+        return result
     else:
         print( '*** Fatal, mode-option not recognized: {}'.format(mode) )
         return ()
@@ -329,100 +485,32 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
     assert dataset, \
         '*** Fatal, no dataset name provided'
 
-    assert isinstance(orbit, (tuple, list)), \
+    assert orbit is None or isinstance(orbit, (tuple, list)), \
         '*** Fatal, parameter orbit is not a list or tuple'
 
-    assert os.path.isfile( dbname ),\
-        '*** Fatal, can not find SQLite database: {}'.format(dbname)
+    db = S5pDB_type( dbname, dataset )
 
-    ## define list of tables to find the dataset
-    tables = ()
-    table_list = ('ICM_SIR_ANALYSIS', 'ICM_SIR_CALIBRATION',
-                  'ICM_SIR_IRRADIANCE', 'ICM_SIR_RADIANCE')
-
-    q_str = 'select distinct name, metaID from {} where name like \'{}\''
-    if after_dn2v:
-        q_str += ' and after_dn2v != 0'
-    if date:
-        ll = list(date[0+i:2+i] for i in range(0, len(date), 2))
-        if len(ll) == 2:
-            ll += ['00', '00', '00', '00']
-            dtime = '+1 month'
-        elif len(ll) == 3:
-            ll += ['00', '00', '00']
-            dtime = '+1 day'
-        elif len(ll) == 4:
-            ll += ['00', '00']
-            dtime = '+1 hour'
-        elif len(ll) == 5:
-            ll += ['00']
-            dtime = '+1 minute'
-        else:
-            pass
-        d1 = '20{}-{}-{}T{}:{}:{}'.format(*ll)
-        mystr = ' and dateTimeStart between \'{}\' and datetime(\'{}\',\'{}\')'
-        q_str += mystr.format( d1, d1, dtime )
-        print(q_str)
-        
-    conn = sqlite3.connect( dbname )
-    cu  = conn.cursor()
-    for tbl in table_list:
-        cu.execute( q_str.format(tbl, dataset) )
-        rows = cu.fetchall()
-        if len(rows) > 0:
-            tables += ({'nameList' : ', '.join(str(e[0]) for e in rows),
-                        'metaList' : ', '.join(str(e[1]) for e in rows)},)
-    cu.close()
-    conn.close()
-
-    if len(tables) == 0:
-        print( '*** Warning, no dataset with name \"{}\" not found'.format(dataset) )
-        return ()
-
-    meta_table = 'ICM_SIR_META'
     if mode == 'location':
-        ## obtain root directories (local or NFS)
-        case_str = 'case when hostName == \'{}\''\
-            ' then localPath else nfsPath end'.format(socket.gethostname())
-        qq_str = 'select {} from ICM_SIR_LOCATION where pathID={}'
+        result = db.location( orbit, after_dn2v, date )
+        if toScreen:
+            for entry in result:
+                h5_grp = 'BAND[78]_' + entry[4].split('_')[2]
+                if entry[3] == 1:
+                    h5_sgrp = entry[2] + '_AFTER_DN2V'
+                else:
+                    h5_sgrp = entry[2]
 
-        if orbit:
-            if len(orbit) == 1:
-                orbit_str = 'referenceOrbit = {}'.format(orbit[0])
-            else:
-                orbit_str = 'referenceOrbit between {} and {}'.format(orbit[0], orbit[1])
-            q_str = 'select distinct pathID, name from {} where ' + orbit_str
-            q_str += ' and metaID in ({})'
-        else:
-            q_str = 'select distinct pathID, name from {} where metaID in ({})'
-        conn = sqlite3.connect( dbname )
-        cu = conn.cursor()
-        cuu = conn.cursor()
-
-        row_list = ()
-        for entry in tables:
-            cu.execute( q_str.format(meta_table, entry['metaList']) )
-            for row in cu:
-                cuu.execute( qq_str.format(case_str, row[0]) )
-                root = cuu.fetchone()
-                if toScreen:
-                    print( os.path.join(root[0], row[1]) )
-                row_list += ([root[0], row[1]],)
-        cuu.close()
-        cu.close()
-        conn.close()
-        if len(row_list) == 1:
-            return row_list[0]
-        else:
-            return row_list
+                print( os.path.join(entry[0], entry[1],
+                                        h5_grp, h5_sgrp) )
+        return result
     
     return ()
 
 #---------------------------------------------------------------------------
-def show_details_icid( args=None, dbname=DB_NAME, ic_id=None,
-                       check=False, toScreen=False ):
+def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
+                             check=False, toScreen=False ):
     '''
-    Query NADC S5p-Tropomi ICM-database on ICID
+    Query NADC S5p-Tropomi ICM-database on ICID to obtain instrument settings
 
     Parameters:
     -----------
@@ -446,48 +534,32 @@ def show_details_icid( args=None, dbname=DB_NAME, ic_id=None,
         ic_id  = args.icid
         check  = args.check
 
-    assert os.path.isfile( dbname ),\
-        '*** Fatal, can not find SQLite database: {}'.format(dbname)
-    
-    conn = sqlite3.connect( dbname )
-    conn.row_factory = sqlite3.Row
-    cu = conn.cursor()
-    
-    table = 'ICM_SIR_TBL_ICID'
+    db = S5pDB_icid( dbname )
     if ic_id is None:
-        query_str = 'select * from {} order by ic_id,ic_version'.format(table)
-        cu.execute( query_str )
-        rows = cu.fetchall()
+        result = db.all()
 
-        row_list = ()
-        for row in rows:
-            row_entry = {}
-            for key_name in row.keys():
-                row_entry[key_name] = row[key_name]
-            row_list += (row_entry,)
-            if toScreen:
-                print( row_entry.values() )
-        
+        if toScreen:
+            key_list = list(result[0].keys())
+            key_list.sort()
+            print( '#', ' '.join(key_list) )
+
+            for row in result:
+                for key_name in key_list:
+                    print( row[key_name], end=' ' )
+                print( '')
+
     else:
-        query_str = 'select * from {} where ic_id={} order by ic_version'.format(table, ic_id)
-        cu.execute( query_str )
-        row = cu.fetchone()
-        if row is None:
-            cu.close()
-            conn.close()
-            return ()
+        result = db.one( ic_id )
 
-        row_list = {}
-        for key_name in row.keys():
-            row_list[key_name] = row[key_name]
-            if toScreen:
-                print( '{:25}\t{}'.format(key_name, row[key_name]) )
+        if toScreen:
+            for key_name in result.keys():
+                print( '{:25}\t{}'.format(key_name, result[key_name]) )
 
         if check:
-            texp = 1.25 * (65540 + row['int_hold'] - row['int_delay'])
-            dtexp = 1.25 * (row['int_delay'] + 0.5)
-            tdead = row['exposure_period_us'] - texp - dtexp + 5.625
-            treset = (row['exposure_period_us'] - texp - 315) / 1e6
+            texp = 1.25 * (65540 + result['int_hold'] - result['int_delay'])
+            dtexp = 1.25 * (result['int_delay'] + 0.5)
+            tdead = result['exposure_period_us'] - texp - dtexp + 5.625
+            treset = (result['exposure_period_us'] - texp - 315) / 1e6
 
             print( '#---------- {}'.format('Calculated timing parameters for reference:') )
             print( '{:25}\t{}'.format('exposure_time (us)', texp) )
@@ -495,8 +567,5 @@ def show_details_icid( args=None, dbname=DB_NAME, ic_id=None,
             print( '{:25}\t{}'.format('exposure_shift (us)', dtexp) )
             print( '{:25}\t{}'.format('reset_time (s)', treset) )
 
-    ## close connection and return result
-    cu.close()
-    conn.close()
-    return row_list
+    return result
    

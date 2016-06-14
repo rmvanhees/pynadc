@@ -14,12 +14,13 @@ DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
 
 def __orbit_range__(string):
     res = [int(str) for str in string.split(',')]
+    res.sort()
 
     if len(res) > 2:
         msg = '%r is not a orbit number or range' % string
         raise argparse.ArgumentTypeError(msg)
-
-    return res.sort()
+    
+    return res
 
 #- main code -------------------------------------------------------------------
 if __name__ == '__main__':
@@ -53,7 +54,7 @@ if __name__ == '__main__':
                               help='show info of given ic_id' )
     parser_icid.add_argument( '--check', action='store_true', default=False,
                               help='provide info to check ic_id parameters' )
-    parser_icid.set_defaults( func=db.show_details_icid )
+    parser_icid.set_defaults( func=db.get_instrument_settings )
 
     #-------------------------
     # define subparsers for queries on product receive time
