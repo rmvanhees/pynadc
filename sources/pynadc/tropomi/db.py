@@ -17,6 +17,7 @@ from tabulate import tabulate
 
 DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
 
+#--------------------------------------------------
 class S5pDB( object ):
     '''
     '''
@@ -50,6 +51,62 @@ class S5pDB( object ):
         self.__conn.close()
         print( '*** Info: connection to database closed' )
 
+#--------------------------------------------------
+class S5pDB_date( S5pDB ):
+    '''
+    '''
+    def __init__( self, dbname, date ):
+        super().__init__( dbname )
+        self.date = date
+
+    def __query_meta__( self ):
+        table = 'ICM_SIR_META'
+        cols = 'pathID,name'
+
+        q_str = 'select {} from {}'.format(cols,table)
+        if self.date is None:
+            return q_str + ' order by dateTimeStart'
+        
+        ll = list(self.date[0+i:2+i] for i in range(0, len(self.date), 2))
+        if len(ll) == 2:
+            ll += ['00', '00', '00', '00']
+            dtime = '+1 month'
+        elif len(ll) == 3:
+            ll += ['00', '00', '00']
+            dtime = '+1 day'
+        elif len(ll) == 4:
+            ll += ['00', '00']
+            dtime = '+1 hour'
+        elif len(ll) == 5:
+            ll += ['00']
+            dtime = '+1 minute'
+        else:
+            pass
+        d1 = '20{}-{}-{} {}:{}:{}'.format(*ll)
+        mystr = ' where dateTimeStart between \'{}\' and datetime(\'{}\',\'{}\')'
+        return q_str + mystr.format( d1, d1, dtime ) + ' order by dateTimeStart'
+    
+    def location( self ):
+        '''
+        '''
+        row_list = ()
+
+        q1_str = self.__query_location__('name')
+        q2_str = self.__query_meta__()
+        q_str = q1_str + ' as s1 join (' + q2_str + ') as s2' 
+        q_str += ' on s1.pathID=s2.pathID'
+        
+        cur = self.cursor()
+        cur.execute( q_str )
+        rows = cur.fetchall()
+        if len(rows) > 0:
+            for e in rows:
+                row_list += (list(e),)
+           
+        cur.close()
+        return row_list
+    
+#--------------------------------------------------
 class S5pDB_name( S5pDB ):
     '''
     class definition for queries given the ICM_CA_SIR product name
@@ -133,7 +190,174 @@ class S5pDB_name( S5pDB ):
         cur.close()
         return row_list
 
+#--------------------------------------------------
+class S5pDB_orbit( S5pDB ):
+    '''
+    '''
+    def __init__( self, dbname, orbit ):
+        super().__init__( dbname )
+        self.orbit = orbit
 
+    def __query_meta__( self ):
+        table = 'ICM_SIR_META'
+        cols = 'pathID,name'
+
+        q_str = 'select {} from {}'.format(cols,table)
+        if len(self.orbit) == 1:
+            orbit_str = ' where referenceOrbit = {}'.format(self.orbit[0])
+        else:
+            orbit_str = ' where referenceOrbit between {} and {}'.format(*self.orbit)
+
+        return q_str + orbit_str + ' order by referenceOrbit'
+    
+    def location( self ):
+        '''
+        '''
+        row_list = ()
+
+        q1_str = self.__query_location__('name')
+        q2_str = self.__query_meta__()
+        q_str = q1_str + ' as s1 join (' + q2_str + ') as s2' 
+        q_str += ' on s1.pathID=s2.pathID'
+
+        cur = self.cursor()
+        cur.execute( q_str )
+        rows = cur.fetchall()
+        if len(rows) > 0:
+            for e in rows:
+                row_list += (list(e),)
+           
+        cur.close()
+        return row_list
+    
+#--------------------------------------------------
+class S5pDB_rtime( S5pDB ):
+    '''
+    '''
+    def __init__( self, dbname, rtime ):
+        super().__init__( dbname )
+        self.rtime = rtime
+
+    def __query_meta__( self ):
+        table = 'ICM_SIR_META'
+        cols = 'pathID,name'
+
+        q_str = 'select {} from {}'.format(cols,table)
+        if self.rtime is None:
+            return q_str + ' order by receiveDate'
+        
+        mystr = ' where receiveDate between datetime(\'now\',\'-{} {}\')' \
+            + ' and datetime(\'now\')'
+        if self.rtime[-1] == 'h':
+            ll = (int(self.rtime[0:-1]), 'hour')
+        else:
+            ll = (int(self.rtime[0:-1]), 'day')
+
+        return q_str + mystr.format(*ll) + ' order by receiveDate'
+    
+    def location( self ):
+        '''
+        '''
+        row_list = ()
+
+        q1_str = self.__query_location__('name')
+        q2_str = self.__query_meta__()
+        q_str = q1_str + ' as s1 join (' + q2_str + ') as s2' 
+        q_str += ' on s1.pathID=s2.pathID'
+        
+        cur = self.cursor()
+        cur.execute( q_str )
+        rows = cur.fetchall()
+        if len(rows) > 0:
+            for e in rows:
+                row_list += (list(e),)
+           
+        cur.close()
+        return row_list
+    
+#--------------------------------------------------
+class S5pDB_type( S5pDB ):
+    '''
+    '''
+    def __init__( self, dbname, dataset ):
+        super().__init__( dbname )
+        self.tables = ()
+        self.dataset = dataset
+
+    def __query_ds__( self, table, after_dn2v, date ):
+        cols = 'metaID,name,after_dn2v'
+        
+        q_str = 'select {} from {}'.format(cols, table)
+        q_str +=  ' where name like \'{}\''.format(self.dataset)
+
+        if after_dn2v:
+            q_str += ' and after_dn2v != 0'
+        if date is None:
+            return q_str
+        
+        ll = list(date[0+i:2+i] for i in range(0, len(date), 2))
+        if len(ll) == 2:
+            ll += ['00', '00', '00', '00']
+            dtime = '+1 month'
+        elif len(ll) == 3:
+            ll += ['00', '00', '00']
+            dtime = '+1 day'
+        elif len(ll) == 4:
+            ll += ['00', '00']
+            dtime = '+1 hour'
+        elif len(ll) == 5:
+            ll += ['00']
+            dtime = '+1 minute'
+        else:
+            pass
+        d1 = '20{}-{}-{} {}:{}:{}'.format(*ll)
+        mystr = ' and dateTimeStart between \'{}\' and datetime(\'{}\',\'{}\')'
+
+        return q_str + mystr.format( d1, d1, dtime )
+
+    def __query_meta__( self ):
+        table = 'ICM_SIR_META'
+        cols = 'pathID,s2.name as prod_name,s3.name as ds_name,after_dn2v'
+
+        return 'select {} from {} as s2'.format(cols,table)
+    
+    def location( self, orbit, after_dn2v, date ):
+        '''
+        '''
+        row_list = ()
+        q1_str = self.__query_location__('prod_name,ds_name,after_dn2v') 
+        q2_str = self.__query_meta__()
+        if orbit is None:
+            orbit_str = ''
+        elif len(orbit) == 1:
+            orbit_str = ' where referenceOrbit={}'.format(orbit[0])
+        else:
+            orbit_str = ' where referenceOrbit between {} and {}'.format(*orbit)
+
+        table_list = ('ICM_SIR_ANALYSIS', 'ICM_SIR_CALIBRATION',
+                      'ICM_SIR_IRRADIANCE', 'ICM_SIR_RADIANCE')
+
+        cur = self.cursor()
+        for table in table_list:
+            q3_str = self.__query_ds__( table, after_dn2v, date )
+            q_str = q1_str   + ' as s1' \
+                    + ' join (' + q2_str + ' join (' + q3_str + ')'
+            q_str += ' as s3 on s2.metaID=s3.metaID' + orbit_str + ')'
+            q_str += ' as s4 on s1.pathID=s4.pathID'
+
+            cur.execute( q_str )
+            rows = cur.fetchall()
+            if len(rows) == 0:
+                continue
+            for e in rows:
+                ee = list(e)
+                ee.append(table)
+                row_list += (ee,)
+           
+        cur.close()
+        return row_list
+    
+#--------------------------------------------------
 class S5pDB_icid( S5pDB ):
     '''
     class definition for queries on instrument settings
@@ -181,91 +405,53 @@ class S5pDB_icid( S5pDB ):
 
         return row_list
 
-class S5pDB_type( S5pDB ):
+#---------------------------------------------------------------------------
+def get_product_by_date( args=None, dbname=DB_NAME, date=None,
+                         mode='location', toScreen=False ):
     '''
+    Query NADC S5p-Tropomi ICM-database on start date of measurements. 
+
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname, startdate, mode
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                   [default: DB_NAME]
+    - "date"     :  select on dateTimeStart of measurements in dataset
+          select a period: date=[dateTime1, dateTime2]
+          select one minute: date=YYMMDDhhmm
+          select one hour: date=YYMMDDhh
+          select one day: date=YYMMDD
+          select one month: date=YYMM
+    - "mode"     : defines the returned information:
+        'location' :  query the file location
+        'meta'     :  query the file meta-data
+        'content'  :  query the file content
+                   [default: 'location']
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
     '''
-    def __init__( self, dbname, dataset ):
-        super().__init__( dbname )
-        self.tables = ()
-        self.dataset = dataset
+    if args:
+        dbname     = args.dbname
+        date       = args.date
+        mode       = args.mode
 
-    def __query_ds__( self, table, after_dn2v, date ):
-        cols = 'metaID,name,after_dn2v'
-        
-        q_str = 'select {} from {}'.format(cols, table)
-        q_str +=  ' where name like \'{}\''.format(self.dataset)
+    assert date, \
+        '*** Fatal, no measurement start date provided'
 
-        if after_dn2v:
-            q_str += ' and after_dn2v != 0'
-        if date:
-            ll = list(date[0+i:2+i] for i in range(0, len(date), 2))
-            if len(ll) == 2:
-                ll += ['00', '00', '00', '00']
-                dtime = '+1 month'
-            elif len(ll) == 3:
-                ll += ['00', '00', '00']
-                dtime = '+1 day'
-            elif len(ll) == 4:
-                ll += ['00', '00']
-                dtime = '+1 hour'
-            elif len(ll) == 5:
-                ll += ['00']
-                dtime = '+1 minute'
-            else:
-                pass
-            d1 = '20{}-{}-{}T{}:{}:{}'.format(*ll)
-            mystr = ' and dateTimeStart between \'{}\' and datetime(\'{}\',\'{}\')'
-            q_str += mystr.format( d1, d1, dtime )
+    assert os.path.isfile( dbname ),\
+        '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
-        return q_str
-        
-    def __query_meta__( self, orbit ):
-        table = 'ICM_SIR_META'
-        cols = 'pathID,s1.name as prod_name,s2.name as ds_name,after_dn2v'
+    db = S5pDB_date( dbname, date )
 
-        q_str = 'select {} from {}'.format(cols,table)
-        if orbit:
-            if len(orbit) == 1:
-                orbit_str = ' where referenceOrbit = {}'.format(orbit[0])
-            else:
-                orbit_str = ' where referenceOrbit between {} and {}'.format(orbit[0], orbit[1])
-            q_str += orbit_str
-
-        return q_str + ' as s1'
+    if mode == 'location':
+        result = db.location()
+        if toScreen:
+            for entry in result:
+                print( os.path.join(entry[0], entry[1]) )
+        return result
     
-    def __query_path__( self ):
-        cols = 'prod_name,ds_name,after_dn2v'
-        
-        return self.__query_location__(cols) + ' as s3'
-    
-    def location( self, orbit, after_dn2v, date ):
-        '''
-        '''
-        q1_str = self.__query_path__()
-        q2_str = self.__query_meta__( orbit )
+    return ()
 
-        table_list = ('ICM_SIR_ANALYSIS', 'ICM_SIR_CALIBRATION',
-                      'ICM_SIR_IRRADIANCE', 'ICM_SIR_RADIANCE')
-
-        row_list = ()
-        cur = self.cursor()
-        for table in table_list:
-            q3_str = self.__query_ds__( table, after_dn2v, date )
-            q_str = q1_str + ' join (' + q2_str + ' join (' + q3_str + ')'
-            q_str += ' as s2 on s1.metaID=s2.metaID)'
-            q_str += ' as s4 on s3.pathID=s4.pathID'
-            cur.execute( q_str )
-            rows = cur.fetchall()
-            if len(rows) == 0:
-                continue
-            for e in rows:
-                ee = list(e)
-                ee.append(table)
-                row_list += (ee,)
-           
-        cur.close()
-        return row_list
-    
 #---------------------------------------------------------------------------
 def get_product_by_name( args=None, product=None, dbname=DB_NAME, 
                          mode='location', toScreen=False ):
@@ -369,47 +555,22 @@ def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
         orbit      = args.orbit
         mode       = args.mode
 
-    assert orbit, \
-        '*** Fatal, no reference orbit provided'
+    assert orbit is None or isinstance(orbit, (tuple, list)), \
+        '*** Fatal, parameter orbit is not a list or tuple'
 
     assert os.path.isfile( dbname ),\
         '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
-#---------------------------------------------------------------------------
-def get_product_by_date( args=None, dbname=DB_NAME, startdate=None,
-                         mode='location', toScreen=False ):
-    '''
-    Query NADC S5p-Tropomi ICM-database on start date of measurements. 
+    db = S5pDB_orbit( dbname, orbit )
 
-    Parameters:
-    -----------
-    - "args"     : argparse object with keys dbname, startdate, mode
-    - "dbname"   : full path to S5p Tropomi SQLite database 
-                   [default: DB_NAME]
-    - "startdate":  select on dateTimeStart of measurements in dataset
-          select a period: date=[dateTime1, dateTime2]
-          select one minute: date=YYMMDDhhmm
-          select one hour: date=YYMMDDhh
-          select one day: date=YYMMDD
-          select one month: date=YYMM
-    - "mode"     : defines the returned information:
-        'location' :  query the file location
-        'meta'     :  query the file meta-data
-        'content'  :  query the file content
-                   [default: 'location']
-    - "toScreen" : controls if the query result is printed on STDOUT 
-                   [default: False]
-    '''
-    if args:
-        dbname     = args.dbname
-        date       = args.date
-        mode       = args.mode
-
-    assert startdate, \
-        '*** Fatal, no measurement start date provided'
-
-    assert os.path.isfile( dbname ),\
-        '*** Fatal, can not find SQLite database: {}'.format(dbname)
+    if mode == 'location':
+        result = db.location()
+        if toScreen:
+            for entry in result:
+                print( os.path.join(entry[0], entry[1]) )
+        return result
+    
+    return ()
 
 #---------------------------------------------------------------------------
 def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
@@ -443,9 +604,20 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
     assert os.path.isfile( dbname ),\
         '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
+    db = S5pDB_rtime( dbname, rtime )
+
+    if mode == 'location':
+        result = db.location()
+        if toScreen:
+            for entry in result:
+                print( os.path.join(entry[0], entry[1]) )
+        return result
+     
+    return ()
+
 #---------------------------------------------------------------------------
 def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
-                         after_dn2v=False, orbit=[], date=None,
+                         after_dn2v=False, orbit=None, date=None,
                          mode='location', toScreen=False ):
     '''
     Query NADC Sciamachy SQLite database on product type with data selections
@@ -472,8 +644,6 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
                    [default: None]
     - "mode"     : defines the returned information:
         'location' :  query the file location
-        'meta'     :  query the file meta-data
-        'content'  :  query the file content
                    [default: 'location']
     - "toScreen" : controls if the query result is printed on STDOUT 
                    [default: False]
@@ -578,3 +748,30 @@ def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
 
     return result
    
+#-------------------------SECTION MAIN--------------------------------------
+if __name__ == '__main__':
+
+    print( '''*** Info: test function 'get_product_by_date' ''' )
+    result = get_product_by_date( date='120919', toScreen=True )
+
+    print( '''*** Info: test function 'get_product_by_name' ''' )
+    result = get_product_by_name( product='S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01932_01_001000_20151002T140000.h5',
+                                  toScreen=True )
+
+    print( '''*** Info: test function 'get_product_by_orbit' ''' )
+    result = get_product_by_orbit( orbit=[1890], toScreen=True )
+    result = get_product_by_orbit( orbit=[1890,1905], toScreen=True )
+
+    print( '''*** Info: test function 'get_product_by_rtime' ''' )
+    result = get_product_by_rtime( rtime='+7d', toScreen=True )
+
+    print( '''*** Info: test function 'get_product_by_type' ''' )
+    result = get_product_by_type( dataset='BACKGROUND_MODE_170%',
+                                  toScreen=True )
+    result = get_product_by_type( dataset='%_1611', orbit=[1926,1930],
+                                  toScreen=True )
+
+    print( '''*** Info: test function 'get_instrument_settings' ''' )
+    result = get_instrument_settings( ic_id=1703, check=True, toScreen=True )
+
+    

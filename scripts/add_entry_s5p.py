@@ -65,13 +65,14 @@ def cre_sqlite_s5p_db( dbname ):
        acquisitionDate  datetime NOT NULL default '0000-00-00 00:00:00',
        creationDate     datetime NOT NULL default '0000-00-00 00:00:00',
        receiveDate      datetime NOT NULL default '0000-00-00 00:00:00',
+       dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
        referenceOrbit   integer  NOT NULL,
        fileSize         integer  NOT NULL,
        num_icm_analys   integer  default 0,
        num_icm_calib    integer  default 0,
        num_icm_irrad    integer  default 0,
        num_icm_rad      integer  default 0 )''' )
-    #cur.execute( 'create index dateTimeStartIndex1 on ICM_SIR_META(dateTimeStart)' )
+    cur.execute( 'create index dateTimeStartIndex1 on ICM_SIR_META(dateTimeStart)' )
     cur.execute( 'create index receiveDateIndex1 on ICM_SIR_META(receiveDate)' )
 
     cur.execute( '''create table ICM_SIR_ANALYSIS (
@@ -79,7 +80,7 @@ def cre_sqlite_s5p_db( dbname ):
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
        after_dn2v       boolean  DEFAULT 0,     
-       validityDate     datetime NOT NULL default '0000-00-00T00:00:00',
+       validityDate     datetime NOT NULL default '0000-00-00 00:00:00',
        svn_revision     integer  NOT NULL,
        scanline         integer  NOT NULL )''' )
     #cur.execute( 'create index dateTimeStartIndex2 on ICM_SIR_ANALYSIS(dateTimeStart)' )
@@ -89,7 +90,7 @@ def cre_sqlite_s5p_db( dbname ):
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
        after_dn2v       boolean  DEFAULT 0,     
-       dateTimeStart    datetime NOT NULL default '0000-00-00T00:00:00',
+       dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
        ic_id            integer  NOT NULL,
        ic_version       smallint NOT NULL,
        scanline         smallint NOT NULL,
@@ -101,7 +102,7 @@ def cre_sqlite_s5p_db( dbname ):
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
        after_dn2v       boolean  DEFAULT 0,     
-       dateTimeStart    datetime NOT NULL default '0000-00-00T00:00:00',
+       dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
        ic_id            integer  NOT NULL,
        ic_version       smallint NOT NULL,
        scanline         smallint NOT NULL,
@@ -113,7 +114,7 @@ def cre_sqlite_s5p_db( dbname ):
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
        after_dn2v       boolean  DEFAULT 0,     
-       dateTimeStart    datetime NOT NULL default '0000-00-00T00:00:00',
+       dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
        ic_id            integer  NOT NULL,
        ic_version       smallint NOT NULL,
        scanline         smallint NOT NULL,
@@ -155,9 +156,9 @@ def delta_time2date( time, delta_time, time_reference=None ):
     from datetime import datetime, timedelta
 
     if time_reference is None:
-        return (datetime(2012,1,1,0,0,0)
+        return (datetime(2010,1,1,0,0,0)
                 + timedelta(seconds=int(time))
-                + timedelta(milliseconds=int(delta_time))).isoformat()[0:19]
+                + timedelta(milliseconds=int(delta_time))).isoformat(' ')[0:19]
 
 #-------------------------
 def ic_dtype():
@@ -231,11 +232,11 @@ class ArchiveSirICM( object ):
 
         with h5py.File( flname, mode='r' ) as fid:
             self.meta['referenceOrbit'] = fid.attrs['reference_orbit'][0]
-            self.meta['time_coverage_start'] = fid.attrs['time_coverage_start']
-            self.meta['time_coverage_end'] = fid.attrs['time_coverage_end']
+            self.meta['time_coverage_start'] = fid.attrs['time_coverage_start'].decode('ascii').strip('Z').replace('T',' ')
+            self.meta['time_coverage_end'] = fid.attrs['time_coverage_end'].decode('ascii').strip('Z').replace('T',' ')
             grp = fid['/METADATA/ESA_METADATA/earth_explorer_header/fixed_header']
             dset = grp['source']
-            self.meta['creationDate'] = (dset.attrs['Creation_Date'].split(b'=')[1]).decode('ascii')
+            self.meta['creationDate'] = (dset.attrs['Creation_Date'].split(b'=')[1]).decode('ascii').replace('T',' ')
             self.meta['creator'] = (dset.attrs['Creator']).decode('ascii')
             self.meta['creatorVersion'] = (dset.attrs['Creator_Version']).decode('ascii')
 
@@ -503,7 +504,8 @@ class ArchiveSirICM( object ):
         str_sql_meta = 'insert into ICM_SIR_META values' \
                        '(NULL,\'%(fileName)s\',%(pathID)d'\
                        ',\'%(creator)s\',\'%(creatorVersion)s\''\
-                       ',\'%(acquisitionDate)s\',\'%(creationDate)s\',\'%(receiveDate)s\''\
+                       ',\'%(acquisitionDate)s\',\'%(creationDate)s\''\
+                       ',\'%(receiveDate)s\',\'%(time_coverage_start)s\''\
                        ',%(referenceOrbit)d,%(fileSize)d,0,0,0,0)'
 
         str_sql_analys = 'insert into ICM_SIR_ANALYSIS values' \
