@@ -17,6 +17,22 @@ from tabulate import tabulate
 
 DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
 
+def check_format_datetime( datetime_str ):
+    '''
+    Check if the datetime string is in ISO format without 'tzinfo'
+     - valid are 'yyyy-mm-ddThh:mm:ss' and 'yyyy-mm-dd hh:mm:ss'
+    '''
+    import re
+
+    # answer obtained from Stackoverflow (funkworm)
+    pattern=r'^(?:[1-9]\d{3}-(?:(?:0[1-9]|1[0-2])-(?:0[1-9]|1\d|2[0-8])'\
+        + r'|(?:0[13-9]|1[0-2])-(?:29|30)|(?:0[13578]|1[02])-31)'\
+        + r'|(?:[1-9]\d(?:0[48]|[2468][048]|[13579][26])'\
+        + r'|(?:[2468][048]|[13579][26])00)-02-29)[T\ ](?:[01]\d|2[0-3])'\
+        + r':[0-5]\d:[0-5]\d$'
+    
+    return re.match(pattern, datetime_str) is not None
+
 #--------------------------------------------------
 class S5pDB( object ):
     '''
@@ -40,6 +56,49 @@ class S5pDB( object ):
         else:
             return 'select {},{} from ICM_SIR_LOCATION'.format(case_str, cols)
         
+    def __get_relpath__( self, flname ):
+        ll = flname.split('_')
+        return( os.path.join(ll[8],ll[4][0:4],ll[4][4:6],ll[4][6:8]) )
+    
+    def __select_on_date__( self, datetime_str, prefix='' ):
+        '''
+        return SQL string to perform selection on date-time
+        
+        keyword 'prefix' is ignored when datetime_str is None
+        '''
+        if datetime_str is None:
+            return ''
+
+        if len(datetime_str.split(',')) == 1:
+            assert (len(datetime_str) >= 4 and len(datetime_str) <= 10), \
+                '*** Fatal, invalid date-string: {}'.format(datetime_str)
+            
+            ll = list(datetime_str[0+i:2+i] for i in range(0, len(datetime_str), 2))
+            if len(ll) == 2:
+                ll += ['00', '00', '00', '00']
+                dtime = '+1 month'
+            elif len(ll) == 3:
+                ll += ['00', '00', '00']
+                dtime = '+1 day'
+            elif len(ll) == 4:
+                ll += ['00', '00']
+                dtime = '+1 hour'
+            elif len(ll) == 5:
+                ll += ['00']
+                dtime = '+1 minute'
+            
+            d1 = '20{}-{}-{} {}:{}:{}'.format(*ll)
+            mystr = ' dateTimeStart between \'{}\' and datetime(\'{}\',\'{}\')'
+            return prefix + mystr.format( d1, d1, dtime )
+        else:
+            date_list = datetime_str.replace('T', ' ').split(',')
+            assert (check_format_datetime( date_list[0] )
+                    and check_format_datetime( date_list[1] )),\
+                '*** Fatal date-string {} not in ISO format'.format(datetime_str)
+
+            mystr = ' dateTimeStart between \'{}\' and \'{}\''
+            return prefix + mystr.format(*date_list)
+    
     def cursor( self, Row=False ):
         if Row:
             self.__conn.row_factory = sqlite3.Row
@@ -55,54 +114,33 @@ class S5pDB( object ):
 class S5pDB_date( S5pDB ):
     '''
     '''
-    def __init__( self, dbname, date ):
+    def __init__( self, dbname ):
         super().__init__( dbname )
-        self.date = date
 
-    def __query_meta__( self ):
+    def __query_meta__( self, date ):
         table = 'ICM_SIR_META'
         cols = 'pathID,name'
 
         q_str = 'select {} from {}'.format(cols,table)
-        if self.date is None:
-            return q_str + ' order by dateTimeStart'
-        
-        ll = list(self.date[0+i:2+i] for i in range(0, len(self.date), 2))
-        if len(ll) == 2:
-            ll += ['00', '00', '00', '00']
-            dtime = '+1 month'
-        elif len(ll) == 3:
-            ll += ['00', '00', '00']
-            dtime = '+1 day'
-        elif len(ll) == 4:
-            ll += ['00', '00']
-            dtime = '+1 hour'
-        elif len(ll) == 5:
-            ll += ['00']
-            dtime = '+1 minute'
-        else:
-            pass
-        d1 = '20{}-{}-{} {}:{}:{}'.format(*ll)
-        mystr = ' where dateTimeStart between \'{}\' and datetime(\'{}\',\'{}\')'
-        return q_str + mystr.format( d1, d1, dtime ) + ' order by dateTimeStart'
+        q_str += self.__select_on_date__( date, prefix=' where' )
+        return q_str + ' order by dateTimeStart'
     
-    def location( self ):
+    def location( self, date ):
         '''
         '''
         row_list = ()
 
         q1_str = self.__query_location__('name')
-        q2_str = self.__query_meta__()
+        q2_str = self.__query_meta__( date )
+        print(q2_str)
         q_str = q1_str + ' as s1 join (' + q2_str + ') as s2' 
         q_str += ' on s1.pathID=s2.pathID'
         
         cur = self.cursor()
         cur.execute( q_str )
-        rows = cur.fetchall()
-        if len(rows) > 0:
-            for e in rows:
-                row_list += (list(e),)
-           
+        for row in cur:
+            row_list += ([os.path.join(row[0], self.__get_relpath__(row[1])),
+                          row[1]],)
         cur.close()
         return row_list
     
@@ -132,7 +170,7 @@ class S5pDB_name( S5pDB ):
             cur.execute( q2_str.format(row[0]) )
             root = cur.fetchone()
             cur.close()
-            return (root[0], row[1])
+            return (os.path.join(root[0], self.__get_relpath__(row[1])), row[1])
     
     def meta( self, product ):
         '''
@@ -194,39 +232,36 @@ class S5pDB_name( S5pDB ):
 class S5pDB_orbit( S5pDB ):
     '''
     '''
-    def __init__( self, dbname, orbit ):
+    def __init__( self, dbname ):
         super().__init__( dbname )
-        self.orbit = orbit
 
-    def __query_meta__( self ):
+    def __query_meta__( self, orbit ):
         table = 'ICM_SIR_META'
         cols = 'pathID,name'
 
         q_str = 'select {} from {}'.format(cols,table)
-        if len(self.orbit) == 1:
-            orbit_str = ' where referenceOrbit = {}'.format(self.orbit[0])
+        if len(orbit) == 1:
+            orbit_str = ' where referenceOrbit = {}'.format(orbit[0])
         else:
-            orbit_str = ' where referenceOrbit between {} and {}'.format(*self.orbit)
+            orbit_str = ' where referenceOrbit between {} and {}'.format(*orbit)
 
         return q_str + orbit_str + ' order by referenceOrbit'
     
-    def location( self ):
+    def location( self, orbit ):
         '''
         '''
         row_list = ()
 
         q1_str = self.__query_location__('name')
-        q2_str = self.__query_meta__()
+        q2_str = self.__query_meta__( orbit )
         q_str = q1_str + ' as s1 join (' + q2_str + ') as s2' 
         q_str += ' on s1.pathID=s2.pathID'
 
         cur = self.cursor()
         cur.execute( q_str )
-        rows = cur.fetchall()
-        if len(rows) > 0:
-            for e in rows:
-                row_list += (list(e),)
-           
+        for row in cur:
+            row_list += ([os.path.join(row[0], self.__get_relpath__(row[1])),
+                          row[1]],)
         cur.close()
         return row_list
     
@@ -234,44 +269,41 @@ class S5pDB_orbit( S5pDB ):
 class S5pDB_rtime( S5pDB ):
     '''
     '''
-    def __init__( self, dbname, rtime ):
+    def __init__( self, dbname ):
         super().__init__( dbname )
-        self.rtime = rtime
 
-    def __query_meta__( self ):
+    def __query_meta__( self, rtime ):
         table = 'ICM_SIR_META'
         cols = 'pathID,name'
 
         q_str = 'select {} from {}'.format(cols,table)
-        if self.rtime is None:
+        if rtime is None:
             return q_str + ' order by receiveDate'
         
         mystr = ' where receiveDate between datetime(\'now\',\'-{} {}\')' \
             + ' and datetime(\'now\')'
-        if self.rtime[-1] == 'h':
-            ll = (int(self.rtime[0:-1]), 'hour')
+        if rtime[-1] == 'h':
+            ll = (int(rtime[0:-1]), 'hour')
         else:
-            ll = (int(self.rtime[0:-1]), 'day')
+            ll = (int(rtime[0:-1]), 'day')
 
         return q_str + mystr.format(*ll) + ' order by receiveDate'
     
-    def location( self ):
+    def location( self, rtime ):
         '''
         '''
         row_list = ()
 
         q1_str = self.__query_location__('name')
-        q2_str = self.__query_meta__()
+        q2_str = self.__query_meta__( rtime )
         q_str = q1_str + ' as s1 join (' + q2_str + ') as s2' 
         q_str += ' on s1.pathID=s2.pathID'
         
         cur = self.cursor()
         cur.execute( q_str )
-        rows = cur.fetchall()
-        if len(rows) > 0:
-            for e in rows:
-                row_list += (list(e),)
-           
+        for row in cur:
+            row_list += ([os.path.join(row[0], self.__get_relpath__(row[1])),
+                          row[1]],)
         cur.close()
         return row_list
     
@@ -279,49 +311,33 @@ class S5pDB_rtime( S5pDB ):
 class S5pDB_type( S5pDB ):
     '''
     '''
-    def __init__( self, dbname, dataset ):
+    def __init__( self, dbname ):
         super().__init__( dbname )
-        self.tables = ()
-        self.dataset = dataset
 
-    def __query_ds__( self, table, after_dn2v, date ):
+    def __query_ds__( self, table, dataset, after_dn2v, date ):
         cols = 'metaID,name,after_dn2v'
         
         q_str = 'select {} from {}'.format(cols, table)
-        q_str +=  ' where name like \'{}\''.format(self.dataset)
+        q_str +=  ' where name like \'{}\''.format(dataset)
 
-        if after_dn2v:
-            q_str += ' and after_dn2v != 0'
-        if date is None:
+        # dynamic CKD are note selected on 'after_dn2v' or 'date'
+        if table == 'ICM_SIR_ANALYSIS':
             return q_str
         
-        ll = list(date[0+i:2+i] for i in range(0, len(date), 2))
-        if len(ll) == 2:
-            ll += ['00', '00', '00', '00']
-            dtime = '+1 month'
-        elif len(ll) == 3:
-            ll += ['00', '00', '00']
-            dtime = '+1 day'
-        elif len(ll) == 4:
-            ll += ['00', '00']
-            dtime = '+1 hour'
-        elif len(ll) == 5:
-            ll += ['00']
-            dtime = '+1 minute'
-        else:
-            pass
-        d1 = '20{}-{}-{} {}:{}:{}'.format(*ll)
-        mystr = ' and dateTimeStart between \'{}\' and datetime(\'{}\',\'{}\')'
+        if after_dn2v:
+            q_str += ' and after_dn2v != 0'
 
-        return q_str + mystr.format( d1, d1, dtime )
+        q_str += self.__select_on_date__( date, prefix=' and' )
+
+        return q_str
 
     def __query_meta__( self ):
         table = 'ICM_SIR_META'
         cols = 'pathID,s2.name as prod_name,s3.name as ds_name,after_dn2v'
 
-        return 'select {} from {} as s2'.format(cols,table)
+        return 'select {} from {} as s2'.format(cols, table)
     
-    def location( self, orbit, after_dn2v, date ):
+    def location( self, dataset, orbit, after_dn2v, date ):
         '''
         '''
         row_list = ()
@@ -339,21 +355,16 @@ class S5pDB_type( S5pDB ):
 
         cur = self.cursor()
         for table in table_list:
-            q3_str = self.__query_ds__( table, after_dn2v, date )
+            q3_str = self.__query_ds__( table, dataset, after_dn2v, date )
             q_str = q1_str   + ' as s1' \
                     + ' join (' + q2_str + ' join (' + q3_str + ')'
             q_str += ' as s3 on s2.metaID=s3.metaID' + orbit_str + ')'
             q_str += ' as s4 on s1.pathID=s4.pathID'
 
             cur.execute( q_str )
-            rows = cur.fetchall()
-            if len(rows) == 0:
-                continue
-            for e in rows:
-                ee = list(e)
-                ee.append(table)
-                row_list += (ee,)
-           
+            for row in cur:
+                row_list += ([os.path.join(row[0], self.__get_relpath__(row[1])),
+                              row[1], table, row[2], row[3]],)           
         cur.close()
         return row_list
     
@@ -441,10 +452,10 @@ def get_product_by_date( args=None, dbname=DB_NAME, date=None,
     assert os.path.isfile( dbname ),\
         '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
-    db = S5pDB_date( dbname, date )
+    db = S5pDB_date( dbname )
 
     if mode == 'location':
-        result = db.location()
+        result = db.location( date )
         if toScreen:
             for entry in result:
                 print( os.path.join(entry[0], entry[1]) )
@@ -561,10 +572,10 @@ def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
     assert os.path.isfile( dbname ),\
         '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
-    db = S5pDB_orbit( dbname, orbit )
+    db = S5pDB_orbit( dbname )
 
     if mode == 'location':
-        result = db.location()
+        result = db.location( orbit )
         if toScreen:
             for entry in result:
                 print( os.path.join(entry[0], entry[1]) )
@@ -604,10 +615,10 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
     assert os.path.isfile( dbname ),\
         '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
-    db = S5pDB_rtime( dbname, rtime )
+    db = S5pDB_rtime( dbname )
 
     if mode == 'location':
-        result = db.location()
+        result = db.location( rtime )
         if toScreen:
             for entry in result:
                 print( os.path.join(entry[0], entry[1]) )
@@ -667,20 +678,20 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
     assert orbit is None or isinstance(orbit, (tuple, list)), \
         '*** Fatal, parameter orbit is not a list or tuple'
 
-    db = S5pDB_type( dbname, dataset )
+    db = S5pDB_type( dbname )
 
     if mode == 'location':
-        result = db.location( orbit, after_dn2v, date )
+        result = db.location( dataset, orbit, after_dn2v, date )
         if toScreen:
             for entry in result:
-                h5_grp = 'BAND[78]_' + entry[4].split('_')[2]
-                if entry[3] == 1:
-                    h5_sgrp = entry[2] + '_AFTER_DN2V'
+                h5_grp = 'BAND[78]_' + entry[2].split('_')[2]
+                if entry[4] == 1:
+                    h5_sgrp = entry[3] + '_AFTER_DN2V'
                 else:
-                    h5_sgrp = entry[2]
+                    h5_sgrp = entry[3]
 
                 print( os.path.join(entry[0], entry[1],
-                                        h5_grp, h5_sgrp) )
+                                    h5_grp, h5_sgrp) )
         return result
     
     return ()
@@ -720,8 +731,10 @@ def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
         if toScreen:
             newdict={}
             for k,v in [(key,d[key]) for d in result for key in d]:
-                if k not in newdict: newdict[k]=[v]
-                else: newdict[k].append(v)
+                if k not in newdict:
+                    newdict[k]=[v]
+                else:
+                    newdict[k].append(v)
             print( '#', ' '.join(newdict.keys()) )
             print( tabulate(newdict, tablefmt="plain") )
             #print( tabulate(newdict, headers="keys") )
@@ -747,12 +760,16 @@ def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
             print( '{:25}\t{}'.format('reset_time (s)', treset) )
 
     return result
-   
-#-------------------------SECTION MAIN--------------------------------------
-if __name__ == '__main__':
 
+#--------------------------------------------------
+def fast_test_db():
+    '''
+    Quick check to test module tropomi.db.py
+    '''
     print( '''*** Info: test function 'get_product_by_date' ''' )
     result = get_product_by_date( date='120919', toScreen=True )
+    result = get_product_by_date( date='2012-09-19 05:17:19,2012-12-19 05:17:20',
+                                  toScreen=True )
 
     print( '''*** Info: test function 'get_product_by_name' ''' )
     result = get_product_by_name( product='S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01932_01_001000_20151002T140000.h5',
@@ -770,8 +787,14 @@ if __name__ == '__main__':
                                   toScreen=True )
     result = get_product_by_type( dataset='%_1611', orbit=[1926,1930],
                                   toScreen=True )
+    result = get_product_by_type( dataset='%_1611',
+                                  date='2012-09-19 05:17:19,2012-12-19 05:17:20',
+                                  toScreen=True )
 
     print( '''*** Info: test function 'get_instrument_settings' ''' )
     result = get_instrument_settings( ic_id=1703, check=True, toScreen=True )
 
-    
+#-------------------------SECTION MAIN--------------------------------------
+if __name__ == '__main__':
+
+    fast_test_db()

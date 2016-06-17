@@ -132,11 +132,8 @@ def fill_tbl_location( dbname ):
     '''
     list_paths = [
         { "host" : 'electra', 
-          "path" : '/array/slot6A/TROPOMI', 
-          "nfs" : '/TROPOMI/ical_01' },
-        { "host" : 'poseidon', 
-          "path" : '/array/slot2C/TROPOMI', 
-          "nfs" : '/TROPOMI/ical_02' },
+          "path" : '/array/slot6B/Tropomi/ical/S5P_ICM_CA_SIR', 
+          "nfs" : '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR' },
     ]
     str_sql = 'insert into ICM_SIR_LOCATION values' \
         '(NULL, \'%(host)s\',\'%(path)s\',\'%(nfs)s\')'
