@@ -79,6 +79,7 @@ def cre_sqlite_s5p_db( dbname ):
        dckdID           integer  PRIMARY KEY AUTOINCREMENT,
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
+       units            text     NOT NULL,
        after_dn2v       boolean  DEFAULT 0,     
        validityDate     datetime NOT NULL default '0000-00-00 00:00:00',
        svn_revision     integer  NOT NULL,
@@ -89,11 +90,13 @@ def cre_sqlite_s5p_db( dbname ):
        calibID          integer  PRIMARY KEY AUTOINCREMENT,
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
+       units            text     NOT NULL,
        after_dn2v       boolean  DEFAULT 0,     
        dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
+       scanline         smallint NOT NULL,
        ic_id            integer  NOT NULL,
        ic_version       smallint NOT NULL,
-       scanline         smallint NOT NULL,
+       processing_class smallint NOT NULL,
        FOREIGN KEY (ic_id, ic_version) REFERENCES ICM_SIR_TBL_ICID (ic_id, ic_version) ON UPDATE CASCADE )''' )
     cur.execute( 'create index dateTimeStartIndex3 on ICM_SIR_CALIBRATION(dateTimeStart)' )
 
@@ -101,11 +104,13 @@ def cre_sqlite_s5p_db( dbname ):
        irradID          integer  PRIMARY KEY AUTOINCREMENT,
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
+       units            text     NOT NULL,
        after_dn2v       boolean  DEFAULT 0,     
        dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
+       scanline         smallint NOT NULL,
        ic_id            integer  NOT NULL,
        ic_version       smallint NOT NULL,
-       scanline         smallint NOT NULL,
+       processing_class smallint NOT NULL,
        FOREIGN KEY (ic_id, ic_version) REFERENCES ICM_SIR_TBL_ICID (ic_id, ic_version) ON UPDATE CASCADE )''' )
     cur.execute( 'create index dateTimeStartIndex4 on ICM_SIR_IRRADIANCE(dateTimeStart)' )
 
@@ -113,11 +118,13 @@ def cre_sqlite_s5p_db( dbname ):
        radID            integer  PRIMARY KEY AUTOINCREMENT,
        metaID           integer  REFERENCES ICM_SIR_META(metaID),
        name             text     NOT NULL,
+       units            text     NOT NULL,
        after_dn2v       boolean  DEFAULT 0,     
        dateTimeStart    datetime NOT NULL default '0000-00-00 00:00:00',
+       scanline         smallint NOT NULL,
        ic_id            integer  NOT NULL,
        ic_version       smallint NOT NULL,
-       scanline         smallint NOT NULL,
+       processing_class smallint NOT NULL,
        FOREIGN KEY (ic_id, ic_version) REFERENCES ICM_SIR_TBL_ICID (ic_id, ic_version) ON UPDATE CASCADE )''' )
     cur.execute( 'create index dateTimeStartIndex5 on ICM_SIR_RADIANCE(dateTimeStart)' )
 
@@ -146,6 +153,7 @@ def fill_tbl_location( dbname ):
     con.commit()
     con.close()
 
+#-------------------------
 def delta_time2date( time, delta_time, time_reference=None ):
     '''
     convert S5p time/delta_time to SQL date-time string
@@ -180,17 +188,20 @@ def ic_dtype():
                       ('nr_coadditions', np.int16),
                       ('clipping', np.uint8)] )
 
+#-------------------------
 def grp_dtype():
     '''
     Defines info on each calibration state which needs to be stored in the database
     '''
     return np.dtype( [('metaID', np.int32),
                       ('name', np.str_, 64),
+                      ('units', np.str_, 64),
                       ('after_dn2v', np.uint16),
                       ('dateTimeStart', np.str_, 20),
                       ('instrumentConfig', ic_dtype()),
                       ('ic_id', np.int32),
                       ('ic_version', np.int16),
+                      ('class', np.int16),
                       ('svn_revision', np.int32),
                       ('scanline', np.int16)] )
 
@@ -199,6 +210,7 @@ class ArchiveSirICM( object ):
     '''
     Define methods to create an inventory of the summary data present in an ICM_CA_SIR product 
     '''
+    #--------------------------------------------------
     def __init__( self, db_name='./sron_s5p_icm.db' ):
         '''
         '''
@@ -213,6 +225,7 @@ class ArchiveSirICM( object ):
         self.irrad  = np.array([])
         self.rad    = np.array([])
 
+    #--------------------------------------------------
     def rd_meta( self, flname, verbose=False ):
         '''
         Collect information for table ICM_SIR_META.
@@ -240,6 +253,7 @@ class ArchiveSirICM( object ):
         if verbose:
             print( self.meta )
 
+    #--------------------------------------------------
     def rd_analys( self, flname, verbose=False ):
         '''
         Collect information for table ICM_SIR_ANALYSIS.
@@ -285,6 +299,7 @@ class ArchiveSirICM( object ):
                     buff[ii]['name'] = key
                     dset = grp7[key][analysis_dict[key]]
                     buff[ii]['dateTimeStart'] = self.meta['time_coverage_end']
+                    buff[ii]['units'] = dset.attrs['units']
                     buff[ii]['svn_revision'] = dset.attrs['svn_revision']
                     buff[ii]['scanline'] = 1
                     ii += 1
@@ -295,6 +310,7 @@ class ArchiveSirICM( object ):
         if verbose:
             print( self.analys )
 
+    #--------------------------------------------------
     def rd_calib( self, flname, verbose=True ):
         '''
         Collect information for table ICM_SIR_CALIBRATION.
@@ -341,8 +357,10 @@ class ArchiveSirICM( object ):
                 dset = sgrp['instrument_configuration']
                 self.calib[ii]['ic_id'] = dset[0,0]['ic_id']
                 self.calib[ii]['ic_version'] = dset[0,0]['ic_version']
+                self.calib[ii]['class'] = sgrp['processing_class'][0,0]
                 
                 sgrp = grp7[key]['OBSERVATIONS']
+                self.calib[ii]['units'] = sgrp['signal_avg'].attrs['units'].decode('ascii')
                 self.calib[ii]['dateTimeStart'] = delta_time2date( sgrp['time'][0],
                                                                    sgrp['delta_time'][0,0] )
                 ii += 1
@@ -350,6 +368,7 @@ class ArchiveSirICM( object ):
         if verbose:
             print( self.calib )
 
+    #--------------------------------------------------
     def rd_irrad( self, flname, verbose=True ):
         '''
         Collect information for table ICM_SIR_IRRADIANCE.
@@ -390,8 +409,10 @@ class ArchiveSirICM( object ):
                 dset = sgrp['instrument_configuration']
                 self.irrad[ii]['ic_id'] = dset[0,0]['ic_id']
                 self.irrad[ii]['ic_version'] = dset[0,0]['ic_version']
+                self.irrad[ii]['class'] = sgrp['processing_class'][0,0]
                 
                 sgrp = grp7[key]['OBSERVATIONS']
+                self.irrad[ii]['units'] = sgrp['irradiance_avg'].attrs['units'].decode('ascii')
                 self.irrad[ii]['dateTimeStart'] = delta_time2date( sgrp['time'][0],
                                                                    sgrp['delta_time'][0,0] )
                 ii += 1
@@ -399,6 +420,7 @@ class ArchiveSirICM( object ):
         if verbose:
             print( self.irrad )
 
+    #--------------------------------------------------
     def rd_rad( self, flname, verbose=True ):
         '''
         Collect information for table ICM_SIR_RADIANCE.
@@ -439,8 +461,10 @@ class ArchiveSirICM( object ):
                 dset = sgrp['instrument_configuration']
                 self.rad[ii]['ic_id'] = dset[0,0]['ic_id']
                 self.rad[ii]['ic_version'] = dset[0,0]['ic_version']
+                self.rad[ii]['class'] = sgrp['processing_class'][0,0]
                 
                 sgrp = grp7[key]['OBSERVATIONS']
+                self.rad[ii]['units'] = sgrp['radiance_avg'].attrs['units'].decode('ascii')
                 self.rad[ii]['dateTimeStart'] = delta_time2date( sgrp['time'][0],
                                                                  sgrp['delta_time'][0,0] )
                 ii += 1
@@ -448,6 +472,7 @@ class ArchiveSirICM( object ):
         if verbose:
             print( self.rad )
 
+    #--------------------------------------------------
     def check_entry( self, flname, verbose=False ):
         '''
         check if product is already stored in database
@@ -468,6 +493,7 @@ class ArchiveSirICM( object ):
         else:
             return True
 
+    #--------------------------------------------------
     def remove_entry( self, flname, verbose=False ):
         '''
         remove entry from database
@@ -489,6 +515,7 @@ class ArchiveSirICM( object ):
         con.commit()
         con.close()
 
+    #--------------------------------------------------
     def add_entry( self, flname, verbose=True ):
         '''
         add new product to database
@@ -506,23 +533,23 @@ class ArchiveSirICM( object ):
                        ',%(referenceOrbit)d,%(fileSize)d,0,0,0,0)'
 
         str_sql_analys = 'insert into ICM_SIR_ANALYSIS values' \
-                       '(NULL,%(metaID)d,\'%(name)s\',0'\
+                       '(NULL,%(metaID)d,\'%(name)s\',\'%(units)s\',0'\
                        ',\'%(dateTimeStart)s\',%(svn_revision)d,%(scanline)d)'
 
         str_sql_calib = 'insert into ICM_SIR_CALIBRATION values' \
-                       '(NULL,%(metaID)d,\'%(name)s\',%(after_dn2v)d' \
-                       ',\'%(dateTimeStart)s\''\
-                       ',%(ic_id)d,%(ic_version)d,%(scanline)d)'
+                       '(NULL,%(metaID)d,\'%(name)s\',\'%(units)s\',%(after_dn2v)d' \
+                       ',\'%(dateTimeStart)s\',%(scanline)d'\
+                       ',%(ic_id)d,%(ic_version)d,%(class)d)'
 
         str_sql_irrad = 'insert into ICM_SIR_IRRADIANCE values' \
-                       '(NULL,%(metaID)d,\'%(name)s\',%(after_dn2v)d' \
-                       ',\'%(dateTimeStart)s\''\
-                       ',%(ic_id)d,%(ic_version)d,%(scanline)d)'
+                       '(NULL,%(metaID)d,\'%(name)s\',\'%(units)s\',%(after_dn2v)d' \
+                       ',\'%(dateTimeStart)s\',%(scanline)d'\
+                       ',%(ic_id)d,%(ic_version)d,%(class)d)'
 
         str_sql_rad  = 'insert into ICM_SIR_RADIANCE values' \
-                       '(NULL,%(metaID)d,\'%(name)s\',%(after_dn2v)d' \
-                       ',\'%(dateTimeStart)s\''\
-                       ',%(ic_id)d,%(ic_version)d,%(scanline)d)'
+                       '(NULL,%(metaID)d,\'%(name)s\',\'%(units)s\',%(after_dn2v)d' \
+                       ',\'%(dateTimeStart)s\',%(scanline)d'\
+                       ',%(ic_id)d,%(ic_version)d,%(class)d)'
 
         str_sql_icid = 'insert into ICM_SIR_TBL_ICID values' \
                        '(%(ic_id)d,%(ic_version)d,%(ic_set)d,%(ic_idx)d'\

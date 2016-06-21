@@ -36,19 +36,21 @@ def check_format_datetime( datetime_str ):
 #--------------------------------------------------
 class S5pDB( object ):
     '''
+    Defines superclass for ICM_SIR database access
     '''
-    def __init__( self, dbname ):
-        '''
-        '''
+    def __init__( self, dbname, verbose=False ):
         assert os.path.isfile( dbname ),\
             '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
         self.__conn = sqlite3.connect( dbname )
+        self.__verbose = verbose
         cur = self.__conn.cursor()
         cur.execute( 'PRAGMA foreign_keys = ON' )
         cur.close()
 
     def __query_location__( self, cols=None ):
+        '''
+        '''
         case_str = 'case when hostName == \'{}\' then localPath'\
                    ' else nfsPath end'.format(socket.gethostname())
         if cols is None:
@@ -57,6 +59,8 @@ class S5pDB( object ):
             return 'select {},{} from ICM_SIR_LOCATION'.format(case_str, cols)
         
     def __get_relpath__( self, flname ):
+        '''
+        '''
         ll = flname.split('_')
         return( os.path.join(ll[8],ll[4][0:4],ll[4][4:6],ll[4][6:8]) )
     
@@ -94,12 +98,14 @@ class S5pDB( object ):
             date_list = datetime_str.replace('T', ' ').split(',')
             assert (check_format_datetime( date_list[0] )
                     and check_format_datetime( date_list[1] )),\
-                '*** Fatal date-string {} not in ISO format'.format(datetime_str)
+                '*** Fatal date-time {} not in ISO format'.format(datetime_str)
 
             mystr = ' dateTimeStart between \'{}\' and \'{}\''
             return prefix + mystr.format(*date_list)
     
     def cursor( self, Row=False ):
+        '''
+        '''
         if Row:
             self.__conn.row_factory = sqlite3.Row
         return self.__conn.cursor()
@@ -108,16 +114,20 @@ class S5pDB( object ):
         '''
         '''
         self.__conn.close()
-        print( '*** Info: connection to database closed' )
+        if self.__verbose:
+            print( '*** Info: connection to database closed' )
 
 #--------------------------------------------------
 class S5pDB_date( S5pDB ):
     '''
     '''
-    def __init__( self, dbname ):
+    def __init__( self, dbname, verbose=False ):
         super().__init__( dbname )
+        self.__verbose = verbose
 
     def __query_meta__( self, date ):
+        '''
+        '''
         table = 'ICM_SIR_META'
         cols = 'pathID,name'
 
@@ -132,7 +142,8 @@ class S5pDB_date( S5pDB ):
 
         q1_str = self.__query_location__('name')
         q2_str = self.__query_meta__( date )
-        print(q2_str)
+        if self.__verbose:
+            print(q2_str)
         q_str = q1_str + ' as s1 join (' + q2_str + ') as s2' 
         q_str += ' on s1.pathID=s2.pathID'
         
@@ -149,8 +160,9 @@ class S5pDB_name( S5pDB ):
     '''
     class definition for queries given the ICM_CA_SIR product name
     '''
-    def __init__( self, dbname ):
+    def __init__( self, dbname, verbose=False ):
         super().__init__( dbname )
+        self.__verbose = verbose
         
     def location( self, product ):
         '''
@@ -232,8 +244,9 @@ class S5pDB_name( S5pDB ):
 class S5pDB_orbit( S5pDB ):
     '''
     '''
-    def __init__( self, dbname ):
+    def __init__( self, dbname, verbose=False ):
         super().__init__( dbname )
+        self.__verbose = verbose
 
     def __query_meta__( self, orbit ):
         table = 'ICM_SIR_META'
@@ -269,8 +282,9 @@ class S5pDB_orbit( S5pDB ):
 class S5pDB_rtime( S5pDB ):
     '''
     '''
-    def __init__( self, dbname ):
+    def __init__( self, dbname, verbose=False ):
         super().__init__( dbname )
+        self.__verbose = verbose
 
     def __query_meta__( self, rtime ):
         table = 'ICM_SIR_META'
@@ -311,8 +325,9 @@ class S5pDB_rtime( S5pDB ):
 class S5pDB_type( S5pDB ):
     '''
     '''
-    def __init__( self, dbname ):
+    def __init__( self, dbname, verbose=False ):
         super().__init__( dbname )
+        self.__verbose = verbose
 
     def __query_ds__( self, table, dataset, after_dn2v, date ):
         cols = 'metaID,name,after_dn2v'
@@ -373,8 +388,9 @@ class S5pDB_icid( S5pDB ):
     '''
     class definition for queries on instrument settings
     '''
-    def __init__( self, dbname ):
+    def __init__( self, dbname, verbose=False ):
         super().__init__( dbname )
+        self.__verbose = verbose
 
     def all( self ):
         '''
@@ -435,8 +451,8 @@ def get_product_by_date( args=None, dbname=DB_NAME, date=None,
           select one month: date=YYMM
     - "mode"     : defines the returned information:
         'location' :  query the file location
-        'meta'     :  query the file meta-data
-        'content'  :  query the file content
+        'meta'     :  query the file meta-data [not implemented, TBD]
+        'content'  :  query the file content [not implemented, TBD]
                    [default: 'location']
     - "toScreen" : controls if the query result is printed on STDOUT 
                    [default: False]
@@ -555,8 +571,8 @@ def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
                    [value required]
     - "mode"     : defines the returned information:
         'location' :  query the file location
-        'meta'     :  query the file meta-data
-        'content'  :  query the file content
+        'meta'     :  query the file meta-data [not implemented, TBD]
+        'content'  :  query the file content [not implemented, TBD]
                    [default: 'location']
     - "toScreen" : controls if the query result is printed on STDOUT 
                    [default: False]
@@ -598,8 +614,8 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
                    [value required]
     - "mode"     : defines the returned information:
         'location' :  query the file location
-        'meta'     :  query the file meta-data
-        'content'  :  query the file content
+        'meta'     :  query the file meta-data [not implemented, TBD]
+        'content'  :  query the file content [not implemented, TBD]
                    [default: 'location']
     - "toScreen" : controls if the query result is printed on STDOUT 
                    [default: False]
