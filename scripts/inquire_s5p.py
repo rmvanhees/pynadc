@@ -89,6 +89,18 @@ if __name__ == '__main__':
 
     #-------------------------
     # define subparser for queries on measurement type or dynamic CKD
+    parser_icid = subparsers.add_parser( 'icid',
+                                         help='select ICM products on ICID' )
+    parser_icid.add_argument( 'icid', type=str, default=None,
+                              help='ICIDs, comma separated' )
+    parser_icid.add_argument( '--date', type=str, default=None,
+                              help='select on dateTimeStart of measurements' )
+    parser_icid.add_argument( '--orbit', type=__orbit_range__,
+                              help='select measurement on orbit (range)' )
+    parser_icid.set_defaults( func=db.get_product_by_icid )
+    
+    #-------------------------
+    # define subparser for queries on measurement type or dynamic CKD
     parser_type = subparsers.add_parser( 'type',
                             help='select ICM products on HDF5 dataset name' )
     parser_type.add_argument( 'dataset', type=str, default=None,
@@ -101,15 +113,16 @@ if __name__ == '__main__':
     parser_type.add_argument( '--orbit', type=__orbit_range__,
                               help='select measurement on orbit (range)' )
     parser_type.set_defaults( func=db.get_product_by_type )
+    
     #-------------------------
     # define subparser for queries ICID table
-    parser_icid = subparsers.add_parser( 'icid',
-                                         help='show instrument settings' )
-    parser_icid.add_argument( 'icid', nargs='?', type=int, default=None,
+    parser_tbl_icid = subparsers.add_parser( 'tbl_icid',
+                                             help='show instrument settings' )
+    parser_tbl_icid.add_argument( 'icid', nargs='?', type=int, default=None,
                               help='show info of given ic_id' )
-    parser_icid.add_argument( '--check', action='store_true', default=False,
+    parser_tbl_icid.add_argument( '--check', action='store_true', default=False,
                               help='provide info to check ic_id parameters' )
-    parser_icid.set_defaults( func=db.get_instrument_settings )
+    parser_tbl_icid.set_defaults( func=db.get_instrument_settings )
 
     args = parser.parse_args()
     if args.debug:

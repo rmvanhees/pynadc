@@ -322,6 +322,71 @@ class S5pDB_rtime( S5pDB ):
         return row_list
     
 #--------------------------------------------------
+class S5pDB_icid( S5pDB ):
+    '''
+    '''
+    def __init__( self, dbname, verbose=False ):
+        super().__init__( dbname )
+        self.__verbose = verbose
+
+    def __query_icid__( self, table, icid, date ):
+        cols = 'metaID, group_concat(name) as names'
+        
+        q_str = 'select {} from {}'.format(cols, table)
+        q_str +=  ' where ic_id in (' + str(icid)[1:-1] + ')'
+        q_str += ' and after_dn2v = 0'
+        
+        q_str += self.__select_on_date__( date, prefix=' and' )
+        q_str += ' GROUP BY metaID HAVING count(*)={}'.format(len(icid)) 
+
+        return q_str
+
+    def __query_meta__( self ):
+        table = 'ICM_SIR_META'
+        cols = 'pathID,s2.name as prod_name,s3.names as ds_name'
+
+        return 'select {} from {} as s2'.format(cols, table)
+    
+    def location( self, icid, orbit, date ):
+        '''
+        '''
+        row_list = ()
+        
+        q1_str = self.__query_location__('prod_name,ds_name') 
+        q2_str = self.__query_meta__()
+        if orbit is None:
+            orbit_str = ''
+        elif len(orbit) == 1:
+            orbit_str = ' where referenceOrbit={}'.format(orbit[0])
+        else:
+            orbit_str = ' where referenceOrbit between {} and {}'.format(*orbit)
+
+        table_list = ('ICM_SIR_ANALYSIS', 'ICM_SIR_CALIBRATION',
+                      'ICM_SIR_IRRADIANCE', 'ICM_SIR_RADIANCE')
+
+        cur = self.cursor()
+        for table in table_list:
+            if table == 'ICM_SIR_ANALYSIS':
+                continue
+            
+            q3_str = self.__query_icid__( table, icid, date )
+            q_str = q1_str   + ' as s1' \
+                    + ' join (' + q2_str + ' join (' + q3_str + ')'
+            q_str += ' as s3 on s2.metaID=s3.metaID' + orbit_str + ')'
+            q_str += ' as s4 on s1.pathID=s4.pathID'
+
+            if self.__verbose:
+                print( q_str )
+            cur.execute( q_str )
+            for row in cur:
+                for col in row[2].split(','):
+                    row_list += ([os.path.join(row[0],
+                                               self.__get_relpath__(row[1])),
+                                  row[1], table, col],)           
+        cur.close()
+        return row_list
+    
+#--------------------------------------------------
 class S5pDB_type( S5pDB ):
     '''
     '''
@@ -384,7 +449,7 @@ class S5pDB_type( S5pDB ):
         return row_list
     
 #--------------------------------------------------
-class S5pDB_icid( S5pDB ):
+class S5pDB_tbl_icid( S5pDB ):
     '''
     class definition for queries on instrument settings
     '''
@@ -643,11 +708,73 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
     return ()
 
 #---------------------------------------------------------------------------
+def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
+                         orbit=None, date=None, 
+                         mode='location', toScreen=False ):
+    '''
+    Query NADC Tropomi SQLite database on products which contain measurements 
+    of all listed ICIDs
+
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname, icid, mode
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                  [default: DB_NAME]
+    - "icid"     : list of ICIDs
+    - "orbit"    : select on reference orbit number or range
+                   [default: empty list]
+    - "date"     :  select on dateTimeStart of measurements in dataset
+          select a period: date=[dateTime1, dateTime2] as "YYYY-MM-DDTHH:MM:SS"
+          select one minute: date=YYMMDDhhmm
+          select one hour: date=YYMMDDhh
+          select one day: date=YYMMDD
+          select one month: date=YYMM
+                   [default: None]
+    - "mode"     : defines the returned information:
+        'location' :  query the file location
+                   [default: 'location']
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
+
+    Output
+    ------
+    return full-path to selected products [default] 
+
+    '''
+    if args:
+        dbname     = args.dbname
+        icid       = [int(s) for s in args.icid.split(',')]
+        orbit      = args.orbit
+        date       = args.date
+        mode       = args.mode
+
+    assert isinstance(icid, (tuple, list)), \
+        '*** Fatal, parameter icid is not a list or tuple'
+
+    assert orbit is None or isinstance(orbit, (tuple, list)), \
+        '*** Fatal, parameter orbit is not a list or tuple'
+
+    db = S5pDB_icid( dbname )
+
+    if mode == 'location':
+        result = db.location( icid, orbit, date )
+        if toScreen:
+            for entry in result:
+                h5_grp = 'BAND%_' + entry[2].split('_')[2]
+                h5_sgrp = entry[3]
+
+                print( os.path.join(entry[0], entry[1],
+                                    h5_grp, h5_sgrp) )
+        return result
+    
+    return ()
+
+#---------------------------------------------------------------------------
 def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
                          after_dn2v=False, orbit=None, date=None,
                          mode='location', toScreen=False ):
     '''
-    Query NADC Sciamachy SQLite database on product type with data selections
+    Query NADC Tropomi SQLite database on product type with data selections
 
     Parameters:
     -----------
@@ -700,7 +827,7 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
         result = db.location( dataset, orbit, after_dn2v, date )
         if toScreen:
             for entry in result:
-                h5_grp = 'BAND[78]_' + entry[2].split('_')[2]
+                h5_grp = 'BAND%_' + entry[2].split('_')[2]
                 if entry[4] == 1:
                     h5_sgrp = entry[3] + '_AFTER_DN2V'
                 else:
@@ -740,7 +867,7 @@ def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
         ic_id  = args.icid
         check  = args.check
 
-    db = S5pDB_icid( dbname )
+    db = S5pDB_ic_id( dbname )
     if ic_id is None:
         result = db.all()
 
