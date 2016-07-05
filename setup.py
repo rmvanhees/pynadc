@@ -1,8 +1,12 @@
 #!/usr/bin/env python
-
+import subprocess
 from distutils.core import setup
 
-VERSION = '1.1.4'
+try:
+    version_git = subprocess.check_output(["git", "describe"])
+    VERSION = str(version_git.decode('ascii').rstrip())[1:]
+except:
+    VERSION = '1.1.4-no_git'
 
 cls_txt = \
 """
@@ -18,10 +22,10 @@ Operating System :: POSIX :: Linux
 Operating System :: MacOS :: MacOS X
 """
 
-short_desc = "Python Sciamachy/GOSAT read and sqlite3 library"
+short_desc = "Python Sciamachy/GOSAT/Tropomi read and SQLite3 library"
 long_desc = \
 """
-The pynadc package provides (limited) access to Sciamachy level 0 and 1b 
+The pynadc package provides (limited) read access to Sciamachy level 0 and 1b 
 products from Python. Access is restricted to product headers and (G)ADS
 datasets within the products. Implementation to access to DSR's is not 
 foreseen.
