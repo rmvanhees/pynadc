@@ -10,10 +10,11 @@ The package is subdivided into subpackages and modules as follows:
    pynadc
       gosat       # contains GOSAT modules
       scia        # contains Sciamachy modules
+      tropomi     # contains Tropomi modules
 
 For details on the available modules inside a subpackage, see the subpackage
 documentation.
 For details on the modules, see the documentation of the corresponding module.
 """
 
-__all__ = ['gosat', 'scia']
+__all__ = ['version', 'gosat', 'scia', 'tropomi']
