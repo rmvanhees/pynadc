@@ -147,7 +147,7 @@ class ICM_io( object ):
     def get_data( self, msm_mode ):
         '''
         Pull averaged frame-data from dataset
-        - msm_mode must be one of 'biweight', 'avg', 'avg_col',
+        - msm_mode must be one of 'biweight', 'sls', 'avg', 'avg_col',
                    'avg_error', 'avg_noise', 'avg_quality_level', 'avg_row', 
                    'avg_std' 
         '''
@@ -199,6 +199,12 @@ class ICM_io( object ):
             dset_grp = 'ANALYSIS'
             dset_values = 'biweight_value'
             dset_errors = 'biweight_error'
+        elif msm_mode == 'sls':
+            dset_grp = 'ANALYSIS'
+            dset_values = 'det_lit_area_signal'            
+        elif msm_mode == 'sls_background':
+            dset_grp = 'ANALYSIS'
+            dset_values = 'det_lit_area_signal'            
         else:
             dset_grp = 'OBSERVATIONS'
             if self.__h5_path.find('CALIBRATION') >= 0:
@@ -219,13 +225,24 @@ class ICM_io( object ):
 
         ii = 0
         for ib in self.bands:
-            sgrp = self.__fid[os.path.join( self.__h5_path.replace('%', ib),
-                                            self.__h5_name, dset_grp )]
-            if values is not None:
-                sgrp[dset_values][...] = values[:,:,ii]
+            ds_path = os.path.join( self.__h5_path.replace('%', ib),
+                                    self.__h5_name, dset_grp )
+            if not ds_path in self.__fid:
+                continue
+            
+            sgrp = self.__fid[ds_path]
+            if msm_mode[0:3] != 'sls':
+                if values is not None:
+                    sgrp[dset_values][...] = values[:,:,ii]
 
-            if errors is not None:
-                sgrp[dset_errors][...] = errors[:,:,ii]
+                if errors is not None:
+                    sgrp[dset_errors][...] = errors[:,:, ii]
+            else:
+                if values is not None:
+                    sgrp[dset_values][...] = values
+
+                if errors is not None:
+                    sgrp[dset_errors][...] = errors
             ii += 1
 
         self.__patched_msm.append( os.path.join( self.__h5_path,

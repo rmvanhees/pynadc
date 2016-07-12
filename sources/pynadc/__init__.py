@@ -17,4 +17,4 @@ documentation.
 For details on the modules, see the documentation of the corresponding module.
 """
 
-__all__ = ['version', 'gosat', 'scia', 'tropomi']
+__all__ = ['version', 'stats', 'gosat', 'scia', 'tropomi']

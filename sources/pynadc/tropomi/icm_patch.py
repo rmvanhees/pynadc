@@ -36,7 +36,8 @@ Remarks:
  - An alternative way to pach the background measurements is to use OCAL data, 
 this is more complicated and not all exposure time/coadding factor combinations 
 are like to be available, however, the may lead to more realistic data and 
-errors. 
+errors.
+ - Data is not always correctly calibrated...
 
 '''
 import os.path
@@ -62,9 +63,9 @@ class ICM_patch( object ):
         ckd_file = os.path.join(ckd_dir, 'offset', 'ckd.offset.detector4.nc')
         with h5py.File( ckd_file, 'r' ) as fid:
             dset = fid['/BAND7/analog_offset_swir']
-            offs_b7 = dset[:-1,:]
+            offs_b7 = dset[:,:]
             dset = fid['/BAND8/analog_offset_swir']
-            offs_b8 = dset[:-1,:]
+            offs_b8 = dset[:,:]
 
         offset_swir = np.hstack((offs_b7, offs_b8))
     
@@ -72,9 +73,9 @@ class ICM_patch( object ):
         ckd_file = os.path.join(ckd_dir, 'darkflux', 'ckd.dark.detector4.nc')
         with h5py.File( ckd_file, 'r' ) as fid:
             dset = fid['/BAND7/long_term_swir']
-            dark_b7 = dset[:-1,:]
+            dark_b7 = dset[:,:]
             dset = fid['/BAND8/long_term_swir']
-            dark_b8 = dset[:-1,:]
+            dark_b8 = dset[:,:]
 
         dark_swir = np.hstack((dark_b7, dark_b8))
 
@@ -101,7 +102,7 @@ class ICM_patch( object ):
         dled_file = os.path.join(dled_dir, 'DledlinSw_signalcurrent_approx.h5')
         with h5py.File( dled_file, 'r' ) as fid:
             dset = fid['dled_signalcurrent_epers']
-            dled_current = dset[:-1,:]
+            dled_current = dset[:,:]
 
         signal += dled_current * exposure_time
         signal *= coadding_factor
@@ -124,14 +125,13 @@ class ICM_patch( object ):
 
         Note:
           - The OCAL diode-laser measurements are processed from L0-1b, but not
-          calibrated (proc_raw)
+          calibrated (proc_raw)!!!
           - The saved columns are defined in /PROCESSOR/goals_configuration,
-          thus written in XML
+          requires XML support to read this information
             * I have now used a fixed column selection for each diode-laser.
-          - Background should be calculated using the biweight function 
-          implementation by Sidney
-          
         '''
+        from pynadc.stats import biweight 
+        
         assert (ld_id > 0 and ld_id < 6)
         
         light_icid = 32096
@@ -211,9 +211,13 @@ class ICM_patch( object ):
         with h5py.File( os.path.join(data_dir, data_fl), 'r' ) as fid:
             path = 'BAND{}/ICID_{}_GROUP_00000'.format(band, light_icid-1)
             dset = fid[path + '/OBSERVATIONS/signal']
-            background = np.nanmean( dset[1:,:,:], axis=0 )
-            background_std = np.nanstd( dset[1:,:,:], axis=0 )
+            (background, background_std) = biweight( dset[1:,:,:],
+                                                     axis=0, scale=True )
 
+        # need to read background data of other band!!
+        background = np.hstack( (background, background) )
+        background_std = np.hstack( (background_std, background_std) )
+        
         return (signal, background, background_std, columns)
 
     def wls( self, exposure_time, coadding_factor ):
@@ -228,7 +232,7 @@ class ICM_patch( object ):
         dled_file = os.path.join(dled_dir, 'DledlinSw_signalcurrent_approx.h5')
         with h5py.File( dled_file, 'r' ) as fid:
             dset = fid['dled_signalcurrent_epers']
-            dled_current = dset[:-1,:]
+            dled_current = dset[:,:]
 
         signal += dled_current * exposure_time
         signal *= coadding_factor
@@ -243,19 +247,44 @@ class ICM_patch( object ):
 
 #--------------------------------------------------
 def test():
+    '''
+    Perform some simple test to check the ICM_io and ICM_path classes
+    '''
+    import shutil
+    
+    from pynadc.tropomi.icm_io import ICM_io
+
+    data_dir = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
+    temp_dir = '/tmp'
+    icm_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_01_001000_20151002T140000.h5'
+    tmp_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_02_001000_20151002T140000.h5'
+
     patch = ICM_patch()
-    res = patch.background( 1., 1 )
-    print( res[0][110,8], res[1][110,8] )
-    res = patch.background( 0.098, 1 )
-    print( res[0][110,8], res[1][110,8] )
-    res = patch.background( 0.0098, 1 )
-    print( res[0][110,8], res[1][110,8] )
-    res = patch.dled( 0.25, 1 )
-    print( res[0][110,8], res[1][110,8] )
-    res = patch.wls( 0.025, 1 )
-    print( res[0][110,8], res[1][110,8] )
-    res = patch.sls( 5 )
-    print( res[0].shape, res[1].shape, res[3] )
+    shutil.copy( os.path.join(data_dir, icm_file),
+                 os.path.join(temp_dir, tmp_file) )
+    fp = ICM_io( os.path.join(temp_dir, tmp_file),
+                 verbose=True, readwrite=True )
+
+    fp.select( 'DARK_MODE_1605' )
+    res = patch.background( fp.instrument_settings['exposure_time'],
+                            fp.instrument_settings['nr_coadditions'] )
+    fp.set_data( 'avg', res[0].reshape(257,500,2),
+                 errors=res[1].reshape(257,500,2) )
+    
+    fp.select( 'SLS_MODE_0610' )
+    for ii in range(5):
+        sls_id = ii+1
+        nr_valid = np.sum(fp.housekeeping_data['sls{}_status'.format(ii+1)])
+        if nr_valid > 0:
+            break
+    res = patch.sls( sls_id )
+    fp.set_data( 'sls', res[0][:fp.delta_time.shape[0],:,:] )
+
+    fp.select( 'BACKGROUND_MODE_0609' )
+    fp.set_data( 'avg', res[1].reshape(257,500,2),
+                 errors=res[2].reshape(257,500,2) )
+    del( fp )
+    del( patch )
 
 if __name__ == '__main__':
     test()
