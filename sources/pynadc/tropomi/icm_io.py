@@ -149,7 +149,11 @@ class ICM_io( object ):
         Pull averaged frame-data from dataset
         - msm_mode must be one of 'biweight', 'sls', 'avg', 'avg_col',
                    'avg_error', 'avg_noise', 'avg_quality_level', 'avg_row', 
-                   'avg_std' 
+                   'avg_std'
+
+        The function returns a tuple with the data values and their errors.
+        - these values and errors are stored as a list of ndarrays (one array
+          per band)
         '''
         if msm_mode == 'biweight':
             dset_grp = 'ANALYSIS'
@@ -179,14 +183,15 @@ class ICM_io( object ):
             sgrp = self.__fid[os.path.join( self.__h5_path.replace('%', ib),
                                             self.__h5_name, dset_grp )]
             if values is None:
-                values = np.squeeze(sgrp[dset_values])
+                values = [np.squeeze(sgrp[dset_values])]
             else:
-                values = np.dstack( (values, np.squeeze(sgrp[dset_values])) )
+                values.append(np.squeeze(sgrp[dset_values]))
+                
             if dset_errors is not None:
                 if errors is None:
-                    errors = np.squeeze(sgrp[dset_errors])
+                    errors = [np.squeeze(sgrp[dset_errors])]
                 else:
-                    errors = np.squeeze( (errors, np.array(sgrp[dset_errors])) )
+                    errors.append(np.array(sgrp[dset_errors]))
         
         return (values, errors)
 
@@ -194,6 +199,8 @@ class ICM_io( object ):
     def set_data( self, msm_mode, values, errors=None ):
         '''
         Push (patched) averaged frame-data to dataset
+        - values and errors should be provided as a list of ndarrays 
+          (one array per band)
         '''
         if msm_mode == 'biweight':
             dset_grp = 'ANALYSIS'
@@ -233,10 +240,10 @@ class ICM_io( object ):
             sgrp = self.__fid[ds_path]
             if msm_mode[0:3] != 'sls':
                 if values is not None:
-                    sgrp[dset_values][...] = values[:,:,ii]
+                    sgrp[dset_values][...] = values[ii][...]
 
                 if errors is not None:
-                    sgrp[dset_errors][...] = errors[:,:, ii]
+                    sgrp[dset_errors][...] = errors[ii][...]
             else:
                 if values is not None:
                     sgrp[dset_values][...] = values
@@ -272,16 +279,16 @@ def test():
     print( fp.delta_time )
     print( fp )
     (values, error) = fp.get_data( msm_mode='biweight' )
-    print( values.shape )
+    print( 'biweight: ', len(values), values[0].shape )
     
     (values, error) = fp.get_data( msm_mode='avg' )
-    print( values.shape )
+    print( 'avg: ', len(values), values[0].shape )
 
     (values, error) = fp.get_data( msm_mode='avg_col' )
-    print( values.shape )
+    print( 'avg_col: ', len(values), values[0].shape )
 
     (values, error) = fp.get_data( msm_mode='avg_row' )
-    print( values.shape )
+    print( 'avg_row: ', len(values), values[0].shape )
 
     if os.path.isdir('/Users/richardh'):
         fl_path2 = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
@@ -295,8 +302,8 @@ def test():
     fp.select( 'BACKGROUND_MODE_1063' )
     print( fp )
     (values, error) = fp.get_data( msm_mode='avg' )
-    values[:,:,0] = 2
-    values[:,:,1] = 3
+    values[0][:,:] = 2
+    values[1][:,:] = 3
     fp.set_data( 'avg', values )
     
     del fp

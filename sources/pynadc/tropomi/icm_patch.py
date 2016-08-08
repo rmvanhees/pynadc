@@ -32,6 +32,9 @@ on the names (and or processing classes) which type of patch it has to apply
  3) patch all measurement datasets of a particular type in an ICM product. The 
 advantage is that the type of patch is known.
 
+Nearly every method return a tuple with the patch values and its errors. For 
+now, the errors are only a very rough estimate.
+
 Remarks:
  - An alternative way to pach the background measurements is to use OCAL data, 
 this is more complicated and not all exposure time/coadding factor combinations 
@@ -83,7 +86,8 @@ class ICM_patch( object ):
         background += dark_swir['value'] * exposure_time
         background *= coadding_factor
 
-        error = 0.0 * offset_swir['error'] + 135  # fixed value at +/- 3 BU
+        # fixed value at +/- 3 BU
+        error = 0.0 * offset_swir['error'] + 135 / np.sqrt(coaddition factor)
 
         return (background, error)
         
@@ -268,8 +272,8 @@ def test():
     fp.select( 'DARK_MODE_1605' )
     res = patch.background( fp.instrument_settings['exposure_time'],
                             fp.instrument_settings['nr_coadditions'] )
-    fp.set_data( 'avg', res[0].reshape(257,500,2),
-                 errors=res[1].reshape(257,500,2) )
+    fp.set_data( 'avg', np.split(res[0], 2, axis=1),
+                 errors=np.split(res[1], 2, axis=1) )
     
     fp.select( 'SLS_MODE_0610' )
     for ii in range(5):
@@ -277,12 +281,16 @@ def test():
         nr_valid = np.sum(fp.housekeeping_data['sls{}_status'.format(ii+1)])
         if nr_valid > 0:
             break
+        
     res = patch.sls( sls_id )
+    print( 'SLS values: ', res[0].shape )
+    print( 'SLS background: ', res[1].shape )
+    print( 'SLS errors: ', res[2].shape )
     fp.set_data( 'sls', res[0][:fp.delta_time.shape[0],:,:] )
 
     fp.select( 'BACKGROUND_MODE_0609' )
-    fp.set_data( 'avg', res[1].reshape(257,500,2),
-                 errors=res[2].reshape(257,500,2) )
+    fp.set_data( 'avg', np.split(res[1], 2, axis=1),
+                 errors=np.split(res[2], 2, axis=1) )
     del( fp )
     del( patch )
 
