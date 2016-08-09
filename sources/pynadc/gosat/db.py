@@ -51,9 +51,13 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
             'pathID,printf(\'%s/%s\',strftime(\'%Y/%m/%d\',acquisitionDate),name)'
     else:
         table = 'tfts__1P'
+        if product.find('_1X') > 0:
+            fmt = "'%s_1X/%s/%s/%s\'"
+        else:
+            fmt = "'%s/%s/%s/%s\'"
         select_str = \
-            'pathID, printf(\'%s/%s/%s/%s\',observationMode,productVersion,'\
-            'strftime(\'%Y/%m/%d\', acquisitionDate),name)'
+            'pathID, printf({}, observationMode,productVersion,'\
+            'strftime(\'%Y/%m/%d\', acquisitionDate),name)'.format(fmt)
     if dump:
         select_str = '*'
 
@@ -149,9 +153,13 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
 
     if prod_type.upper() == 'TFTS_1':
         table = 'tfts__1P'
+        if product.find('_1X') > 0:
+            fmt = "'%s_1X/%s/%s/%s\'"
+        else:
+            fmt = "'%s/%s/%s/%s\'"
         select_str = \
-            'pathID, printf(\'%s/%s/%s/%s\',observationMode,productVersion,'\
-            'strftime(\'%Y/%m/%d\', acquisitionDate),name)'
+            'pathID, printf({}, observationMode,productVersion,'\
+            'strftime(\'%Y/%m/%d\', acquisitionDate),name)'.format(fmt)
     else:
         table = 'tcai__2P'
         select_str = \
