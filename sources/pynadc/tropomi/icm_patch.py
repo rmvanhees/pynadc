@@ -87,7 +87,7 @@ class ICM_patch( object ):
         background *= coadding_factor
 
         # fixed value at +/- 3 BU
-        error = 0.0 * offset_swir['error'] + 135 / np.sqrt(coaddition factor)
+        error = 0.0 * offset_swir['error'] + 135 / np.sqrt(coadding_factor)
 
         return (background, error)
         
