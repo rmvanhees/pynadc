@@ -170,7 +170,7 @@ class ICM_io( object ):
                 dset_values = 'irradiance_{}'.format(msm_mode)
                 dset_errors = None
                 if msm_mode == 'avg':
-                    dset_errors = 'irradiace_{}_std'.format(msm_mode)
+                    dset_errors = 'irradiance_{}_std'.format(msm_mode)
             elif self.__h5_path.find('RADIANCE') >= 0:
                 dset_values = 'radiance_{}'.format(msm_mode)
                 dset_errors = None
@@ -223,7 +223,7 @@ class ICM_io( object ):
                 dset_values = 'irradiance_{}'.format(msm_mode)
                 dset_errors = None
                 if msm_mode == 'avg':
-                    dset_errors = 'irradiace_{}_std'.format(msm_mode)
+                    dset_errors = 'irradiance_{}_std'.format(msm_mode)
             elif self.__h5_path.find('RADIANCE') >= 0:
                 dset_values = 'radiance_{}'.format(msm_mode)
                 dset_errors = None
