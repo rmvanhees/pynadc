@@ -15,6 +15,9 @@ import sqlite3
 
 DB_NAME = '/GOSAT/share/db/sron_gosat.db'
 
+# define function to construct date sub-directories from FTS product-name
+date_subdir = lambda n: os.path.join(n[9:13], n[13:15], n[15:17])
+
 #---------------------------------------------------------------------------
 def get_product_by_name( args=None, dbname=DB_NAME, product=None, 
                          toScreen=False, dump=False, debug=False ):
@@ -45,19 +48,15 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
         print( 'Fatal, can not find SQLite database: %s' % dbname )
         return []
 
+    level_1X = False
     if product[0:9] == 'GOSATTCAI':
         table = 'tcai__2P'
-        select_str = \
-            'pathID,printf(\'%s/%s\',strftime(\'%Y/%m/%d\',acquisitionDate),name)'
+        select_str = 'pathID. name'
     else:
         table = 'tfts__1P'
         if product.find('_1X') > 0:
-            fmt = "'%s_1X/%s/%s/%s\'"
-        else:
-            fmt = "'%s/%s/%s/%s\'"
-        select_str = \
-            'pathID, printf({}, observationMode,productVersion,'\
-            'strftime(\'%Y/%m/%d\', acquisitionDate),name)'.format(fmt)
+            level_1X = True
+        select_str = 'pathID, observationMode, productVersion, name'
     if dump:
         select_str = '*'
 
@@ -71,7 +70,7 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
     cu = conn.cursor()
     if debug:
         print( query_str )
-        row = ['/fakePath/toProduct', product]
+        row = (1, product)
     else:
         cu.execute( query_str )
         row = cu.fetchone()
@@ -88,27 +87,31 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
             'select {} from rootPaths where pathID={}'.format(case_str, row[0])
         if debug:
             print( query_str )
-            root = [ row[0] ]
+            root = '/fakePath/toProduct'
         else:
             cu.execute( query_str )
-            root = cu.fetchone()
+            root = cu.fetchone()[0]
     cu.close()
     conn.close()
 
-    #if debug:
-    #    return []
-
-    if toScreen:
-        if dump:
+    if dump:
+        if toScreen:
             for name in row.keys():
                 print( name, '\t', row[name] )
-        else:
-            print( root[0] + '/' +  row[1] )
-    
-    if dump:
         return row
     else:
-        return root[0] + '/' +  row[1]
+        if len(row) == 2:
+            full_path = os.path.join(root, row[1])
+        else:                    ## should check for len(row) equals 4
+            if level_1X:
+                full_path = os.path.join( root, row[1] + '_1X', row[2],
+                                          date_subdir(row[3]), row[3] )
+            else:
+                full_path = os.path.join( root, row[1], row[2],
+                                          date_subdir(row[3]), row[3] )
+        if toScreen:
+            print( full_path )
+        return full_path
 
 #---------------------------------------------------------------------------
 def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None, 
@@ -153,20 +156,19 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
 
     if prod_type.upper() == 'TFTS_1':
         table = 'tfts__1P'
-        if product.find('_1X') > 0:
-            fmt = "'%s_1X/%s/%s/%s\'"
-        else:
-            fmt = "'%s/%s/%s/%s\'"
-        select_str = \
-            'pathID, printf({}, observationMode,productVersion,'\
-            'strftime(\'%Y/%m/%d\', acquisitionDate),name)'.format(fmt)
+        select_str = 'pathID, observationMode, productVersion, name'
     else:
         table = 'tcai__2P'
-        select_str = \
-            'pathID,printf(\'%s/%s\',strftime(\'%Y/%m/%d\',acquisitionDate),name)'
+        select_str = 'pathID, name'
 
-    query_str = \
-        ['select {} from {}'.format(select_str, table)]
+    ## define query on meta-Table
+    query_str = ['select {} from {}'.format(select_str, table)]
+
+    ## define query to obtain root directories (local or NFS)
+    case_str = 'case when hostName == \'{}\''\
+               ' then localPath else nfsPath end'.format(socket.gethostname())
+    query_str2 = \
+                'select {} from rootPaths where pathID={}'
 
     ## perform selection on datetime
     if date:
@@ -230,6 +232,7 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
 
     if debug:
         print( ''.join(query_str) )
+        print( query_str2.format(case_str, 1) )
         return []
 
     conn = sqlite3.connect( dbname )
@@ -240,21 +243,22 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
 
     rowList = []
     for row in cu:
-        ## obtain root directories (local or NFS)
-        case_str = 'case when hostName == \'{}\''\
-            ' then localPath else nfsPath end'.format(socket.gethostname())
-        query_str = \
-            'select {} from rootPaths where pathID={}'.format(case_str, row[0])
-        if debug:
-            print( query_str )
-        else:
-            cuu.execute( query_str )
-            root = cuu.fetchone()
+        cuu.execute( query_str2.format(case_str, row[0]) )
+        root = cuu.fetchone()[0]
 
+        if len(row) == 2:
+            full_path = os.path.join(root, row[1])
+        else:   ## should check for len(row) equals 4
+            if row[3].find('_1X') > 0:
+                full_path = os.path.join( root, row[1] + '_1X', row[2],
+                                          date_subdir(row[3]), row[3] )
+            else:
+                full_path = os.path.join( root, row[1], row[2],
+                                          date_subdir(row[3]), row[3] )
         if toScreen:
-            print( root[0] + '/' +  row[1] )
+            print( full_path )
 
-        rowList.append( root[0] + '/' +  row[1] )
+        rowList.append( full_path )
                     
     cu.close()
     cuu.close()
