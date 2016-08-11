@@ -277,6 +277,42 @@ class S5pDB_orbit( S5pDB ):
                           row[1]],)
         cur.close()
         return row_list
+
+    def latest( self ):
+        '''
+        '''
+        table = 'ICM_SIR_META'
+        q_str = 'select max(referenceOrbit) from {}'.format(table)
+
+        cur = self.cursor()
+        cur.execute( q_str )
+        row = cur.fetchone()
+        cur.close()
+        if row is None:
+            return None
+        else:
+            return row[0]
+    
+    def date( self, date ):
+        '''
+        '''
+        row_list = ()
+
+        table = 'ICM_SIR_META'
+        date_str = 'dateTimeStart between \'{}\' and \'{}\''.format(
+            date + ' 00:00:00', date + ' 23:59:59' )
+        q_str = 'select referenceOrbit from {} where {}'.format(table, date_str)
+        if self.__verbose:
+            print( q_str )
+        
+        cur = self.cursor()
+        cur.execute( q_str )
+        for row in cur:
+            row_list += (row[0],)
+        cur.close()
+        
+        return row_list
+
     
 #--------------------------------------------------
 class S5pDB_rtime( S5pDB ):
@@ -406,6 +442,8 @@ class S5pDB_type( S5pDB ):
         
         if after_dn2v:
             q_str += ' and after_dn2v != 0'
+        else:
+            q_str += ' and after_dn2v = 0'
 
         q_str += self.__select_on_date__( date, prefix=' and' )
 
@@ -497,6 +535,59 @@ class S5pDB_tbl_icid( S5pDB ):
 
         return row_list
 
+#---------------------------------------------------------------------------
+def get_orbit_latest( args=None, dbname=DB_NAME, toScreen=False ):
+    '''
+    Query NADC S5p-Tropomi ICM-database for the largest available referenceOrbit
+
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                   [default: DB_NAME]
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
+    '''
+    if args:
+        dbname  = args.dbname
+
+    db = S5pDB_orbit( dbname )
+
+    result = db.latest()
+    if toScreen:
+        print( result )
+    return result
+   
+#---------------------------------------------------------------------------
+def get_orbit_for_date( date, args=None, dbname=DB_NAME, toScreen=False ):
+    '''
+    Query NADC S5p-Tropomi ICM-database for all orbits during a given day
+
+    Parameters:
+    -----------
+    - "args"     : argparse object with keys dbname
+    - "dbname"   : full path to S5p Tropomi SQLite database 
+                   [default: DB_NAME]
+    - "date"     : date in ISA-format (YYYY-mm-dd)
+    - "toScreen" : controls if the query result is printed on STDOUT 
+                   [default: False]
+    '''
+    if args:
+        dbname  = args.dbname
+        date    = args.date
+
+    if date is None:
+        from datetime import date
+        
+        date = date.today().isoformat()
+
+    db = S5pDB_orbit( dbname )
+
+    result = db.date( date )
+    if toScreen:
+        print( result )
+    return result
+   
 #---------------------------------------------------------------------------
 def get_product_by_date( args=None, dbname=DB_NAME, date=None,
                          mode='location', toScreen=False ):
@@ -909,6 +1000,8 @@ def fast_test_db():
     '''
     Quick check to test module tropomi.db.py
     '''
+    result = get_orbit_latest(toScreen=True)
+    
     print( '''*** Info: test function 'get_product_by_date' ''' )
     result = get_product_by_date( date='120919', toScreen=True )
     result = get_product_by_date( date='2012-09-19 05:17:19,2012-12-19 05:17:20',
