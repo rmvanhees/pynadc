@@ -79,7 +79,7 @@ class S5pDB( object ):
             
             ll = list(datetime_str[0+i:2+i] for i in range(0, len(datetime_str), 2))
             if len(ll) == 2:
-                ll += ['00', '00', '00', '00']
+                ll += ['01', '00', '00', '00']
                 dtime = '+1 month'
             elif len(ll) == 3:
                 ll += ['00', '00', '00']
@@ -133,7 +133,9 @@ class S5pDB_date( S5pDB ):
 
         q_str = 'select {} from {}'.format(cols,table)
         q_str += self.__select_on_date__( date, prefix=' where' )
-        return q_str + ' order by dateTimeStart'
+        if self.__verbose:
+            print( q_str )
+        return q_str + ' order by referenceOrbit'
     
     def location( self, date ):
         '''
@@ -958,7 +960,7 @@ def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
         ic_id  = args.icid
         check  = args.check
 
-    db = S5pDB_ic_id( dbname )
+    db = S5pDB_tbl_icid( dbname )
     if ic_id is None:
         result = db.all()
 
@@ -1003,7 +1005,9 @@ def fast_test_db():
     result = get_orbit_latest(toScreen=True)
     
     print( '''*** Info: test function 'get_product_by_date' ''' )
+    result = get_product_by_date( date='1209', toScreen=True )
     result = get_product_by_date( date='120919', toScreen=True )
+    result = get_product_by_date( date='12091905', toScreen=True )
     result = get_product_by_date( date='2012-09-19 05:17:19,2012-12-19 05:17:20',
                                   toScreen=True )
 
