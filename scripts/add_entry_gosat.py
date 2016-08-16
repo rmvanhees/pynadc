@@ -40,7 +40,7 @@ def cre_sqlite_gosat_db( dbname ):
         receiveDate      datetime NOT NULL default '0000-00-00 00:00:00',
         missingPixelRate integer  NOT NULL,
         numLine          integer  NOT NULL,
-        numPixel         integer[2]  NOT NULL,
+        numPixel         integer  NOT NULL,
         fileSize         integer  NOT NULL,
         FOREIGN KEY(pathID) REFERENCES rootPaths(pathID) )''' )
     cur.execute( 'create index dateTimeStartIndex2 on tcai__2P(dateTimeStart)' )
@@ -61,7 +61,7 @@ def cre_sqlite_gosat_db( dbname ):
 	acquisitionDate  datetime NOT NULL default '0000-00-00 00:00:00',
 	creationDate     datetime NOT NULL default '0000-00-00',
         receiveDate      datetime NOT NULL default '0000-00-00 00:00:00',
-        numPoints        integer  NOT NULL,
+        numPoints        integer[2]  NOT NULL,
         fileSize         integer  NOT NULL,
         FOREIGN KEY(pathID) REFERENCES rootPaths(pathID) )''' )
     cur.execute( 'create index dateTimeStartIndex1 on tfts__1P(dateTimeStart)' )

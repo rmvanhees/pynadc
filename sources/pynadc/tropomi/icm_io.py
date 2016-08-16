@@ -191,7 +191,7 @@ class ICM_io( object ):
                 if errors is None:
                     errors = [np.squeeze(sgrp[dset_errors])]
                 else:
-                    errors.append(np.array(sgrp[dset_errors]))
+                    errors.append(np.squeeze(sgrp[dset_errors]))
         
         return (values, errors)
 
