@@ -32,12 +32,13 @@ def biweight(data, axis=None, scale=False):
                              / np.sum((1 - u) *  (1 - 5 * u)) ** 2)
     else:
         mm = np.nanmedian(data, axis=axis)
-        deltas = data - mm
-        dd = np.nanmedian(np.abs(deltas), axis=axis)
-        indices = (dd == 0)
-        
         xb = mm
         sb = np.zeros( mm.shape, dtype=np.float64 )
+
+        deltas = data - np.expand_dims( mm, axis=axis )
+
+        dd = np.nanmedian(np.abs(deltas), axis=axis)        
+        indices = (dd == 0)
         if not np.all(indices):
             dd[indices] = 1.  # dummy value
             dd = np.expand_dims(dd, axis=axis)
@@ -64,7 +65,10 @@ def test():
     import matplotlib.pyplot as plt
 
     light_icid = 32096
-    ocal_dir = '/nfs/TROPOMI/ocal/proc_raw'
+    if os.path.isdir('/Users/richardh'):
+        ocal_dir = '/Users/richardh/Data/proc_raw'
+    else:
+        ocal_dir = '/nfs/TROPOMI/ocal/proc_raw'
     data_dir = os.path.join( ocal_dir,
                              '2015_02_25T05_16_36_LaserDiodes_LD1_100',
                              'proc_raw' )
@@ -75,6 +79,12 @@ def test():
         dset = fid[path + '/OBSERVATIONS/signal']
         frames = dset[1:,:,:]
             
+    (background, background_std) = biweight( frames,
+                                             axis=2, scale=True )
+    print( background.shape, background_std.shape )
+    (background, background_std) = biweight( frames,
+                                             axis=1, scale=True )
+    print( background.shape, background_std.shape )
     (background, background_std) = biweight( frames,
                                              axis=0, scale=True )
     print( background.shape, background_std.shape )
@@ -118,5 +128,6 @@ def test():
     plt.colorbar( im, orientation='vertical' )
     plt.show()
 
+#--------------------------------------------------
 if __name__ == '__main__':
     test()
