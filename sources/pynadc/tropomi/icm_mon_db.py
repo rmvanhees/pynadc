@@ -19,7 +19,8 @@ Methods to create and fill ICM monitoring databases
 
 -- Query the database --
  Public methods to query the monitoring databases are:
- * ...
+ * sql_check_orbit
+ *...
 
 -- Configuration management --
 * ICM product version [KNMI]
@@ -51,11 +52,17 @@ from pynadc.stats import biweight
 class ICM_mon( object ):
     '''
     '''
-    def __init__( self, dbname, orbit_window=15 ):
+    def __init__( self, dbname, orbit, orbit_window=15 ):
         '''
         Perform the following tasts:
-        1) if databases do not exist then create them
-        2) check versions of databases and this S/W
+        * if database does not exist 
+        then 
+        1) create HDF5 database (mode='w')
+        2) set attribute 'orbit_window'
+        3) set attributes with 'algo_version' and 'db_version'
+        else
+        1) open HDF5 database, read only when orbit is already present
+        1) check versions of 'algo_version' and 'db_version'
         3) set class attributes
         '''
         self.dbname = dbname
@@ -63,13 +70,17 @@ class ICM_mon( object ):
         if not os.path.exists( dbname+'.h5' ) \
            and not os.path.exists( dbname+'.db' ):
             self.__init = True
-            self.__fid = h5py.File( dbname+'.h5', 'w' )
+            self.__mode = 'w'
+            self.__fid = h5py.File( dbname+'.h5', self.__mode )
             self.__fid.attrs['orbit_window'] = orbit_window
-            ## write database meta-data
         else:
             self.__init = False
+            if self.sql_check_orbit( orbit ) != -1:
+                self.__mode = 'r'
+            else:
+                self.__mode = 'r+'
             self.__fid = h5py.File( dbname+'.h5', 'r+' )
-            ## check versions
+            ## check versions 
 
     def __repr__( self ):
         pass
@@ -149,26 +160,27 @@ class ICM_mon( object ):
         '''
         create datasets for measurement data
         '''
+        chunk_sz = (16, frames.shape[0] // 4, frames.shape[1] // 4)
         dset = self.__fid.create_dataset( "signal_avg",
                                           (0,) + frames.shape,
-                                          chunks=(1,) + frames.shape,
+                                          chunks=chunk_sz,
                                           maxshape=(None,) + frames.shape,
                                           dtype=frames.dtype )
         dset = self.__fid.create_dataset( "signal_avg_{}".format(method),
                                           (0,) + frames.shape,
-                                          chunks=(1,) + frames.shape,
+                                          chunks=chunk_sz,
                                           maxshape=(None,) + frames.shape,
                                           dtype=frames.dtype )
         if rows:
             nrows = (frames.shape[1],)
             dset = self.__fid.create_dataset( "signal_avg_row",
                                               (0,) + nrows,
-                                              chunks=(1,) + nrows,
+                                              chunks=(16,) + nrows,
                                               maxshape=(None,) + nrows,
                                               dtype=frames.dtype )
             dset = self.__fid.create_dataset( "signal_avg_row_{}".format(method),
                                               (0,) + nrows,
-                                              chunks=(1,) + nrows,
+                                              chunks=(16,) + nrows,
                                               maxshape=(None,) + nrows,
                                               dtype=frames.dtype )
 
@@ -176,12 +188,12 @@ class ICM_mon( object ):
             ncols = (frames.shape[0],)
             dset = self.__fid.create_dataset( "signal_avg_col",
                                               (0,) + ncols,
-                                              chunks=(1,) + ncols,
+                                              chunks=(16,) + ncols,
                                               maxshape=(None,) + ncols,
                                               dtype=frames.dtype )
             dset = self.__fid.create_dataset( "signal_avg_col_{}".format(method),
                                               (0,) + ncols,
-                                              chunks=(1,) + ncols,
+                                              chunks=(16,) + ncols,
                                               maxshape=(None,) + ncols,
                                               dtype=frames.dtype )
 
@@ -248,7 +260,8 @@ class ICM_mon( object ):
         con = sqlite3.connect( dbname )
         cur = con.cursor()
         cur.execute( '''create table icm_meta (
-           referenceOrbit  integer     PRIMARY KEY,
+           rowID           integer     PRIMARY KEY AUTOINCREMENT,
+           referenceOrbit  integer     NOT NULL UNIQUE,
            orbitsUsed      integer     NOT NULL,
            entryDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
            startDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
@@ -273,7 +286,7 @@ class ICM_mon( object ):
             self.__sql_cre_meta()
 
         str_sql = 'insert into icm_meta values' \
-                  '({orbit},{orbit_used},{entry_date!r},{start_time!r}'\
+                  '(NULL,{orbit},{orbit_used},{entry_date!r},{start_time!r}'\
                   ',{icm_version!r},{alg_version!r},{db_version!r}'\
                   ',{q_det_temp},{q_obm_temp})'
         print( str_sql.format(**meta_dict) )
@@ -284,6 +297,29 @@ class ICM_mon( object ):
         cur.close()
         con.commit()
         con.close()
+
+    def sql_check_orbit( self, orbit ):
+        '''
+        Check if data from referenceOrbit is already present in database
+
+        Returns rowID equals -1 when row is not present, else rowID > 0
+        '''
+        dbname = self.dbname + '.db'
+        if self.__init:
+            return -1
+        
+        str_sql = 'select rowID from icm_meta where referenceOrbit={}'
+        
+        con = sqlite3.connect( dbname )
+        cur = con.cursor()
+        cur.execute( str_sql.format(orbit) )
+        row = cur.fetchone()
+        cur.close()
+        con.close()
+        if row == None: 
+            return -1
+        else:
+            return row[0]
 
 #--------------------------------------------------
 def test( num_orbits=1 ):
@@ -343,7 +379,7 @@ def test( num_orbits=1 ):
         del( fp )
 
         ## then add information to monitoring database
-        mon = ICM_mon( DBNAME, orbit_window=ORBIT_WINDOW )
+        mon = ICM_mon( DBNAME, meta_dict['orbit'], orbit_window=ORBIT_WINDOW )
         mon.h5_write_hk( hk_data  )
         mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
         mon.sql_write_meta( meta_dict )
@@ -351,4 +387,5 @@ def test( num_orbits=1 ):
 
 #--------------------------------------------------
 if __name__ == '__main__':
-    test( 5475 )
+    #test( 5475 )
+    test( 75 )
