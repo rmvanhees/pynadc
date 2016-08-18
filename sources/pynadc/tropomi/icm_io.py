@@ -47,6 +47,13 @@ class ICM_io( object ):
         self.__msm_mode = None
         self.__patched_msm = []
 
+        self.orbit = self.__fid.attrs['reference_orbit'][0]
+        self.start_time = self.__fid.attrs['time_coverage_start'].decode('ascii').strip('Z').replace('T',' ')
+        grp = self.__fid['/METADATA/ESA_METADATA/earth_explorer_header/fixed_header']
+        dset = grp['source']
+        self.creation_date = (dset.attrs['Creation_Date'].split(b'=')[1]).decode('ascii').replace('T',' ')
+        self.creator_version = (dset.attrs['Creator_Version']).decode('ascii')
+
         self.bands = ''
         self.ref_time = None
         self.delta_time = None
