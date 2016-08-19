@@ -7,15 +7,19 @@ Methods to create and fill ICM monitoring databases
 
 -- Adding new entries to the database --
  Public methods to add new entries to the monitoring databases are:
+ * h5_write_attr
  * h5_write_hk
  * h5_write_frames
+ * h5_write_dpqf     ## not yet defined nor implemented
+ * h5_write_isrf     ## not yet defined nor implemented
+ * h5_write_stray    ## not yet defined nor implemented
  * sql_write_meta
 
 -- Updating existing entries in the database --
  Public methods to update existing entries in the monitoring databases are:
- * h5_update_hk
- * h5_update_frames
- * sql_update_meta
+ * h5_update_hk      ## not yes implemented
+ * h5_update_frames  ## not yes implemented
+ * sql_update_meta   ## not yes implemented
 
 -- Query the database --
  Public methods to query the monitoring databases are:
@@ -52,34 +56,31 @@ from pynadc.stats import biweight
 class ICM_mon( object ):
     '''
     '''
-    def __init__( self, dbname, orbit, orbit_window=15 ):
+    def __init__( self, dbname, mode='r' ):
         '''
         Perform the following tasts:
         * if database does not exist 
         then 
-        1) create HDF5 database (mode='w')
-        2) set attribute 'orbit_window'
-        3) set attributes with 'algo_version' and 'db_version'
+         1) create HDF5 database (mode='w')
+         2) set attribute 'orbit_window'
+         3) set attributes with 'algo_version' and 'db_version'
         else
-        1) open HDF5 database, read only when orbit is already present
-        1) check versions of 'algo_version' and 'db_version'
-        3) set class attributes
+         1) open HDF5 database, read only when orbit is already present
+         1) check versions of 'algo_version' and 'db_version'
+         3) set class attributes
         '''
+        assert( (mode == 'r') or (mode =='r+') )
         self.dbname = dbname
         
         if not os.path.exists( dbname+'.h5' ) \
            and not os.path.exists( dbname+'.db' ):
             self.__init = True
             self.__mode = 'w'
-            self.__fid = h5py.File( dbname+'.h5', self.__mode )
-            self.__fid.attrs['orbit_window'] = orbit_window
+            self.__fid = h5py.File( dbname+'.h5', 'w' )
         else:
             self.__init = False
-            if self.sql_check_orbit( orbit ) != -1:
-                self.__mode = 'r'
-            else:
-                self.__mode = 'r+'
-            self.__fid = h5py.File( dbname+'.h5', 'r+' )
+            self.__mode = mode
+            self.__fid = h5py.File( dbname+'.h5', mode )
             ## check versions 
 
     def __repr__( self ):
@@ -92,6 +93,27 @@ class ICM_mon( object ):
         '''
         self.__fid.close()
 
+    ## ---------- READ/WRITE (USER) ATTRIBUTES ----------
+    def h5_set_attr( self, name, value ):
+        '''
+        Add attributes to HDF5 database, during definition phase.
+        Otherwise the call is silently ignored
+
+        Please use standard names for attributes:
+         - 'orbit_window' : [scalar] size of the orbit window 
+                           Note, defined at creation of HDF5 database
+         - 'icid_list' : [array] list of ic_id and ic_version used by algorithm
+         - ...
+        '''
+        if self.__init:
+            self.__fid.attrs[name] = value
+
+    def h5_get_attr( self, name ):
+        '''
+        Obtain value of an HDF5 database attribute
+        '''
+        return self.__fid.attrs[name]
+        
     ## ---------- WRITE HOUSE-KEEPING DATA ----------
     def __h5_cre_hk( self, hk ):
         '''
@@ -131,6 +153,8 @@ class ICM_mon( object ):
               the requested measurements. 
               Reject entries during start-up or at the end
         '''
+        assert(self.__mode != 'r')
+
         if self.__init:
             self.__h5_cre_hk( hk )
 
@@ -155,30 +179,20 @@ class ICM_mon( object ):
         dset[-1] = hk_scale
 
     ## ---------- WRITE DATA (frames averaged in time) ----------
-    def __h5_cre_frames( self, frames, method='std',
-                         rows=False, cols=False ):
+    def __h5_cre_frames( self, frames,
+                         rows=False, cols=False, method='none' ):
         '''
         create datasets for measurement data
         '''
         chunk_sz = (16, frames.shape[0] // 4, frames.shape[1] // 4)
-        dset = self.__fid.create_dataset( "signal_avg",
-                                          (0,) + frames.shape,
-                                          chunks=chunk_sz,
-                                          maxshape=(None,) + frames.shape,
-                                          dtype=frames.dtype )
-        dset = self.__fid.create_dataset( "signal_avg_{}".format(method),
+        dset = self.__fid.create_dataset( "signal",
                                           (0,) + frames.shape,
                                           chunks=chunk_sz,
                                           maxshape=(None,) + frames.shape,
                                           dtype=frames.dtype )
         if rows:
             nrows = (frames.shape[1],)
-            dset = self.__fid.create_dataset( "signal_avg_row",
-                                              (0,) + nrows,
-                                              chunks=(16,) + nrows,
-                                              maxshape=(None,) + nrows,
-                                              dtype=frames.dtype )
-            dset = self.__fid.create_dataset( "signal_avg_row_{}".format(method),
+            dset = self.__fid.create_dataset( "signal_row",
                                               (0,) + nrows,
                                               chunks=(16,) + nrows,
                                               maxshape=(None,) + nrows,
@@ -186,12 +200,31 @@ class ICM_mon( object ):
 
         if cols:
             ncols = (frames.shape[0],)
-            dset = self.__fid.create_dataset( "signal_avg_col",
+            dset = self.__fid.create_dataset( "signal_col",
                                               (0,) + ncols,
                                               chunks=(16,) + ncols,
                                               maxshape=(None,) + ncols,
                                               dtype=frames.dtype )
-            dset = self.__fid.create_dataset( "signal_avg_col_{}".format(method),
+
+        if method == 'none':
+            return
+        
+        dset = self.__fid.create_dataset( "signal_{}".format(method),
+                                          (0,) + frames.shape,
+                                          chunks=chunk_sz,
+                                          maxshape=(None,) + frames.shape,
+                                          dtype=frames.dtype )
+        if rows:
+            nrows = (frames.shape[1],)
+            dset = self.__fid.create_dataset( "signal_row_{}".format(method),
+                                              (0,) + nrows,
+                                              chunks=(16,) + nrows,
+                                              maxshape=(None,) + nrows,
+                                              dtype=frames.dtype )
+
+        if cols:
+            ncols = (frames.shape[0],)
+            dset = self.__fid.create_dataset( "signal_col_{}".format(method),
                                               (0,) + ncols,
                                               chunks=(16,) + ncols,
                                               maxshape=(None,) + ncols,
@@ -204,53 +237,66 @@ class ICM_mon( object ):
          - rows : when row average/median should be calculated from frames
          - cols : when column average/median should be calculated from frames
         '''
+        assert(self.__mode != 'r')
+
         if self.__init:
             if statistics is None:
-                self.__fid.attrs['method'] = 'std'
                 self.__fid.attrs['rows'] = False
                 self.__fid.attrs['cols'] = False
+                if errors is None:
+                    ext = 'none'
+                else:
+                    ext = 'std'
             else:
                 stat_list = statistics.split(',')
-                self.__fid.attrs['method'] = stat_list[0]
                 self.__fid.attrs['rows'] = 'rows' in stat_list
                 self.__fid.attrs['cols'] = 'cols' in stat_list
-            self.__h5_cre_frames( values,
-                                  method=self.__fid.attrs['method'],
+                if errors is None:
+                    ext = 'none'
+                else:
+                    ext = stat_list[0]
+
+            self.__fid.attrs['method'] = ext
+            self.__h5_cre_frames( values, method=ext,
                                   rows=self.__fid.attrs['rows'],
                                   cols=self.__fid.attrs['cols'] )
+        else:
+            ext = self.__fid.attrs['method']
 
-        dset = self.__fid['signal_avg']
+        dset = self.__fid['signal']
         shape = (dset.shape[0]+1,) + dset.shape[1:]
         dset.resize( shape )
         dset[-1,:,:] = values
 
-        ext = self.__fid.attrs['method']
-        dset = self.__fid['signal_avg_{}'.format(ext)]
-        shape = (dset.shape[0]+1,) + dset.shape[1:]
-        dset.resize( shape )
-        dset[-1,:,:] = values
+        if ext != 'none':
+            dset = self.__fid['signal_{}'.format(ext)]
+            shape = (dset.shape[0]+1,) + dset.shape[1:]
+            dset.resize( shape )
+            dset[-1,:,:] = errors
 
         if self.__fid.attrs['rows']:
-            dset = self.__fid['signal_avg_row']
+            dset = self.__fid['signal_row']
             shape = (dset.shape[0]+1,) + dset.shape[1:]
             dset.resize( shape )
             dset[-1,:] = np.nanmedian( values, axis=0 )
 
-            dset = self.__fid['signal_avg_row_{}'.format(ext)]
-            shape = (dset.shape[0]+1,) + dset.shape[1:]
-            dset.resize( shape )
-            dset[-1,:] = np.nanmedian( errors, axis=0 )
+            if ext != 'none':
+                dset = self.__fid['signal_row_{}'.format(ext)]
+                shape = (dset.shape[0]+1,) + dset.shape[1:]
+                dset.resize( shape )
+                dset[-1,:] = np.nanmedian( errors, axis=0 )
  
         if self.__fid.attrs['cols']:
-            dset = self.__fid['signal_avg_col']
+            dset = self.__fid['signal_col']
             shape = (dset.shape[0]+1,) + dset.shape[1:]
             dset.resize( shape )
             dset[-1,:] = np.nanmedian( values, axis=1 )
 
-            dset = self.__fid['signal_avg_col_{}'.format(ext)]
-            shape = (dset.shape[0]+1,) + dset.shape[1:]
-            dset.resize( shape )
-            dset[-1,:] = np.nanmedian( errors, axis=1 )
+            if ext != 'none':
+                dset = self.__fid['signal_col_{}'.format(ext)]
+                shape = (dset.shape[0]+1,) + dset.shape[1:]
+                dset.resize( shape )
+                dset[-1,:] = np.nanmedian( errors, axis=1 )
  
             
    ## ---------- WRITE META-DATA TO SQL database ----------
@@ -287,7 +333,7 @@ class ICM_mon( object ):
 
         str_sql = 'insert into icm_meta values' \
                   '(NULL,{orbit},{orbit_used},{entry_date!r},{start_time!r}'\
-                  ',{icm_version!r},{alg_version!r},{db_version!r}'\
+                  ',{icm_version!r},{algo_version!r},{db_version!r}'\
                   ',{q_det_temp},{q_obm_temp})'
         print( str_sql.format(**meta_dict) )
 
@@ -361,7 +407,7 @@ def test( num_orbits=1 ):
         meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
         meta_dict['start_time'] = fp.start_time
         meta_dict['icm_version'] = fp.creator_version
-        meta_dict['alg_version'] = '0.1.0.0'              ## placeholder
+        meta_dict['algo_version'] = '0.1.0.0'             ## placeholder
         version_spec = util.find_spec( "pynadc.version" )
         if version_spec is not None:
             from pynadc import version
@@ -379,7 +425,12 @@ def test( num_orbits=1 ):
         del( fp )
 
         ## then add information to monitoring database
-        mon = ICM_mon( DBNAME, meta_dict['orbit'], orbit_window=ORBIT_WINDOW )
+        ## Note that ingesting results twice leads to database corruption!
+        ##   Please use 'mon.sql_check_orbit'
+        mon = ICM_mon( DBNAME, mode='r+' )
+        if mon.sql_check_orbit( meta_dict['orbit'] ) >= 0:
+            continue
+        mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
         mon.h5_write_hk( hk_data  )
         mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
         mon.sql_write_meta( meta_dict )
