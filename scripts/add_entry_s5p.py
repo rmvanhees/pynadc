@@ -680,7 +680,7 @@ if __name__ == '__main__':
                          help='read from INPUT_FILE' )
     args = parser.parse_args()
 
-    if not h5py.is_hdf5( np.string_(args.input_file) ):
+    if not h5py.is_hdf5( args.input_file ):
         print( 'Info: %s is not a HDF5/S5P-ICM product' % args.input_file )
         sys.exit(0)
 
