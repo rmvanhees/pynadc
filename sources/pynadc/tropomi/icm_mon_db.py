@@ -326,16 +326,27 @@ class ICM_mon( object ):
     def sql_write_meta( self, meta_dict ):
         '''
         Append monitoring meta-data to SQLite database
+        The dictionary "meta_dict" should contain the following fields:
+         "orbit_ref"    : column referenceOrbit [integer]
+         "orbit_used"   : column orbitsUsed     [integer]
+         "entry_date"   : column entryDateTime  [text format YY-MM-DD hh:mm:ss]
+         "start_time"   : column startDateTime  [text format YY-MM-DD hh:mm:ss]
+         "icm_version"  : column icmVersion     [text format xx.xx.xx]
+         "algo_version" : column algVersion     [text format xx.xx.xx]
+         "db_version"   : column dbVersion      [text format xx.xx.xx]
+         "q_det_temp"   : column q_detTemp      [integer]
+         "q_obm_temp"   : column q_obmTemp      [integer]
         '''
         dbname = self.dbname + '.db'
         if self.__init:
             self.__sql_cre_meta()
 
         str_sql = 'insert into icm_meta values' \
-                  '(NULL,{orbit},{orbit_used},{entry_date!r},{start_time!r}'\
+                  '(NULL,{orbit_ref},{orbit_used},{entry_date!r}' \
+                  ',{start_time!r}'\
                   ',{icm_version!r},{algo_version!r},{db_version!r}'\
                   ',{q_det_temp},{q_obm_temp})'
-        print( str_sql.format(**meta_dict) )
+        #print( str_sql.format(**meta_dict) )
 
         con = sqlite3.connect( dbname )
         cur = con.cursor()
@@ -366,6 +377,47 @@ class ICM_mon( object ):
             return -1
         else:
             return row[0]
+
+    def sql_select_orbit( self, orbit, orbit_used=None,
+                          q_det_temp=None, q_obm_temp=None ):
+        '''
+        Obtain list of rowIDs for given orbit(range)
+        Parameters:
+           orbit      : scalar or range orbit_min, orbit_max
+           orbit_used : minimal number of orbits used to calculate results 
+           q_det_temp : select only entries with stable detector temperature
+           q_obm_temp : select only entries with stable OBM temperature
+        '''
+        dbname = self.dbname + '.db'
+        row_list = ()
+        if self.__init:
+            return row_list
+
+        str_sql = 'select rowID from icm_meta'
+        if len(orbit) == 1:
+            str_sql += ' where referenceOrbit={}'.format(orbit)
+        else:
+            str_sql += ' where referenceOrbit between {} and {}'.format(*orbit)
+
+        if orbit_used is not None:
+            str_sql += ' and orbitsUsed >= {}'.format(orbit_used)
+
+        if q_det_temp is not None:
+            str_sql += ' and q_det_temp = 0'
+
+        if q_obm_temp is not None:
+            str_sql += ' and q_obm_temp = 0'
+        str_sql += ' order by referenceOrbit'
+
+        con = sqlite3.connect( dbname )
+        cur = con.cursor()
+        cur.execute( str_sql )
+        for row in cur:
+            row_list += (row[0],)
+        cur.close()
+        con.close()
+
+        return row_list
 
 #--------------------------------------------------
 def test( num_orbits=1 ):
@@ -401,7 +453,7 @@ def test( num_orbits=1 ):
         ## select measurement and collect its meta-data 
         fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
         meta_dict = {}
-        meta_dict['orbit'] = fp.orbit + ii
+        meta_dict['orbit_ref'] = fp.orbit + ii
         meta_dict['orbit_window'] = ORBIT_WINDOW
         meta_dict['orbit_used'] = ORBIT_WINDOW - (ii % 3) ## placeholder
         meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
@@ -428,7 +480,7 @@ def test( num_orbits=1 ):
         ## Note that ingesting results twice leads to database corruption!
         ##   Please use 'mon.sql_check_orbit'
         mon = ICM_mon( DBNAME, mode='r+' )
-        if mon.sql_check_orbit( meta_dict['orbit'] ) >= 0:
+        if mon.sql_check_orbit( meta_dict['orbit_ref'] ) >= 0:
             continue
         mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
         mon.h5_write_hk( hk_data  )
@@ -436,6 +488,12 @@ def test( num_orbits=1 ):
         mon.sql_write_meta( meta_dict )
         del( mon )
 
+    ## select rows from database given an orbit range
+    mon = ICM_mon( DBNAME, mode='r' )
+    print( mon.sql_select_orbit( [1940,1950] ) )
+    del(mon)
+
+        
 #--------------------------------------------------
 if __name__ == '__main__':
     #test( 5475 )
