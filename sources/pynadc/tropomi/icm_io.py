@@ -139,8 +139,8 @@ class ICM_io( object ):
             grp_path = os.path.join( h5_path.replace('%', ib), h5_name )
             grp = self.__fid[grp_path]
             sgrp = grp['INSTRUMENT']
-            self.instrument_settings = np.array(sgrp['instrument_settings'])
-            self.housekeeping_data = np.array(sgrp['housekeeping_data'])
+            self.instrument_settings = np.squeeze(sgrp['instrument_settings'])
+            self.housekeeping_data = np.squeeze(sgrp['housekeeping_data'])
             sgrp = grp['OBSERVATIONS']
             self.ref_time = (datetime(2010,1,1,0,0,0) \
                              + timedelta(seconds=int(sgrp['time'][0])))

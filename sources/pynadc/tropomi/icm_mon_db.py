@@ -77,14 +77,14 @@ class ICM_mon( object ):
             self.__init = True
             self.__mode = 'w'
             self.__fid = h5py.File( dbname+'.h5', 'w' )
-            self.__fid.attrs['dbVersion'] = self.version()
+            self.__fid.attrs['dbVersion'] = self.pynadc_version()
         else:
             self.__init = False
             self.__mode = mode
             self.__fid = h5py.File( dbname+'.h5', mode )
             ## check versions
             db_version = self.__fid.attrs['dbVersion'].split('.')
-            sw_version = self.version().split('.')
+            sw_version = self.pynadc_version().split('.')
             assert( (db_version[0] == sw_version[0])
                     and (db_version[1] == sw_version[1]) )
 
@@ -99,7 +99,7 @@ class ICM_mon( object ):
         self.__fid.close()
 
     ## ---------- RETURN VERSION of the S/W ----------
-    def version( self ):
+    def pynadc_version( self ):
         '''
         Return S/W version
         '''
@@ -136,7 +136,7 @@ class ICM_mon( object ):
     def __h5_cre_hk( self, hk ):
         '''
         Create datasets for house-keeping data.
-        seperated datasets for  biweight medium and scale
+        seperated datasets for biweight medium and scale
 
         Todo: only include hk-data when the instrument is really performing 
               the requested measurements. 
@@ -165,7 +165,7 @@ class ICM_mon( object ):
     def h5_write_hk( self, hk ):
         '''
         Create datasets for house-keeping data.
-        seperated datasets for  biweight medium and scale
+        seperated datasets for biweight medium and scale
 
         Todo: only include hk-data when the instrument is really performing 
               the requested measurements. 
@@ -349,9 +349,9 @@ class ICM_mon( object ):
          "orbit_used"   : column orbitsUsed     [integer]
          "entry_date"   : column entryDateTime  [text format YY-MM-DD hh:mm:ss]
          "start_time"   : column startDateTime  [text format YY-MM-DD hh:mm:ss]
-         "icm_version"  : column icmVersion     [text format xx.xx.xx]
-         "algo_version" : column algVersion     [text format xx.xx.xx]
-         "db_version"   : column dbVersion      [text format xx.xx.xx]
+         "icm_version"  : column icmVersion     [text free-format]
+         "algo_version" : column algVersion     [text free-format]
+         "db_version"   : column dbVersion      [text free-format]
          "q_det_temp"   : column q_detTemp      [integer]
          "q_obm_temp"   : column q_obmTemp      [integer]
         '''
@@ -480,7 +480,7 @@ def test( num_orbits=1 ):
         meta_dict['icm_version'] = fp.creator_version
 
         ## Tim: how to obtain the actual version of your S/W?
-        meta_dict['algo_version'] = '0.1.0.0'             
+        meta_dict['algo_version'] = '00.01.00'
         meta_dict['q_det_temp'] = 0                       ## obtain from hk
         meta_dict['q_obm_temp'] = 0                       ## obtain from hk
         meta_dict['q_algo'] = 0                           ## obtain from algo?!
@@ -496,13 +496,12 @@ def test( num_orbits=1 ):
         ## Note that ingesting results twice leads to database corruption!
         ##   Please use 'mon.sql_check_orbit'
         mon = ICM_mon( DBNAME, mode='r+' )
-        meta_dict['db_version'] = mon.version()
-        if mon.sql_check_orbit( meta_dict['orbit_ref'] ) >= 0:
-            continue
-        mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
-        mon.h5_write_hk( hk_data  )
-        mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
-        mon.sql_write_meta( meta_dict )
+        meta_dict['db_version'] = mon.pynadc_version()
+        if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
+            mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
+            mon.h5_write_hk( hk_data  )
+            mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
+            mon.sql_write_meta( meta_dict )
         del( mon )
 
     ## select rows from database given an orbit range
