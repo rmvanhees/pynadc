@@ -43,18 +43,18 @@ Methods to create and fill ICM monitoring databases
   is necessary
 '''
 
-import os.path
+import os
 import sqlite3
-
-from importlib import util
 
 import numpy as np
 import h5py
 
 from pynadc.stats import biweight
 
+##--------------------------------------------------
 class ICM_mon( object ):
     '''
+    Defines methods to create ICM monitoring databases and ingest new entries
     '''
     def __init__( self, dbname, mode='r' ):
         '''
@@ -77,11 +77,16 @@ class ICM_mon( object ):
             self.__init = True
             self.__mode = 'w'
             self.__fid = h5py.File( dbname+'.h5', 'w' )
+            self.__fid.attrs['dbVersion'] = self.version()
         else:
             self.__init = False
             self.__mode = mode
             self.__fid = h5py.File( dbname+'.h5', mode )
-            ## check versions 
+            ## check versions
+            db_version = self.__fid.attrs['dbVersion'].split('.')
+            sw_version = self.version().split('.')
+            assert( (db_version[0] == sw_version[0])
+                    and (db_version[1] == sw_version[1]) )
 
     def __repr__( self ):
         pass
@@ -92,6 +97,19 @@ class ICM_mon( object ):
         then close access to databases
         '''
         self.__fid.close()
+
+    ## ---------- RETURN VERSION of the S/W ----------
+    def version( self ):
+        '''
+        Return S/W version
+        '''
+        from importlib import util
+
+        version_spec = util.find_spec( "pynadc.version" )
+        assert (version_spec is not None)
+
+        from pynadc import version
+        return version.__version__
 
     ## ---------- READ/WRITE (USER) ATTRIBUTES ----------
     def h5_set_attr( self, name, value ):
@@ -125,24 +143,24 @@ class ICM_mon( object ):
               Reject entries during start-up or at the end
         '''
         # SWIR related house-keeping data
-        nameList = ('temp_det4','temp_obm_swir','temp_cu_sls_stim',
-                    'temp_obm_swir_grating','temp_obm_swir_if',
-                    'temp_pelt_cu_sls1','temp_pelt_cu_sls2',
-                    'temp_pelt_cu_sls3','temp_pelt_cu_sls4',
-                    'temp_pelt_cu_sls5','swir_vdet_bias',
-                    'difm_status', 'det4_led_status','wls_status',
-                    'common_led_status','sls1_status','sls2_status',
-                    'sls3_status','sls4_status','sls5_status')
-        dtypeList = ()
-        for name in nameList:
-            dtypeList += (hk[name].dtype.name,)
+        name_list = ('temp_det4','temp_obm_swir','temp_cu_sls_stim',
+                     'temp_obm_swir_grating','temp_obm_swir_if',
+                     'temp_pelt_cu_sls1','temp_pelt_cu_sls2',
+                     'temp_pelt_cu_sls3','temp_pelt_cu_sls4',
+                     'temp_pelt_cu_sls5','swir_vdet_bias',
+                     'difm_status', 'det4_led_status','wls_status',
+                     'common_led_status','sls1_status','sls2_status',
+                     'sls3_status','sls4_status','sls5_status')
+        dtype_list = ()
+        for name in name_list:
+            dtype_list += (hk[name].dtype.name,)
 
-        hk_buff = np.empty( 1, dtype=','.join(dtypeList) )
-        hk_buff.dtype.names = nameList
-        dset = self.__fid.create_dataset( "hk_medium", (0,), maxshape=(None,),
-                                          dtype=hk_buff.dtype )
-        dset = self.__fid.create_dataset( "hk_scale", (0,), maxshape=(None,),
-                                          dtype=hk_buff.dtype )
+        hk_buff = np.empty( 1, dtype=','.join(dtype_list) )
+        hk_buff.dtype.names = name_list
+        self.__fid.create_dataset( "hk_medium", (0,), maxshape=(None,),
+                                   dtype=hk_buff.dtype )
+        self.__fid.create_dataset( "hk_scale", (0,), maxshape=(None,),
+                                   dtype=hk_buff.dtype )
                 
     def h5_write_hk( self, hk ):
         '''
@@ -185,50 +203,50 @@ class ICM_mon( object ):
         create datasets for measurement data
         '''
         chunk_sz = (16, frames.shape[0] // 4, frames.shape[1] // 4)
-        dset = self.__fid.create_dataset( "signal",
-                                          (0,) + frames.shape,
-                                          chunks=chunk_sz,
-                                          maxshape=(None,) + frames.shape,
-                                          dtype=frames.dtype )
+        self.__fid.create_dataset( "signal",
+                                   (0,) + frames.shape,
+                                   chunks=chunk_sz,
+                                   maxshape=(None,) + frames.shape,
+                                   dtype=frames.dtype )
         if rows:
             nrows = (frames.shape[1],)
-            dset = self.__fid.create_dataset( "signal_row",
-                                              (0,) + nrows,
-                                              chunks=(16,) + nrows,
-                                              maxshape=(None,) + nrows,
-                                              dtype=frames.dtype )
+            self.__fid.create_dataset( "signal_row",
+                                       (0,) + nrows,
+                                       chunks=(16,) + nrows,
+                                       maxshape=(None,) + nrows,
+                                       dtype=frames.dtype )
 
         if cols:
             ncols = (frames.shape[0],)
-            dset = self.__fid.create_dataset( "signal_col",
-                                              (0,) + ncols,
-                                              chunks=(16,) + ncols,
-                                              maxshape=(None,) + ncols,
-                                              dtype=frames.dtype )
+            self.__fid.create_dataset( "signal_col",
+                                       (0,) + ncols,
+                                       chunks=(16,) + ncols,
+                                       maxshape=(None,) + ncols,
+                                       dtype=frames.dtype )
 
         if method == 'none':
             return
         
-        dset = self.__fid.create_dataset( "signal_{}".format(method),
-                                          (0,) + frames.shape,
-                                          chunks=chunk_sz,
-                                          maxshape=(None,) + frames.shape,
-                                          dtype=frames.dtype )
+        self.__fid.create_dataset( "signal_{}".format(method),
+                                   (0,) + frames.shape,
+                                   chunks=chunk_sz,
+                                   maxshape=(None,) + frames.shape,
+                                   dtype=frames.dtype )
         if rows:
             nrows = (frames.shape[1],)
-            dset = self.__fid.create_dataset( "signal_row_{}".format(method),
-                                              (0,) + nrows,
-                                              chunks=(16,) + nrows,
-                                              maxshape=(None,) + nrows,
-                                              dtype=frames.dtype )
+            self.__fid.create_dataset( "signal_row_{}".format(method),
+                                       (0,) + nrows,
+                                       chunks=(16,) + nrows,
+                                       maxshape=(None,) + nrows,
+                                       dtype=frames.dtype )
 
         if cols:
             ncols = (frames.shape[0],)
-            dset = self.__fid.create_dataset( "signal_col_{}".format(method),
-                                              (0,) + ncols,
-                                              chunks=(16,) + ncols,
-                                              maxshape=(None,) + ncols,
-                                              dtype=frames.dtype )
+            self.__fid.create_dataset( "signal_col_{}".format(method),
+                                       (0,) + ncols,
+                                       chunks=(16,) + ncols,
+                                       maxshape=(None,) + ncols,
+                                       dtype=frames.dtype )
 
     def h5_write_frames( self, values, errors, statistics=None ):
         '''
@@ -240,20 +258,17 @@ class ICM_mon( object ):
         assert(self.__mode != 'r')
 
         if self.__init:
+            ext = 'none'
             if statistics is None:
                 self.__fid.attrs['rows'] = False
                 self.__fid.attrs['cols'] = False
-                if errors is None:
-                    ext = 'none'
-                else:
+                if errors is not None:
                     ext = 'std'
             else:
                 stat_list = statistics.split(',')
                 self.__fid.attrs['rows'] = 'rows' in stat_list
                 self.__fid.attrs['cols'] = 'cols' in stat_list
-                if errors is None:
-                    ext = 'none'
-                else:
+                if errors is not None:
                     ext = stat_list[0]
 
             self.__fid.attrs['method'] = ext
@@ -301,6 +316,9 @@ class ICM_mon( object ):
             
    ## ---------- WRITE META-DATA TO SQL database ----------
     def __sql_cre_meta( self ):
+        '''
+        Create SQLite database for ICM monitoring
+        '''
         dbname = self.dbname + '.db'
         
         con = sqlite3.connect( dbname )
@@ -373,7 +391,7 @@ class ICM_mon( object ):
         row = cur.fetchone()
         cur.close()
         con.close()
-        if row == None: 
+        if row is None: 
             return -1
         else:
             return row[0]
@@ -424,7 +442,6 @@ def test( num_orbits=1 ):
     '''
     Perform some simple test to check the ICM_mon_db class
     '''
-    import os
     import shutil
     
     from datetime import datetime
@@ -440,8 +457,10 @@ def test( num_orbits=1 ):
 
     if os.path.isdir('/Users/richardh'):
         fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
-    else:
+    elif os.path.isdir('/nfs/TROPOMI/ical/'):
         fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
+    else:
+        fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
     icm_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_01_001000_20151002T140000.h5'
 
     for ii in range( num_orbits ):
@@ -459,15 +478,12 @@ def test( num_orbits=1 ):
         meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
         meta_dict['start_time'] = fp.start_time
         meta_dict['icm_version'] = fp.creator_version
-        meta_dict['algo_version'] = '0.1.0.0'             ## placeholder
-        version_spec = util.find_spec( "pynadc.version" )
-        if version_spec is not None:
-            from pynadc import version
-            meta_dict['db_version'] = version.__version__
-        else:
-            meta_dict['db_version'] = '0.1.0.0'           ## placeholder
-        meta_dict['q_det_temp'] = 0                       ## placeholder
-        meta_dict['q_obm_temp'] = 0                       ## placeholder
+
+        ## Tim: how to obtain the actual version of your S/W?
+        meta_dict['algo_version'] = '0.1.0.0'             
+        meta_dict['q_det_temp'] = 0                       ## obtain from hk
+        meta_dict['q_obm_temp'] = 0                       ## obtain from hk
+        meta_dict['q_algo'] = 0                           ## obtain from algo?!
         hk_data = fp.housekeeping_data
     
         ## read data from ICM product and combine band 7 & 8
@@ -480,6 +496,7 @@ def test( num_orbits=1 ):
         ## Note that ingesting results twice leads to database corruption!
         ##   Please use 'mon.sql_check_orbit'
         mon = ICM_mon( DBNAME, mode='r+' )
+        meta_dict['db_version'] = mon.version()
         if mon.sql_check_orbit( meta_dict['orbit_ref'] ) >= 0:
             continue
         mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
