@@ -71,15 +71,13 @@ class ICM_mon( object ):
         '''
         assert( (mode == 'r') or (mode =='r+') )
         self.dbname = dbname
-        
+
         if not os.path.exists( dbname+'.h5' ) \
            and not os.path.exists( dbname+'.db' ):
-            self.__init = True
             self.__mode = 'w'
             self.__fid = h5py.File( dbname+'.h5', 'w' )
             self.__fid.attrs['dbVersion'] = self.pynadc_version()
         else:
-            self.__init = False
             self.__mode = mode
             self.__fid = h5py.File( dbname+'.h5', mode )
             ## check versions
@@ -123,20 +121,23 @@ class ICM_mon( object ):
          - 'icid_list' : [array] list of ic_id and ic_version used by algorithm
          - ...
         '''
-        if self.__init:
+        if self.__mode != 'r':
             self.__fid.attrs[name] = value
 
     def h5_get_attr( self, name ):
         '''
         Obtain value of an HDF5 database attribute
         '''
-        return self.__fid.attrs[name]
+        if name in self.__fid:
+            return self.__fid.attrs[name]
+        else:
+            return None
         
     ## ---------- WRITE HOUSE-KEEPING DATA ----------
     def __h5_cre_hk( self, hk ):
         '''
         Create datasets for house-keeping data.
-        seperated datasets for biweight medium and scale
+        seperated datasets for biweight median and scale
 
         Todo: only include hk-data when the instrument is really performing 
               the requested measurements. 
@@ -157,7 +158,7 @@ class ICM_mon( object ):
 
         hk_buff = np.empty( 1, dtype=','.join(dtype_list) )
         hk_buff.dtype.names = name_list
-        self.__fid.create_dataset( "hk_medium", (0,), maxshape=(None,),
+        self.__fid.create_dataset( "hk_median", (0,), maxshape=(None,),
                                    dtype=hk_buff.dtype )
         self.__fid.create_dataset( "hk_scale", (0,), maxshape=(None,),
                                    dtype=hk_buff.dtype )
@@ -165,7 +166,7 @@ class ICM_mon( object ):
     def h5_write_hk( self, hk ):
         '''
         Create datasets for house-keeping data.
-        seperated datasets for biweight medium and scale
+        seperated datasets for biweight median and scale
 
         Todo: only include hk-data when the instrument is really performing 
               the requested measurements. 
@@ -173,12 +174,12 @@ class ICM_mon( object ):
         '''
         assert(self.__mode != 'r')
 
-        if self.__init:
+        if not ('hk_median' in self.__fid and 'hk_scale' in self.__fid):
             self.__h5_cre_hk( hk )
 
-        hk_median = np.empty( 1, dtype=self.__fid['hk_medium'].dtype )
-        hk_scale = np.empty( 1, dtype=self.__fid['hk_medium'].dtype )
-        for name in self.__fid['hk_medium'].dtype.names:
+        hk_median = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
+        hk_scale = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
+        for name in self.__fid['hk_median'].dtype.names:
             if hk[name].dtype.name.find( 'float' ) >= 0:
                 (mx, sx) = biweight(hk[name], scale=True)
                 hk_median[name] = mx
@@ -188,7 +189,7 @@ class ICM_mon( object ):
                 hk_scale[name]  = np.all(hk[name])
             else:
                 print( name )
-        dset = self.__fid['hk_medium']
+        dset = self.__fid['hk_median']
         dset.resize( (dset.shape[0]+1,) )
         dset[-1] = hk_median
 
@@ -257,7 +258,7 @@ class ICM_mon( object ):
         '''
         assert(self.__mode != 'r')
 
-        if self.__init:
+        if not 'signal' in self.__fid:
             ext = 'none'
             if statistics is None:
                 self.__fid.attrs['rows'] = False
@@ -356,7 +357,7 @@ class ICM_mon( object ):
          "q_obm_temp"   : column q_obmTemp      [integer]
         '''
         dbname = self.dbname + '.db'
-        if self.__init:
+        if not os.path.exists( dbname ):
             self.__sql_cre_meta()
 
         str_sql = 'insert into icm_meta values' \
@@ -380,7 +381,7 @@ class ICM_mon( object ):
         Returns rowID equals -1 when row is not present, else rowID > 0
         '''
         dbname = self.dbname + '.db'
-        if self.__init:
+        if not os.path.exists( dbname ):
             return -1
         
         str_sql = 'select rowID from icm_meta where referenceOrbit={}'
@@ -399,19 +400,21 @@ class ICM_mon( object ):
     def sql_select_orbit( self, orbit, orbit_used=None,
                           q_det_temp=None, q_obm_temp=None ):
         '''
-        Obtain list of rowIDs for given orbit(range)
+        Obtain list of rowIDs and orbit numbers for given orbit(range)
         Parameters:
            orbit      : scalar or range orbit_min, orbit_max
            orbit_used : minimal number of orbits used to calculate results 
            q_det_temp : select only entries with stable detector temperature
            q_obm_temp : select only entries with stable OBM temperature
+
+        Returns dictionary with keys: 'rowID' and 'referenceOrbit'
         '''
         dbname = self.dbname + '.db'
-        row_list = ()
-        if self.__init:
+        row_list = {}
+        if not os.path.exists( dbname ):
             return row_list
 
-        str_sql = 'select rowID from icm_meta'
+        str_sql = 'select rowID,referenceOrbit from icm_meta'
         if len(orbit) == 1:
             str_sql += ' where referenceOrbit={}'.format(orbit)
         else:
@@ -427,13 +430,17 @@ class ICM_mon( object ):
             str_sql += ' and q_obm_temp = 0'
         str_sql += ' order by referenceOrbit'
 
-        con = sqlite3.connect( dbname )
-        cur = con.cursor()
+        conn = sqlite3.connect( dbname )
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
         cur.execute( str_sql )
+        row_list['rowID'] = ()
+        row_list['referenceOrbit'] = ()
         for row in cur:
-            row_list += (row[0],)
+            row_list['rowID'] += (row['rowID'],)
+            row_list['referenceOrbit'] += (row['referenceOrbit'],)
         cur.close()
-        con.close()
+        conn.close()
 
         return row_list
 
@@ -508,9 +515,8 @@ def test( num_orbits=1 ):
     mon = ICM_mon( DBNAME, mode='r' )
     print( mon.sql_select_orbit( [1940,1950] ) )
     del(mon)
-
         
 #--------------------------------------------------
 if __name__ == '__main__':
     #test( 5475 )
-    test( 75 )
+    test( 25 )
