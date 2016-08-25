@@ -62,9 +62,9 @@ class ICM_io( object ):
         
     def __repr__( self ):
         return "ICM_io: {}/{}/{} of bands {}".format( self.__product,
-                                                    self.__h5_path,
-                                                    self.__h5_name,
-                                                    self.bands )
+                                                      self.__h5_path,
+                                                      self.__h5_name,
+                                                      self.bands )
 
     def __del__( self ):
         '''

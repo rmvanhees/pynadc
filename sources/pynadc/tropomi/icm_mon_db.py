@@ -86,14 +86,27 @@ class ICM_mon( object ):
             assert( (db_version[0] == sw_version[0])
                     and (db_version[1] == sw_version[1]) )
 
-    def __repr__( self ):
-        pass
-    
+#    def __repr__( self ):
+#        pass
+
     def __del__( self ):
         '''
         first check if SQLite and HDF5 are consistent
         then close access to databases
         '''
+        if self.__mode != 'r':
+            ## obtain number of row in SQLite database
+            num_sql_rows = self.sql_num_entries()
+            
+            ## check number of entries in HDF5 datasets
+            ds_list = ['hk_median', 'hk_scale', 'signal',
+                       'signal_row', 'signal_col']
+            for ds_name in ds_list:
+                if ds_name in self.__fid:
+                    num_ds_rows = self.__fid[ds_name].shape[0]
+                    msg = "integrity test faild on {}, which has not {} rows".format(ds_name, num_sql_rows)
+                    assert (num_sql_rows == num_ds_rows), msg
+
         self.__fid.close()
 
     ## ---------- RETURN VERSION of the S/W ----------
@@ -374,6 +387,27 @@ class ICM_mon( object ):
         con.commit()
         con.close()
 
+    def sql_num_entries( self ):
+        '''
+        Returns number of rows
+        '''
+        dbname = self.dbname + '.db'
+        if not os.path.exists( dbname ):
+            return 0
+        
+        str_sql = 'select count(*) from icm_meta'
+        
+        con = sqlite3.connect( dbname )
+        cur = con.cursor()
+        cur.execute( str_sql )
+        row = cur.fetchone()
+        cur.close()
+        con.close()
+        if row is None:
+            return -1
+        else:
+            return row[0]
+
     def sql_check_orbit( self, orbit ):
         '''
         Check if data from referenceOrbit is already present in database
@@ -392,7 +426,7 @@ class ICM_mon( object ):
         row = cur.fetchone()
         cur.close()
         con.close()
-        if row is None: 
+        if row is None:
             return -1
         else:
             return row[0]
@@ -449,8 +483,6 @@ def test( num_orbits=1 ):
     '''
     Perform some simple test to check the ICM_mon_db class
     '''
-    import shutil
-    
     from datetime import datetime
 
     from pynadc.tropomi.icm_io import ICM_io
