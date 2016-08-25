@@ -81,14 +81,10 @@ class ICM_io( object ):
              - auxiliary datasets used by patch-routines
             '''
             from datetime import datetime
-            from importlib import util
             
             sgrp = self.__fid.create_group( "METADATA/SRON_METADATA" )
             sgrp.attrs['dateStamp'] = datetime.utcnow().isoformat()
-            version_spec = util.find_spec( "pynadc.version" )
-            if version_spec is not None:
-                from pynadc import version
-                sgrp.attrs['git_tag'] = version.__version__
+            sgrp.attrs['git_tag'] = self.pynadc_version()
             dt = h5py.special_dtype(vlen=str)
             ds = sgrp.create_dataset( 'patched_datasets',
                                       (len(self.__patched_msm),), dtype=dt)
@@ -96,6 +92,19 @@ class ICM_io( object ):
              
         self.__fid.close()
     
+    # ---------- RETURN VERSION of the S/W ----------
+    def pynadc_version( self ):
+        '''
+        Return S/W version
+        '''
+        from importlib import util
+
+        version_spec = util.find_spec( "pynadc.version" )
+        assert (version_spec is not None)
+
+        from pynadc import version
+        return version.__version__
+
     #-------------------------
     def select( self, h5_name, h5_path=None ):
         '''
