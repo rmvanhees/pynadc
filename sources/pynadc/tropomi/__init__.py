@@ -6,4 +6,4 @@
 Tropomi package
 """
 
-__all__ = ['db', 'icm_io.py', 'icm_mon_db.py', 'icm_patch.py']
+__all__ = ['db', 'icm_io', 'icm_mon_db', 'icm_patch', 'icm_plot']

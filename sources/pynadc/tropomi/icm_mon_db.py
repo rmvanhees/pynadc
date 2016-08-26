@@ -7,9 +7,10 @@ Methods to create and fill ICM monitoring databases
 
 -- Adding new entries to the database --
  Public methods to add new entries to the monitoring databases are:
- * h5_write_attr
+ * h5_set_attr
  * h5_write_hk
  * h5_write_frames
+ * h5_set_frame_attr
  * h5_write_dpqf     ## not yet defined nor implemented
  * h5_write_isrf     ## not yet defined nor implemented
  * h5_write_stray    ## not yet defined nor implemented
@@ -21,10 +22,18 @@ Methods to create and fill ICM monitoring databases
  * h5_update_frames  ## not yes implemented
  * sql_update_meta   ## not yes implemented
 
+-- Miscellaneous functions --
+ * pynadc_version
+
 -- Query the database --
  Public methods to query the monitoring databases are:
+ * get_orbit_latest
+ * h5_get_attr
+ * h5_get_frame_attr
+ * h5_read_frames
+ * sql_num_entries
  * sql_check_orbit
- *...
+ * sql_select_orbit
 
 -- Configuration management --
 * ICM product version [KNMI]
@@ -122,10 +131,10 @@ class ICM_mon( object ):
         from pynadc import version
         return version.__version__
 
-    ## ---------- READ/WRITE (USER) ATTRIBUTES ----------
+    ## ---------- READ/WRITE GOBAL ATTRIBUTES ----------
     def h5_set_attr( self, name, value ):
         '''
-        Add attributes to HDF5 database, during definition phase.
+        Add global attributes to HDF5 database, during definition phase.
         Otherwise the call is silently ignored
 
         Please use standard names for attributes:
@@ -134,14 +143,16 @@ class ICM_mon( object ):
          - 'icid_list' : [array] list of ic_id and ic_version used by algorithm
          - ...
         '''
-        if self.__mode != 'r':
-            self.__fid.attrs[name] = value
+        if self.__mode == 'r' or name in self.__fid.attrs.keys():
+            return
+        
+        self.__fid.attrs[name] = value
 
     def h5_get_attr( self, name ):
         '''
         Obtain value of an HDF5 database attribute
         '''
-        if name in self.__fid:
+        if name in self.__fid.attrs.keys():
             return self.__fid.attrs[name]
         else:
             return None
@@ -327,8 +338,79 @@ class ICM_mon( object ):
                 dset.resize( shape )
                 dset[-1,:] = np.nanmedian( errors, axis=1 )
  
+    def h5_read_frames( self, rowID, statistics=None ):
+        '''
+        Read data given rowID
+
+        parameter statistics may contain the following strings (comma-separated)
+         - rows  : return row-averaged results
+         - cols  : return column-averaged results
+         - error : return also error estimates
+        '''
+        res = {}
+        ext = self.__fid.attrs['method']
+        stat_list = statistics.split(',')
+
+        dset = self.__fid['signal']
+        res['signal'] = dset[rowID-1,:,:]
+
+        if ext != 'none' and 'error' in stat_list:
+            dset = self.__fid['signal_{}'.format(ext)]
+            res['signal_{}'.format(ext)] = dset[rowID-1,:,:]
             
-   ## ---------- WRITE META-DATA TO SQL database ----------
+        if self.__fid.attrs['rows'] and 'rows' in stat_list:
+            dset = self.__fid['signal_row']
+            res['signal_row'] = dset[rowID-1,:]
+
+            if ext != 'none' and 'error' in stat_list:
+                dset = self.__fid['signal_row_{}'.format(ext)]
+                res['signal_row_{}'.format(ext)] = dset[rowID-1,:]
+               
+        if self.__fid.attrs['cols'] and 'cols' in stat_list:
+            dset = self.__fid['signal_col']
+            res['signal_col'] = dset[rowID-1,:]
+
+            if ext != 'none' and 'error' in stat_list:
+                dset = self.__fid['signal_col_{}'.format(ext)]
+                res['signal_col_{}'.format(ext)] = dset[rowID-1,:]
+               
+        return res
+    
+    ## ---------- READ/WRITE DATASET ATTRIBUTES ----------
+    def h5_set_frame_attr( self, attr, value ):
+        '''
+        Add attributes to HDF5 datasets, during definition phase.
+        Otherwise the call is silently ignored
+
+        Please use names according to the CF conventions:
+         - 'standard_name' : required CF-conventions attribute
+         - 'long_name' : descriptive name may be used for labeling plots
+         - 'units' : unit of the dataset values
+        '''
+        if self.__mode == 'r':
+            return
+
+        ds_list = [ 'signal', 'signal_row', 'signal_col' ]
+        ext = self.__fid.attrs['method']
+        
+        for ds_name in ds_list:
+            if not attr in self.__fid[ds_name].attrs.keys():
+                self.__fid[ds_name].attrs[attr] = value
+            if ext != 'none':
+                ds_ext = ds_name + '_{}'.format(ext)
+                if not attr in self.__fid[ds_ext].attrs.keys():
+                    self.__fid[ds_ext].attrs[attr] = value
+
+    def h5_get_frame_attr( self, ds_name, attr ):
+        '''
+        Obtain value of an HDF5 dataset attribute
+        '''
+        if attr in self.__fid[ds_name].attrs.keys():
+            return self.__fid[ds_name].attrs[attr]
+        else:
+            return None
+        
+    ## ---------- WRITE META-DATA TO SQL database ----------
     def __sql_cre_meta( self ):
         '''
         Create SQLite database for ICM monitoring
@@ -408,6 +490,27 @@ class ICM_mon( object ):
         else:
             return row[0]
 
+    def get_orbit_latest( self ):
+        '''
+        Returns number of rows
+        '''
+        dbname = self.dbname + '.db'
+        if not os.path.exists( dbname ):
+            return 0
+        
+        str_sql = 'select max(referenceOrbit) from icm_meta'
+        
+        con = sqlite3.connect( dbname )
+        cur = con.cursor()
+        cur.execute( str_sql )
+        row = cur.fetchone()
+        cur.close()
+        con.close()
+        if row is None:
+            return -1
+        else:
+            return row[0]
+
     def sql_check_orbit( self, orbit ):
         '''
         Check if data from referenceOrbit is already present in database
@@ -431,7 +534,7 @@ class ICM_mon( object ):
         else:
             return row[0]
 
-    def sql_select_orbit( self, orbit, orbit_used=None,
+    def sql_select_orbit( self, orbit, full=False, orbit_used=None,
                           q_det_temp=None, q_obm_temp=None ):
         '''
         Obtain list of rowIDs and orbit numbers for given orbit(range)
@@ -448,9 +551,15 @@ class ICM_mon( object ):
         if not os.path.exists( dbname ):
             return row_list
 
-        str_sql = 'select rowID,referenceOrbit from icm_meta'
-        if len(orbit) == 1:
+        if full:
+            str_sql = 'select * from icm_meta'
+        else:
+            str_sql = 'select rowID,referenceOrbit from icm_meta'
+
+        if isinstance( orbit, int ):
             str_sql += ' where referenceOrbit={}'.format(orbit)
+        elif len(orbit) == 1:
+            str_sql += ' where referenceOrbit={}'.format(orbit[0])
         else:
             str_sql += ' where referenceOrbit between {} and {}'.format(*orbit)
 
@@ -468,16 +577,98 @@ class ICM_mon( object ):
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute( str_sql )
-        row_list['rowID'] = ()
-        row_list['referenceOrbit'] = ()
         for row in cur:
-            row_list['rowID'] += (row['rowID'],)
-            row_list['referenceOrbit'] += (row['referenceOrbit'],)
+            if len(row_list) == 0:
+                for key_name in row.keys():
+                    row_list[key_name] = ()
+            for key_name in row.keys():
+                row_list[key_name] += (row[key_name],)
         cur.close()
         conn.close()
 
         return row_list
 
+#--------------------------------------------------
+def test_dark( num_orbits=365 ):
+    '''
+    Perform some simple test to check the ICM_mon_db class
+    '''
+    from datetime import datetime, timedelta
+
+    from pynadc.tropomi.icm_io import ICM_io
+
+    DBNAME = 'mon_dark'
+    ORBIT_WINDOW = 15
+    if os.path.exists( DBNAME + '.h5' ):
+        os.remove( DBNAME + '.h5' )
+    if os.path.exists( DBNAME + '.db' ):
+        os.remove( DBNAME + '.db' )
+
+    if os.path.isdir('/Users/richardh'):
+        fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
+    elif os.path.isdir('/nfs/TROPOMI/ical/'):
+        fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
+    else:
+        fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
+    icm_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_01_001000_20151002T140000.h5'
+
+    for ii in range( num_orbits ):
+        print( ii )
+        
+        ## open access to ICM product
+        fp = ICM_io( os.path.join(fl_path, icm_file), readwrite=False )
+
+        ## select measurement and collect its meta-data 
+        fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
+        meta_dict = {}
+        meta_dict['orbit_ref'] = fp.orbit + ii * ORBIT_WINDOW
+        meta_dict['orbit_window'] = ORBIT_WINDOW
+        meta_dict['orbit_used'] = ORBIT_WINDOW - (ii % 3) ## placeholder
+        meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
+        start_time = datetime.strptime( fp.start_time, '%Y-%m-%d %H:%M:%S' ) \
+                     + timedelta(days=ii)
+        meta_dict['start_time'] = start_time.isoformat(' ')
+        meta_dict['icm_version'] = fp.creator_version
+
+        ## Tim: how to obtain the actual version of your S/W?
+        meta_dict['algo_version'] = '00.01.00'
+        meta_dict['q_det_temp'] = 0                       ## obtain from hk
+        meta_dict['q_obm_temp'] = 0                       ## obtain from hk
+        meta_dict['q_algo'] = 0                           ## obtain from algo?!
+        hk_data = fp.housekeeping_data
+    
+        ## read data from ICM product and combine band 7 & 8
+        (values, errors) = fp.get_data( 'avg' )
+        values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
+        errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
+        del( fp )
+
+        ## then add information to monitoring database
+        ## Note that ingesting results twice leads to database corruption!
+        ##   Please use 'mon.sql_check_orbit'
+        mon = ICM_mon( DBNAME, mode='r+' )
+        meta_dict['db_version'] = mon.pynadc_version()
+        if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
+            mon.h5_set_attr( 'title', 'Tropomi SWIR dark-flux monitoring results' )
+            mon.h5_set_attr( 'institution', 'SRON, Netherlands Institute for Space Research' )
+            mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
+            mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
+            mon.h5_set_attr( 'comment', 'Based on ICIDs such and such' )
+            mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
+            mon.h5_set_attr( 'icid_list', [5,] )
+            mon.h5_set_attr( 'ic_version', [6,] )
+            mon.h5_write_hk( hk_data  )
+            mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
+            mon.h5_set_frame_attr( 'long_name', 'background signal' )
+            mon.h5_set_frame_attr( 'units', 'electron' )
+            mon.sql_write_meta( meta_dict )
+        del( mon )
+
+    ## select rows from database given an orbit range
+    mon = ICM_mon( DBNAME, mode='r' )
+    print( mon.sql_select_orbit( [1940,2050] ) )
+    del(mon)
+        
 #--------------------------------------------------
 def test( num_orbits=1 ):
     '''
@@ -537,18 +728,27 @@ def test( num_orbits=1 ):
         mon = ICM_mon( DBNAME, mode='r+' )
         meta_dict['db_version'] = mon.pynadc_version()
         if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
+            mon.h5_set_attr( 'title', 'Tropomi SWIR dark-flux monitoring results' )
+            mon.h5_set_attr( 'institution', 'SRON, Netherlands Institute for Space Research' )
+            mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
+            mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
+            mon.h5_set_attr( 'comment', 'Based on ICIDs such and such' )
             mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
+            mon.h5_set_attr( 'icid_list', [5,] )
+            mon.h5_set_attr( 'ic_version', [6,] )
             mon.h5_write_hk( hk_data  )
             mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
+            mon.h5_set_frame_attr( 'long_name', 'background signal' )
+            mon.h5_set_frame_attr( 'units', 'electron' )
             mon.sql_write_meta( meta_dict )
         del( mon )
 
     ## select rows from database given an orbit range
     mon = ICM_mon( DBNAME, mode='r' )
-    print( mon.sql_select_orbit( [1940,1950] ) )
+    print( mon.sql_select_orbit( [1940,1950], full=True ) )
     del(mon)
         
 #--------------------------------------------------
 if __name__ == '__main__':
-    #test( 5475 )
-    test( 25 )
+    test_dark()
+    #test( 25 )

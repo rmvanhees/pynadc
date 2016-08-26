@@ -17,4 +17,5 @@ documentation.
 For details on the modules, see the documentation of the corresponding module.
 """
 
-__all__ = ['version', 'stats', 'gosat', 'scia', 'tropomi']
+__all__ = ['version', 'stats', 'extendedrainbow_with_outliers',
+           'gosat', 'scia', 'tropomi']
