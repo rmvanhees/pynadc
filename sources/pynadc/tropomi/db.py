@@ -62,7 +62,10 @@ class S5pDB( object ):
         '''
         '''
         ll = flname.split('_')
-        return( os.path.join(ll[8],ll[4][0:4],ll[4][4:6],ll[4][6:8]) )
+        if len(ll) == 11:
+            return( os.path.join(ll[9],ll[5][0:4],ll[5][4:6],ll[5][6:8]) )
+        else:
+            return( os.path.join(ll[8],ll[4][0:4],ll[4][4:6],ll[4][6:8]) )
     
     def __select_on_date__( self, datetime_str, prefix='' ):
         '''
