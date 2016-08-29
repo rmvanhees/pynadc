@@ -47,7 +47,7 @@ class ICM_io( object ):
         self.__msm_mode = None
         self.__patched_msm = []
 
-        self.orbit = self.__fid.attrs['reference_orbit'][0]
+        self.orbit = self.__fid.attrs['reference_orbit']
         self.start_time = self.__fid.attrs['time_coverage_start'].decode('ascii').strip('Z').replace('T',' ')
         grp = self.__fid['/METADATA/ESA_METADATA/earth_explorer_header/fixed_header']
         dset = grp['source']

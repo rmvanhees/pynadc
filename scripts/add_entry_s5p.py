@@ -241,7 +241,7 @@ class ArchiveSirICM( object ):
         self.meta['fileSize'] = os.path.getsize( flname )
 
         with h5py.File( flname, mode='r' ) as fid:
-            self.meta['referenceOrbit'] = fid.attrs['reference_orbit'][0]
+            self.meta['referenceOrbit'] = fid.attrs['reference_orbit']
             self.meta['time_coverage_start'] = fid.attrs['time_coverage_start'].decode('ascii').strip('Z').replace('T',' ')
             self.meta['time_coverage_end'] = fid.attrs['time_coverage_end'].decode('ascii').strip('Z').replace('T',' ')
             grp = fid['/METADATA/ESA_METADATA/earth_explorer_header/fixed_header']

@@ -24,7 +24,7 @@ class ICM_plot(object):
         self.__icm_version  = res_sql['icmVersion'][0]
         date = res_sql['startDateTime'][0][0:10].replace('-','')
         orbit = res_sql['referenceOrbit'][0]
-        self.__pdf = PdfPages( dbname + '_{}_{}.pdf'.format(date, orbit) )
+        self.__pdf = PdfPages( dbname + '_{}_{:05}.pdf'.format(date, orbit) )
         self.__cmap = cmap
         
     def __repr__( self ):
