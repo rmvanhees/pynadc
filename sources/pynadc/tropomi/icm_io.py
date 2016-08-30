@@ -32,6 +32,7 @@ class ICM_io( object ):
     5) close file
     '''
     def __init__( self, icm_product, readwrite=False, verbose=False ):
+        # import numbers
         assert os.path.isfile( icm_product ), \
             '*** Fatal, can not find ICM_CA_SIR file: {}'.format(icm_product)
 
@@ -47,11 +48,7 @@ class ICM_io( object ):
         self.__msm_mode = None
         self.__patched_msm = []
 
-        orbit = self.__fid.attrs['reference_orbit']
-        if isinstance( orbit, int ):
-            self.orbit = orbit
-        else:
-            self.orbit = orbit[0]
+        self.orbit = int(self.__fid.attrs['reference_orbit'])
         self.start_time = self.__fid.attrs['time_coverage_start'].decode('ascii').strip('Z').replace('T',' ')
         grp = self.__fid['/METADATA/ESA_METADATA/earth_explorer_header/fixed_header']
         dset = grp['source']
