@@ -240,6 +240,8 @@ class ICM_mon( object ):
                                        chunks=(16,) + nrows,
                                        maxshape=(None,) + nrows,
                                        dtype=frames.dtype )
+            self.__fid["signal_row"].attrs["comment"] = \
+                                        "averaged row signal"
 
         if cols:
             ncols = (frames.shape[0],)
@@ -248,6 +250,8 @@ class ICM_mon( object ):
                                        chunks=(16,) + ncols,
                                        maxshape=(None,) + ncols,
                                        dtype=frames.dtype )
+            self.__fid["signal_col"].attrs["comment"] = \
+                                        "averaged column signal"
 
         if method == 'none':
             return
@@ -264,6 +268,8 @@ class ICM_mon( object ):
                                        chunks=(16,) + nrows,
                                        maxshape=(None,) + nrows,
                                        dtype=frames.dtype )
+            self.__fid["signal_row_{}".format(method)].attrs["comment"] = \
+                                "averaged row signal_{}".format(method)
 
         if cols:
             ncols = (frames.shape[0],)
@@ -272,6 +278,8 @@ class ICM_mon( object ):
                                        chunks=(16,) + ncols,
                                        maxshape=(None,) + ncols,
                                        dtype=frames.dtype )
+            self.__fid["signal_col_{}".format(method)].attrs["comment"] = \
+                                    "averaged colum signal_{}".format(method)
 
     def h5_write_frames( self, values, errors, statistics=None ):
         '''
@@ -428,6 +436,10 @@ class ICM_mon( object ):
            icmVersion      text        NOT NULL,
            algVersion      text        NOT NULL,
            dbVersion       text        NOT NULL,
+           dataMedian      float       NOT NULL,
+           dataScale       float       NOT NULL,
+           errorMedian     float       NOT NULL,
+           errorScale      float       NOT NULL,
            q_detTemp       integer     NOT NULL,
            q_obmTemp       integer     NOT NULL
         )''' )
@@ -437,7 +449,7 @@ class ICM_mon( object ):
         con.commit()
         con.close()
 
-    def sql_write_meta( self, meta_dict ):
+    def sql_write_meta( self, meta_dict, verbose=False ):
         '''
         Append monitoring meta-data to SQLite database
         The dictionary "meta_dict" should contain the following fields:
@@ -448,6 +460,10 @@ class ICM_mon( object ):
          "icm_version"  : column icmVersion     [text free-format]
          "algo_version" : column algVersion     [text free-format]
          "db_version"   : column dbVersion      [text free-format]
+         "data_median"  : column dataMedian     [float]
+         "data_scale"   : column dataScale      [float]
+         "error_median" : column errorMedian    [float]
+         "error_scale"  : column errorScale     [float]
          "q_det_temp"   : column q_detTemp      [integer]
          "q_obm_temp"   : column q_obmTemp      [integer]
         '''
@@ -459,8 +475,10 @@ class ICM_mon( object ):
                   '(NULL,{orbit_ref},{orbit_used},{entry_date!r}' \
                   ',{start_time!r}'\
                   ',{icm_version!r},{algo_version!r},{db_version!r}'\
+                  ',{data_median},{data_scale},{error_median},{error_scale}'\
                   ',{q_det_temp},{q_obm_temp})'
-        #print( str_sql.format(**meta_dict) )
+        if verbose:
+            print( str_sql.format(**meta_dict) )
 
         con = sqlite3.connect( dbname )
         cur = con.cursor()
@@ -597,7 +615,7 @@ def test_dark( num_orbits=365 ):
 
     from pynadc.tropomi.icm_io import ICM_io
 
-    DBNAME = 'mon_dark'
+    DBNAME = 'mon_dark_test'
     ORBIT_WINDOW = 15
     if os.path.exists( DBNAME + '.h5' ):
         os.remove( DBNAME + '.h5' )
@@ -620,6 +638,12 @@ def test_dark( num_orbits=365 ):
 
         ## select measurement and collect its meta-data 
         fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
+
+        ## read data from ICM product and combine band 7 & 8
+        (values, errors) = fp.get_data( 'avg' )
+        values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
+        errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
+
         meta_dict = {}
         meta_dict['orbit_ref'] = fp.orbit + ii * ORBIT_WINDOW
         meta_dict['orbit_window'] = ORBIT_WINDOW
@@ -630,6 +654,13 @@ def test_dark( num_orbits=365 ):
         meta_dict['start_time'] = start_time.isoformat(' ')
         meta_dict['icm_version'] = fp.creator_version
 
+        (mx, sx) = biweight(values, scale=True)
+        meta_dict['data_median'] = mx
+        meta_dict['data_scale'] = sx
+        (mx, sx) = biweight(errors, scale=True)
+        meta_dict['error_median'] = mx
+        meta_dict['error_scale'] = sx
+
         ## Tim: how to obtain the actual version of your S/W?
         meta_dict['algo_version'] = '00.01.00'
         meta_dict['q_det_temp'] = 0                       ## obtain from hk
@@ -637,10 +668,6 @@ def test_dark( num_orbits=365 ):
         meta_dict['q_algo'] = 0                           ## obtain from algo?!
         hk_data = fp.housekeeping_data
     
-        ## read data from ICM product and combine band 7 & 8
-        (values, errors) = fp.get_data( 'avg' )
-        values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
-        errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
         del( fp )
 
         ## then add information to monitoring database
@@ -678,7 +705,7 @@ def test( num_orbits=1 ):
 
     from pynadc.tropomi.icm_io import ICM_io
 
-    DBNAME = 'mon_test'
+    DBNAME = 'mon_quick_test'
     ORBIT_WINDOW = 16
     if os.path.exists( DBNAME + '.h5' ):
         os.remove( DBNAME + '.h5' )
@@ -701,6 +728,12 @@ def test( num_orbits=1 ):
 
         ## select measurement and collect its meta-data 
         fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
+    
+        ## read data from ICM product and combine band 7 & 8
+        (values, errors) = fp.get_data( 'avg' )
+        values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
+        errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
+
         meta_dict = {}
         meta_dict['orbit_ref'] = fp.orbit + ii
         meta_dict['orbit_window'] = ORBIT_WINDOW
@@ -709,17 +742,19 @@ def test( num_orbits=1 ):
         meta_dict['start_time'] = fp.start_time
         meta_dict['icm_version'] = fp.creator_version
 
+        (mx, sx) = biweight(values, scale=True)
+        meta_dict['data_median'] = mx
+        meta_dict['data_scale'] = sx
+        (mx, sx) = biweight(errors, scale=True)
+        meta_dict['error_median'] = mx
+        meta_dict['error_scale'] = sx
+
         ## Tim: how to obtain the actual version of your S/W?
         meta_dict['algo_version'] = '00.01.00'
         meta_dict['q_det_temp'] = 0                       ## obtain from hk
         meta_dict['q_obm_temp'] = 0                       ## obtain from hk
         meta_dict['q_algo'] = 0                           ## obtain from algo?!
         hk_data = fp.housekeeping_data
-    
-        ## read data from ICM product and combine band 7 & 8
-        (values, errors) = fp.get_data( 'avg' )
-        values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
-        errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
         del( fp )
 
         ## then add information to monitoring database
@@ -740,7 +775,7 @@ def test( num_orbits=1 ):
             mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
             mon.h5_set_frame_attr( 'long_name', 'background signal' )
             mon.h5_set_frame_attr( 'units', 'electron' )
-            mon.sql_write_meta( meta_dict )
+            mon.sql_write_meta( meta_dict, verbose=True )
         del( mon )
 
     ## select rows from database given an orbit range
