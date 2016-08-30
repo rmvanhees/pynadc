@@ -22,6 +22,8 @@ class ICM_plot(object):
         self.__algo_version = res_sql['algVersion'][0]
         self.__db_version   = res_sql['dbVersion'][0]
         self.__icm_version  = res_sql['icmVersion'][0]
+        self.__sign_median  = res_sql['dataMedian'][0]
+        self.__error_median  = res_sql['errorMedian'][0]
         date = res_sql['startDateTime'][0][0:10].replace('-','')
         orbit = res_sql['referenceOrbit'][0]
         self.__pdf = PdfPages( dbname + '_{}_{:05}.pdf'.format(date, orbit) )
@@ -41,9 +43,11 @@ class ICM_plot(object):
         cre_date = datetime.utcnow().isoformat(' ')[0:19]
     
         info_str = 'date : {}'.format(cre_date) \
-                   + '\nicm_version  : {}'.format(self.__icm_version) \
-                   + '\nalgo_version : {}'.format(self.__algo_version) \
-                   + '\ndb_version   : {}'.format(self.__db_version)
+                   + '\nicm_version   : {}'.format(self.__icm_version) \
+                   + '\nalgo_version  : {}'.format(self.__algo_version) \
+                   + '\ndb_version    : {}'.format(self.__db_version) \
+                   + '\nsignal_median : {:.3f}'.format(self.__sign_median) \
+                   + '\nerror_median  : {:.3f}'.format(self.__error_median)
     
         fig.text( 0.015, 0.075, info_str,
                   verticalalignment='bottom', horizontalalignment='left',
@@ -67,8 +71,8 @@ class ICM_plot(object):
         ax0.set_ylabel( 'row', fontsize=18 )
 
         ax1 = plt.subplot(gs[1:4,2:14])
-        (p_05, p_95) = np.percentile( signal, (5,95) )        
-        ax1.imshow( signal, cmap=self.__cmap, aspect=1, vmin=p_05, vmax=p_95,
+        (p_10, p_90) = np.percentile( signal[np.isfinite(signal)], (10,90) )
+        ax1.imshow( signal, cmap=self.__cmap, aspect=1, vmin=p_10, vmax=p_90,
                     interpolation='none', origin='lower' )
         ax1.set_title( mon.h5_get_attr('comment' ) )
 
@@ -79,7 +83,7 @@ class ICM_plot(object):
         ax3.set_xlabel( 'column', fontsize=18 )
 
         ax4 = plt.subplot(gs[1:6,14])
-        norm = mpl.colors.Normalize(vmin=p_05, vmax=p_95)
+        norm = mpl.colors.Normalize(vmin=p_10, vmax=p_90)
         cb1 = mpl.colorbar.ColorbarBase( ax4, cmap=self.__cmap, norm=norm,
                                          orientation='vertical' )
         cb1.set_label( 'electron / s', fontsize=18 )
