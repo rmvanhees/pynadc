@@ -47,7 +47,11 @@ class ICM_io( object ):
         self.__msm_mode = None
         self.__patched_msm = []
 
-        self.orbit = self.__fid.attrs['reference_orbit']
+        orbit = self.__fid.attrs['reference_orbit']
+        if isinstance( orbit, int ):
+            self.orbit = orbit
+        else:
+            self.orbit = orbit[0]
         self.start_time = self.__fid.attrs['time_coverage_start'].decode('ascii').strip('Z').replace('T',' ')
         grp = self.__fid['/METADATA/ESA_METADATA/earth_explorer_header/fixed_header']
         dset = grp['source']
@@ -170,6 +174,7 @@ class ICM_io( object ):
         The function returns a tuple with the data values and their errors.
         - these values and errors are stored as a list of ndarrays (one array
           per band)
+        - FillValue are set to NaN
         '''
         if msm_mode == 'biweight':
             dset_grp = 'ANALYSIS'
@@ -195,19 +200,26 @@ class ICM_io( object ):
 
         values = None
         errors = None
+        fillvalue = float.fromhex('0x1.ep+122')
         for ib in self.bands:
             sgrp = self.__fid[os.path.join( self.__h5_path.replace('%', ib),
                                             self.__h5_name, dset_grp )]
+            data = np.squeeze(sgrp[dset_values])
+            if sgrp[dset_values].attrs['_FillValue'] == fillvalue:
+                data[(data == fillvalue)] = np.nan
             if values is None:
-                values = [np.squeeze(sgrp[dset_values])]
+                values = [data]
             else:
-                values.append(np.squeeze(sgrp[dset_values]))
+                values.append(data)
                 
             if dset_errors is not None:
+                data = np.squeeze(sgrp[dset_errors])
+                if sgrp[dset_errors].attrs['_FillValue'] == fillvalue:
+                    data[(data == fillvalue)] = np.nan
                 if errors is None:
-                    errors = [np.squeeze(sgrp[dset_errors])]
+                    errors = [data]
                 else:
-                    errors.append(np.squeeze(sgrp[dset_errors]))
+                    errors.append(data)
         
         return (values, errors)
 
