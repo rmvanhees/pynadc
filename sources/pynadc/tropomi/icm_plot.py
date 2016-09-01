@@ -131,9 +131,14 @@ class ICM_plot(object):
         pdf.savefig()
         plt.close()
     
-## read data of latest entry
+## 
+## --------------------------------------------------
+## 
 def test():
-    DBNAME = 'mon_dark'
+    import os
+    
+    DBNAME = 'mon_background_0005_test'
+        
     mon = ICM_mon( DBNAME, mode='r' )
     orbit = mon.get_orbit_latest()
     print( orbit )
