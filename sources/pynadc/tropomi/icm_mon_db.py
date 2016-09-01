@@ -81,13 +81,16 @@ class ICM_mon( object ):
         assert( (mode == 'r') or (mode =='r+') )
         self.dbname = dbname
 
+        self.__mode = mode
+        self.__fid = None
         if not os.path.exists( dbname+'.h5' ) \
            and not os.path.exists( dbname+'.db' ):
+            assert mode == 'r+', \
+                "*** Fatal: databse {} does not exist in read-mode".format(dbname)
             self.__mode = 'w'
             self.__fid = h5py.File( dbname+'.h5', 'w' )
             self.__fid.attrs['dbVersion'] = self.pynadc_version()
         else:
-            self.__mode = mode
             self.__fid = h5py.File( dbname+'.h5', mode )
             ## check versions
             db_version = self.__fid.attrs['dbVersion'].split('.')
@@ -116,7 +119,8 @@ class ICM_mon( object ):
                     msg = "integrity test faild on {}, which has not {} rows".format(ds_name, num_sql_rows)
                     assert (num_sql_rows == num_ds_rows), msg
 
-        self.__fid.close()
+        if self.__fid is not None:
+            self.__fid.close()
 
     ## ---------- RETURN VERSION of the S/W ----------
     def pynadc_version( self ):
@@ -607,7 +611,7 @@ class ICM_mon( object ):
         return row_list
 
 #--------------------------------------------------
-def test_dark( num_orbits=365 ):
+def test_background( num_orbits=365 ):
     '''
     Perform some simple test to check the ICM_mon_db class
     '''
@@ -615,7 +619,7 @@ def test_dark( num_orbits=365 ):
 
     from pynadc.tropomi.icm_io import ICM_io
 
-    DBNAME = 'mon_dark_test'
+    DBNAME = 'mon_background_0005_test'
     ORBIT_WINDOW = 15
     if os.path.exists( DBNAME + '.h5' ):
         os.remove( DBNAME + '.h5' )
@@ -676,11 +680,11 @@ def test_dark( num_orbits=365 ):
         mon = ICM_mon( DBNAME, mode='r+' )
         meta_dict['db_version'] = mon.pynadc_version()
         if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
-            mon.h5_set_attr( 'title', 'Tropomi SWIR dark-flux monitoring results' )
+            mon.h5_set_attr( 'title', 'Tropomi SWIR background monitoring results' )
             mon.h5_set_attr( 'institution', 'SRON, Netherlands Institute for Space Research' )
             mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
             mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
-            mon.h5_set_attr( 'comment', 'Based on ICIDs such and such' )
+            mon.h5_set_attr( 'comment', 'Based on background measurements with ICID 5' )
             mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
             mon.h5_set_attr( 'icid_list', [5,] )
             mon.h5_set_attr( 'ic_version', [6,] )
@@ -785,5 +789,5 @@ def test( num_orbits=1 ):
         
 #--------------------------------------------------
 if __name__ == '__main__':
-    test_dark()
+    test_background()
     #test( 25 )
