@@ -67,6 +67,7 @@ setup(
               'scripts/add_entry_scia.py',
               'scripts/add_entry_s5p.py',
               'scripts/collect_stateDefs.py',
+              'scripts/icm_efm_patch.py',
               'scripts/inquire_db.py',
               'scripts/inquire_gosat.py',
               'scripts/inquire_scia.py',
