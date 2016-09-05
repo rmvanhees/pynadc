@@ -31,9 +31,15 @@ Methods to create and fill ICM monitoring databases
  * h5_get_attr
  * h5_get_frame_attr
  * h5_read_frames
+ * h5_get_trend_colum
+ * h5_get_trend_row
+ * h5_get_trend_pixel
+
  * sql_num_entries
  * sql_check_orbit
  * sql_select_orbit
+ * sql_get_row_list
+ * sql_get_trend_frames
 
 -- Configuration management --
 * ICM product version [KNMI]
@@ -135,6 +141,9 @@ class ICM_mon( object ):
         from pynadc import version
         return version.__version__
 
+    def get_method( self ):
+        return self.__fid.attrs['method']
+
     ## ---------- READ/WRITE GOBAL ATTRIBUTES ----------
     def h5_set_attr( self, name, value ):
         '''
@@ -188,8 +197,16 @@ class ICM_mon( object ):
         hk_buff.dtype.names = name_list
         self.__fid.create_dataset( "hk_median", (0,), maxshape=(None,),
                                    dtype=hk_buff.dtype )
+        self.__fid["hk_median"].attrs["comment"] = \
+                                "biweight median of hous-keeping data (SWIR)"
+        self.__fid["hk_median"].attrs["fields"] = \
+                                    np.array([np.string_(n) for n in name_list])
         self.__fid.create_dataset( "hk_scale", (0,), maxshape=(None,),
                                    dtype=hk_buff.dtype )
+        self.__fid["hk_scale"].attrs["comment"] = \
+                                "biweight scale of hous-keeping data (SWIR)"
+        self.__fid["hk_scale"].attrs["fields"] = \
+                                    np.array([np.string_(n) for n in name_list])
                 
     def h5_write_hk( self, hk ):
         '''
@@ -237,6 +254,8 @@ class ICM_mon( object ):
                                    chunks=chunk_sz,
                                    maxshape=(None,) + frames.shape,
                                    dtype=frames.dtype )
+        self.__fid["signal"].attrs["comment"] = \
+                                    "values in detector-pixel coordinates"
         if rows:
             nrows = (frames.shape[1],)
             self.__fid.create_dataset( "signal_row",
@@ -245,7 +264,7 @@ class ICM_mon( object ):
                                        maxshape=(None,) + nrows,
                                        dtype=frames.dtype )
             self.__fid["signal_row"].attrs["comment"] = \
-                                        "averaged row signal"
+                                    "medians along the first axis of signal"
 
         if cols:
             ncols = (frames.shape[0],)
@@ -255,35 +274,40 @@ class ICM_mon( object ):
                                        maxshape=(None,) + ncols,
                                        dtype=frames.dtype )
             self.__fid["signal_col"].attrs["comment"] = \
-                                        "averaged column signal"
+                                    "medians along the second axis of signal"
 
         if method == 'none':
             return
-        
-        self.__fid.create_dataset( "signal_{}".format(method),
+
+        ds_name = "signal_{}".format(method)
+        self.__fid.create_dataset( ds_name,
                                    (0,) + frames.shape,
                                    chunks=chunk_sz,
                                    maxshape=(None,) + frames.shape,
                                    dtype=frames.dtype )
+        self.__fid[ds_name].attrs["comment"] = \
+                                    "errors in detector-pixel coordinates"
         if rows:
             nrows = (frames.shape[1],)
-            self.__fid.create_dataset( "signal_row_{}".format(method),
+            ds_name = "signal_row_{}".format(method)
+            self.__fid.create_dataset( ds_name,
                                        (0,) + nrows,
                                        chunks=(16,) + nrows,
                                        maxshape=(None,) + nrows,
                                        dtype=frames.dtype )
-            self.__fid["signal_row_{}".format(method)].attrs["comment"] = \
-                                "averaged row signal_{}".format(method)
+            self.__fid[ds_name].attrs["comment"] = \
+                    "medians along the first axis of signal_{}".format(method)
 
         if cols:
+            ds_name = "signal_col_{}".format(method)
             ncols = (frames.shape[0],)
-            self.__fid.create_dataset( "signal_col_{}".format(method),
+            self.__fid.create_dataset( ds_name,
                                        (0,) + ncols,
                                        chunks=(16,) + ncols,
                                        maxshape=(None,) + ncols,
                                        dtype=frames.dtype )
-            self.__fid["signal_col_{}".format(method)].attrs["comment"] = \
-                                    "averaged colum signal_{}".format(method)
+            self.__fid[ds_name].attrs["comment"] = \
+                    "medians along the second axis of signal_{}".format(method)
 
     def h5_write_frames( self, values, errors, statistics=None ):
         '''
@@ -350,9 +374,9 @@ class ICM_mon( object ):
                 dset.resize( shape )
                 dset[-1,:] = np.nanmedian( errors, axis=1 )
  
-    def h5_read_frames( self, rowID, statistics=None ):
+    def h5_read_frames( self, row_id, statistics=None ):
         '''
-        Read data given rowID
+        Read data given row_id
 
         parameter statistics may contain the following strings (comma-separated)
          - rows  : return row-averaged results
@@ -364,30 +388,39 @@ class ICM_mon( object ):
         stat_list = statistics.split(',')
 
         dset = self.__fid['signal']
-        res['signal'] = dset[rowID-1,:,:]
+        res['signal'] = dset[row_id-1,:,:]
 
         if ext != 'none' and 'error' in stat_list:
             dset = self.__fid['signal_{}'.format(ext)]
-            res['signal_{}'.format(ext)] = dset[rowID-1,:,:]
+            res['signal_{}'.format(ext)] = dset[row_id-1,:,:]
             
         if self.__fid.attrs['rows'] and 'rows' in stat_list:
             dset = self.__fid['signal_row']
-            res['signal_row'] = dset[rowID-1,:]
+            res['signal_row'] = dset[row_id-1,:]
 
             if ext != 'none' and 'error' in stat_list:
                 dset = self.__fid['signal_row_{}'.format(ext)]
-                res['signal_row_{}'.format(ext)] = dset[rowID-1,:]
+                res['signal_row_{}'.format(ext)] = dset[row_id-1,:]
                
         if self.__fid.attrs['cols'] and 'cols' in stat_list:
             dset = self.__fid['signal_col']
-            res['signal_col'] = dset[rowID-1,:]
+            res['signal_col'] = dset[row_id-1,:]
 
             if ext != 'none' and 'error' in stat_list:
                 dset = self.__fid['signal_col_{}'.format(ext)]
-                res['signal_col_{}'.format(ext)] = dset[rowID-1,:]
+                res['signal_col_{}'.format(ext)] = dset[row_id-1,:]
                
         return res
     
+    def h5_get_trend_cols( self, orbit_list=None, orbit_range=None ):
+        pass
+
+    def h5_get_trend_rows( self, orbit_list=None, orbit_range=None ):
+        pass
+
+    def h5_get_trend_pixel( self, pixel_id, orbit_list=None, orbit_range=None ):
+        pass
+
     ## ---------- READ/WRITE DATASET ATTRIBUTES ----------
     def h5_set_frame_attr( self, attr, value ):
         '''
@@ -565,6 +598,7 @@ class ICM_mon( object ):
            orbit_used : minimal number of orbits used to calculate results 
            q_det_temp : select only entries with stable detector temperature
            q_obm_temp : select only entries with stable OBM temperature
+           full       : add data of all columns to output dictionary
 
         Returns dictionary with keys: 'rowID' and 'referenceOrbit'
         '''
@@ -609,6 +643,68 @@ class ICM_mon( object ):
         conn.close()
 
         return row_list
+    
+    def sql_get_row_list( self, orbit_list=None, orbit_range=None,
+                          frame_stats=False ):
+        '''
+        Obtain list of rowIDs and orbit numbers for given orbit(range)
+        Parameters:
+           orbit_list  : list with orbit numbers
+           orbit_range : list with orbit range: [orbit_mn, orbit_mx]
+           frame_stats : add statistics of selected frames as
+                           dataMedian, dataScale, errorMedian, errorScale
+
+        Returns dictionary with keys: 'rowID' and 'referenceOrbit'
+        '''
+        dbname = self.dbname + '.db'
+        row_list = {}
+        if not os.path.exists( dbname ):
+            return row_list
+
+        if frame_stats:
+            str_sql = 'select rowID,referenceOrbit,dataMedian,dataScale,errorMedian,errorScale from icm_meta'
+        else:
+            str_sql = 'select rowID,referenceOrbit from icm_meta'
+            
+        if orbit_list is not None:
+            str_sql += ' where referenceOrbit in ('
+            str_sql += ','.join(str(x) for x in orbit_list)
+            str_sql += ')'
+        elif orbit_range is not None:
+            assert( len(orbit_range) == 2 )
+
+            str_sql += ' where referenceOrbit between {} and {}'.format(*orbit_range)
+        str_sql += ' order by referenceOrbit'
+
+        conn = sqlite3.connect( dbname )
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute( str_sql )
+        for row in cur:
+            if len(row_list) == 0:
+                for key_name in row.keys():
+                    row_list[key_name] = ()
+            for key_name in row.keys():
+                row_list[key_name] += (row[key_name],)
+        cur.close()
+        conn.close()
+ 
+        return row_list
+           
+
+    def sql_get_trend_frames( self, orbit_list=None, orbit_range=None ):
+        '''
+        Obtain list of rowIDs and orbit numbers for given orbit(range)
+        Parameters:
+           orbit_list  : list with orbit numbers
+           orbit_range : list with orbit range: [orbit_mn, orbit_mx]
+
+        Returns dictionary with keys: 'rowID', 'referenceOrbit', 'dataMedian', 
+             'dataScale', 'errorMedian', 'errorScale'
+        '''
+        return self.sql_get_row_list( orbit_list=orbit_list,
+                                      orbit_range=orbit_range,
+                                      frame_stats=True )
 
 #--------------------------------------------------
 def test_background( num_orbits=365 ):
@@ -680,17 +776,17 @@ def test_background( num_orbits=365 ):
         mon = ICM_mon( DBNAME, mode='r+' )
         meta_dict['db_version'] = mon.pynadc_version()
         if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
-            mon.h5_set_attr( 'title', 'Tropomi SWIR background monitoring results' )
+            mon.h5_set_attr( 'title', 'Tropomi SWIR thermal background monitoring' )
             mon.h5_set_attr( 'institution', 'SRON, Netherlands Institute for Space Research' )
             mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
             mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
-            mon.h5_set_attr( 'comment', 'Based on background measurements with ICID 5' )
+            mon.h5_set_attr( 'comment', 'ICID 5' )
             mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
             mon.h5_set_attr( 'icid_list', [5,] )
             mon.h5_set_attr( 'ic_version', [6,] )
             mon.h5_write_hk( hk_data  )
             mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
-            mon.h5_set_frame_attr( 'long_name', 'background signal' )
+            mon.h5_set_frame_attr( 'long_name', 'signal' )
             mon.h5_set_frame_attr( 'units', 'electron' )
             mon.sql_write_meta( meta_dict )
         del( mon )
@@ -698,6 +794,15 @@ def test_background( num_orbits=365 ):
     ## select rows from database given an orbit range
     mon = ICM_mon( DBNAME, mode='r' )
     print( mon.sql_select_orbit( [1940,2050] ) )
+
+    print( mon.sql_get_row_list( orbit_range=[1940,2050] ) )
+
+    print( mon.sql_get_row_list( orbit_list=[1954,1969,1999,2044] ) )
+        
+    print( mon.sql_get_row_list( orbit_list=[2044] ) )
+        
+    print( mon.sql_get_trend_frames( orbit_range=[2010,2050] ) )
+
     del(mon)
         
 #--------------------------------------------------
