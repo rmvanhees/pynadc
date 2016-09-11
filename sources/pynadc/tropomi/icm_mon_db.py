@@ -707,7 +707,7 @@ class ICM_mon( object ):
                                       frame_stats=True )
 
 #--------------------------------------------------
-def test_background( num_orbits=365 ):
+def test_background( num_orbits=365, rebuild=False ):
     '''
     Perform some simple test to check the ICM_mon_db class
     '''
@@ -716,80 +716,87 @@ def test_background( num_orbits=365 ):
     from pynadc.tropomi.icm_io import ICM_io
 
     DBNAME = 'mon_background_0005_test'
-    ORBIT_WINDOW = 15
-    if os.path.exists( DBNAME + '.h5' ):
-        os.remove( DBNAME + '.h5' )
-    if os.path.exists( DBNAME + '.db' ):
-        os.remove( DBNAME + '.db' )
-
-    if os.path.isdir('/Users/richardh'):
-        fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
-    elif os.path.isdir('/nfs/TROPOMI/ical/'):
-        fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
-    else:
-        fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
-    icm_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_01_001000_20151002T140000.h5'
-
-    for ii in range( num_orbits ):
-        print( ii )
-        
-        ## open access to ICM product
-        fp = ICM_io( os.path.join(fl_path, icm_file), readwrite=False )
-
-        ## select measurement and collect its meta-data 
-        fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
-
-        ## read data from ICM product and combine band 7 & 8
-        (values, errors) = fp.get_data( 'avg' )
-        values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
-        errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
-
-        meta_dict = {}
-        meta_dict['orbit_ref'] = fp.orbit + ii * ORBIT_WINDOW
-        meta_dict['orbit_window'] = ORBIT_WINDOW
-        meta_dict['orbit_used'] = ORBIT_WINDOW - (ii % 3) ## placeholder
-        meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
-        start_time = datetime.strptime( fp.start_time, '%Y-%m-%d %H:%M:%S' ) \
-                     + timedelta(days=ii)
-        meta_dict['start_time'] = start_time.isoformat(' ')
-        meta_dict['icm_version'] = fp.creator_version
-
-        (mx, sx) = biweight(values, scale=True)
-        meta_dict['data_median'] = mx
-        meta_dict['data_scale'] = sx
-        (mx, sx) = biweight(errors, scale=True)
-        meta_dict['error_median'] = mx
-        meta_dict['error_scale'] = sx
-
-        ## Tim: how to obtain the actual version of your S/W?
-        meta_dict['algo_version'] = '00.01.00'
-        meta_dict['q_det_temp'] = 0                       ## obtain from hk
-        meta_dict['q_obm_temp'] = 0                       ## obtain from hk
-        meta_dict['q_algo'] = 0                           ## obtain from algo?!
-        hk_data = fp.housekeeping_data
+    if rebuild:
+        ORBIT_WINDOW = 15
     
-        del( fp )
+        if os.path.exists( DBNAME + '.h5' ):
+            os.remove( DBNAME + '.h5' )
+        if os.path.exists( DBNAME + '.db' ):
+            os.remove( DBNAME + '.db' )
 
-        ## then add information to monitoring database
-        ## Note that ingesting results twice leads to database corruption!
-        ##   Please use 'mon.sql_check_orbit'
-        mon = ICM_mon( DBNAME, mode='r+' )
-        meta_dict['db_version'] = mon.pynadc_version()
-        if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
-            mon.h5_set_attr( 'title', 'Tropomi SWIR thermal background monitoring' )
-            mon.h5_set_attr( 'institution', 'SRON, Netherlands Institute for Space Research' )
-            mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
-            mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
-            mon.h5_set_attr( 'comment', 'ICID 5' )
-            mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
-            mon.h5_set_attr( 'icid_list', [5,] )
-            mon.h5_set_attr( 'ic_version', [6,] )
-            mon.h5_write_hk( hk_data  )
-            mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
-            mon.h5_set_frame_attr( 'long_name', 'signal' )
-            mon.h5_set_frame_attr( 'units', 'electron' )
-            mon.sql_write_meta( meta_dict )
-        del( mon )
+        if os.path.isdir('/Users/richardh'):
+            fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
+        elif os.path.isdir('/nfs/TROPOMI/ical/'):
+            fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
+        else:
+            fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
+        icm_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_01_001000_20151002T140000.h5'
+
+        for ii in range( num_orbits ):
+            print( ii )
+        
+            ## open access to ICM product
+            fp = ICM_io( os.path.join(fl_path, icm_file), readwrite=False )
+
+            ## select measurement and collect its meta-data 
+            fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
+
+            ## read data from ICM product and combine band 7 & 8
+            (values, errors) = fp.get_data( 'avg' )
+            values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
+            errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
+
+            meta_dict = {}
+            meta_dict['orbit_ref'] = fp.orbit + ii * ORBIT_WINDOW
+            meta_dict['orbit_window'] = ORBIT_WINDOW
+            meta_dict['orbit_used'] = ORBIT_WINDOW - (ii % 3) ## placeholder
+            meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
+            start_time = datetime.strptime( fp.start_time,
+                                            '%Y-%m-%d %H:%M:%S' ) \
+                + timedelta(days=ii)
+            meta_dict['start_time'] = start_time.isoformat(' ')
+            meta_dict['icm_version'] = fp.creator_version
+
+            (mx, sx) = biweight(values, scale=True)
+            meta_dict['data_median'] = mx
+            meta_dict['data_scale'] = sx
+            (mx, sx) = biweight(errors, scale=True)
+            meta_dict['error_median'] = mx
+            meta_dict['error_scale'] = sx
+
+            ## Tim: how to obtain the actual version of your S/W?
+            meta_dict['algo_version'] = '00.01.00'
+            meta_dict['q_det_temp'] = 0                 ## obtain from hk
+            meta_dict['q_obm_temp'] = 0                 ## obtain from hk
+            meta_dict['q_algo'] = 0                     ## obtain from algo?!
+            hk_data = fp.housekeeping_data
+    
+            ## then add information to monitoring database
+            ## Note that ingesting results twice leads to database corruption!
+            ##   Please use 'mon.sql_check_orbit'
+            mon = ICM_mon( DBNAME, mode='r+' )
+            meta_dict['db_version'] = mon.pynadc_version()
+            if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
+                mon.h5_set_attr( 'title',
+                                 'Tropomi SWIR thermal background monitoring' )
+                mon.h5_set_attr( 'institution',
+                                 'SRON, Netherlands Institute for Space Research' )
+                mon.h5_set_attr( 'source',
+                                 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
+                mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
+                mon.h5_set_attr( 'comment',
+                                 'ICID {} ($t_{{exp}}={:.3f}$)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
+                mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
+                mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
+                mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
+                mon.h5_write_hk( hk_data  )
+                mon.h5_write_frames( values, errors,
+                                     statistics='std,rows,cols'  )
+                mon.h5_set_frame_attr( 'long_name', 'signal' )
+                mon.h5_set_frame_attr( 'units', 'electron' )
+                mon.sql_write_meta( meta_dict )
+            del( fp )
+            del( mon )
 
     ## select rows from database given an orbit range
     mon = ICM_mon( DBNAME, mode='r' )
@@ -864,7 +871,6 @@ def test( num_orbits=1 ):
         meta_dict['q_obm_temp'] = 0                       ## obtain from hk
         meta_dict['q_algo'] = 0                           ## obtain from algo?!
         hk_data = fp.housekeeping_data
-        del( fp )
 
         ## then add information to monitoring database
         ## Note that ingesting results twice leads to database corruption!
@@ -876,15 +882,17 @@ def test( num_orbits=1 ):
             mon.h5_set_attr( 'institution', 'SRON, Netherlands Institute for Space Research' )
             mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
             mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
-            mon.h5_set_attr( 'comment', 'Based on ICIDs such and such' )
+            mon.h5_set_attr( 'comment',
+                             'ICID {} ($t_{{exp}}={:.3f}$)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
             mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
-            mon.h5_set_attr( 'icid_list', [5,] )
-            mon.h5_set_attr( 'ic_version', [6,] )
+            mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
+            mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
             mon.h5_write_hk( hk_data  )
             mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
             mon.h5_set_frame_attr( 'long_name', 'background signal' )
             mon.h5_set_frame_attr( 'units', 'electron' )
             mon.sql_write_meta( meta_dict, verbose=True )
+        del( fp )
         del( mon )
 
     ## select rows from database given an orbit range
@@ -893,6 +901,91 @@ def test( num_orbits=1 ):
     del(mon)
         
 #--------------------------------------------------
+def test2():
+    '''
+    Perform some simple test to check the ICM_mon_db class
+    '''
+    from datetime import datetime
+
+    from pynadc.tropomi.ocm_io import OCM_io
+
+    DBNAME = 'mon_sun_isrf_test'
+    ORBIT_WINDOW = 1
+    if os.path.exists( DBNAME + '.h5' ):
+        os.remove( DBNAME + '.h5' )
+    if os.path.exists( DBNAME + '.db' ):
+        os.remove( DBNAME + '.db' )
+
+    if os.path.isdir('/Users/richardh'):
+        fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
+    elif os.path.isdir('/nfs/TROPOMI/ocal/'):
+        fl_path = '/nfs/TROPOMI/ocal/proc_knmi/2015_05_02T10_28_44_SwirlsSunIsrf'
+    else:
+        fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
+    ocm_msm = 'after_et_l1bavg_004_block-004-004'
+
+    dirList = [d for d in os.listdir( fl_path ) 
+               if os.path.isdir(os.path.join(fl_path, d))]
+    dirList.sort()
+    ii = 0
+    for msm in dirList:
+        fp = OCM_io( os.path.join(fl_path, msm), verbose=True )
+        if fp.select( 31623 ) == 0:
+            continue
+        
+        print( fp )
+        (values, errors) = fp.get_data()
+        print( 'dimensions of values: ', len(values), values[0].shape )
+        values = np.hstack((values[0], values[1]))
+        errors = np.hstack((errors[0], errors[1]))
+        print( 'dimensions of values: ', values.shape )
+        
+        meta_dict = {}
+        meta_dict['orbit_ref'] = ii
+        meta_dict['orbit_window'] = ORBIT_WINDOW
+        meta_dict['orbit_used'] = fp.num_msm
+        meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
+        meta_dict['start_time'] = fp.start_time
+        meta_dict['icm_version'] = fp.creator_version
+        
+        (mx, sx) = biweight(values, scale=True)
+        meta_dict['data_median'] = mx
+        meta_dict['data_scale'] = sx
+        (mx, sx) = biweight(errors, scale=True)
+        meta_dict['error_median'] = mx
+        meta_dict['error_scale'] = sx
+
+        ## Tim: how to obtain the actual version of your S/W?
+        meta_dict['algo_version'] = '00.01.00'
+        meta_dict['db_version'] = fp.pynadc_version()
+        meta_dict['q_det_temp'] = 0                       ## obtain from hk
+        meta_dict['q_obm_temp'] = 0                       ## obtain from hk
+        meta_dict['q_algo'] = 0                           ## obtain from algo?!
+        hk_data = fp.housekeeping_data
+        ii += 1
+        
+        mon = ICM_mon( DBNAME, mode='r+' )
+        mon.h5_set_attr( 'title', 'Tropomi SWIR OCAL SunISRF backgrounds' )
+        mon.h5_set_attr( 'institution', 'SRON, Netherlands Institute for Space Research' )
+        mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi On-ground Calibration and Monitoring product' )
+        mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' )
+        mon.h5_set_attr( 'comment',
+                         'ICID {} ($t_{{exp}}={:.3f}$)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
+        mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
+        mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
+        mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
+        mon.h5_write_hk( hk_data  )
+        mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
+        mon.h5_set_frame_attr( 'long_name', 'signal' )
+        mon.h5_set_frame_attr( 'units', 'electron / s' )
+        mon.sql_write_meta( meta_dict, verbose=True )
+
+        del( fp )
+        del( mon )
+        
+        
+#--------------------------------------------------
 if __name__ == '__main__':
-    test_background()
+    test_background(rebuild=True)
     #test( 25 )
+    #test2()
