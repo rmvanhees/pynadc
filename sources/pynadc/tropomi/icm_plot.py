@@ -214,47 +214,58 @@ class ICM_plot(object):
         self.__pdf.savefig()
         plt.close()
     
-    def __dpqm( self, dpqm, low_thres=0.1, high_thres=0.8,
-                title=None, cmap="RainbowBands" ):
+    def __quality( self, dpqm, low_thres=0.1, high_thres=0.8,
+                   title=None, cmap=None ):
         '''
         '''
+        thres_min = 10 * low_thres
+        thres_max = 10 * high_thres
+        dpqf = (dpqm * 10).astype(np.byte)
+        unused_cols = np.where(np.sum(dpqm, axis=0) < (256 // 4))
+        if unused_cols[0].size > 0:
+            dpqf[:,unused_cols[0]] = -1
+        unused_rows = np.where(np.sum(dpqm, axis=1) < (1000 // 4))
+        if unused_rows[0].size > 0:
+            dpqf[:,unused_rows[0]] = -1
+
         fig = plt.figure(figsize=(18, 7.875))
         if title is not None:
             fig.suptitle( title, fontsize=24 )
         gs = gridspec.GridSpec(6,16) 
 
-        dpqf_col_01 = np.sum( (dpqm <= low_thres), axis=1 )
-        dpqf_col_08 = np.sum( (dpqm <= high_thres), axis=1 )
+        #clist = ['w', 'k','#EE6677','#CCBB44']
+        clist = ['w', 'k','#228833','#CCBB44']
+        cmap = mpl.colors.ListedColormap(clist)
+        bounds=[-1, 0, thres_min, thres_max, 10]
+        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+
+        dpqf_col_01 = np.sum( ((dpqf >= 0) & (dpqf < thres_min)), axis=1 )
+        dpqf_col_08 = np.sum( ((dpqf >= 0) & (dpqf < thres_max)), axis=1 )
         
         ax0 = plt.subplot(gs[1:4,0:2])
-        ax0.step(dpqf_col_01, np.arange(dpqf_col_01.size),
-                 lw=0.5, color=line_colors[0] )
         ax0.step(dpqf_col_08, np.arange(dpqf_col_08.size),
-                 lw=0.5, color=line_colors[4] )
-        ax0.set_xlim( [15, 45] )
+                 lw=0.5, color=clist[2] )
+        ax0.step(dpqf_col_01, np.arange(dpqf_col_01.size),
+                 lw=0.6, color=clist[1] )
+        ax0.set_xlim( [0, 30] )
         ax0.set_xlabel( 'bad (count)' )
         ax0.set_ylim( [0, dpqf_col_01.size-1] )
         ax0.set_ylabel( 'row' )
         ax0.grid(True)
 
-        dpqf = np.copy(dpqm)
-        dpqf[np.where( (dpqm == .0) )] = 1.
-        dpqf[np.where( (dpqm > 0.) & (dpqm <= low_thres) )] = 0.8
-        dpqf[np.where( (dpqm > low_thres) & (dpqm <= high_thres) )] = 0.5
-        dpqf[np.where( (dpqm > high_thres) )] = 0.
-
         ax1 = plt.subplot(gs[1:4,2:14])
-        ax1.imshow( dpqf, cmap=cmap, aspect=1, vmin=0, vmax=1,
+        ax1.imshow( dpqf, cmap=cmap, norm=norm,
+                    aspect=1, vmin=-1, vmax=10,
                     interpolation='none', origin='lower' )
 
-        dpqf_row_01 = np.sum( (dpqm <= low_thres), axis=0 )
-        dpqf_row_08 = np.sum( (dpqm <= high_thres), axis=0 )
+        dpqf_row_01 = np.sum( ((dpqf >= 0) & (dpqf < thres_min)), axis=0 )
+        dpqf_row_08 = np.sum( ((dpqf >= 0) & (dpqf < thres_max)), axis=0 )
         
         ax3 = plt.subplot(gs[4:6,2:14])
-        ax3.step(np.arange(dpqf_row_01.size), dpqf_row_01,
-                 lw=0.5, color=line_colors[0] )
         ax3.step(np.arange(dpqf_row_08.size), dpqf_row_08,
-                 lw=0.5, color=line_colors[4] )
+                 lw=0.5, color=clist[2] )
+        ax3.step(np.arange(dpqf_row_01.size), dpqf_row_01,
+                 lw=0.6, color=clist[1] )
         ax3.set_ylim( [0, 10] )
         ax3.set_ylabel( 'bad (count)' )
         ax3.set_xlim( [0, dpqf_row_01.size-1] )
@@ -298,14 +309,19 @@ class ICM_plot(object):
     def draw_quality( self, mon, dpqm ):
         '''
         '''
-        self.__dpqm( dpqm, title=mon.h5_get_attr('title') )
+        self.__quality( dpqm, title=mon.h5_get_attr('title') )
 ## 
 ## --------------------------------------------------
 ## 
 def test_dpqm( ):
     import os
     
-    dpqm_fl='/nfs/TROPOMI/ocal/ckd/ckd_release_swir/dpqf/ckd.dpqf.detector4.nc'
+    if os.path.isdir('/Users/richardh'):
+        data_dir = '/Users/richardh/Data'
+    else:
+        data_dir ='/nfs/TROPOMI/ocal/ckd/ckd_release_swir/dpqf' 
+    dpqm_fl=os.path.join(data_dir, 'ckd.dpqf.detector4.nc')
+    
     with h5py.File( dpqm_fl, 'r' ) as fid:
         b7 = fid['BAND7/dpqf_map'][:-1,:]
         b8 = fid['BAND8/dpqf_map'][:-1,:]
