@@ -684,13 +684,13 @@ def get_product_by_name( args=None, product=None, dbname=DB_NAME,
     db = S5pDB_name( dbname )
     if mode == 'location':
         result = db.location( product )
-        if toScreen:
+        if toScreen and len(result) == 2:
             print( os.path.join(result[0], result[1]) )
 
         return result
     elif mode == 'meta':
         result = db.meta( product )
-        if toScreen:
+        if toScreen and len(result) > 0:
             keys_list = list(result.keys())
             keys_list.sort()
             for key_name in keys_list:
