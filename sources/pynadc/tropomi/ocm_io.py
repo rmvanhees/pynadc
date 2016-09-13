@@ -145,7 +145,7 @@ class OCM_io( object ):
                 data = sgid['signal'][offs:,:-1,:]
                 if sgid['signal'].attrs['_FillValue'] == fillvalue:
                     data[(data == fillvalue)] = np.nan
-                (mx, sx) = biweight( data, axis=0, scale=True )
+                (mx, sx) = biweight( data, axis=0, spread=True )
                 if values is None:
                     values = [mx]
                     errors = [sx]
@@ -161,7 +161,7 @@ class OCM_io( object ):
                 data = sgid['signal'][offs:,:-1,:]
                 if sgid['signal'].attrs['_FillValue'] == fillvalue:
                     data[(data == fillvalue)] = np.nan
-                (mx, sx) = biweight( data, axis=0, scale=True )
+                (mx, sx) = biweight( data, axis=0, spread=True )
                 if values is None:
                     values = [mx]
                     errors = [sx]

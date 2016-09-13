@@ -117,7 +117,7 @@ class ICM_mon( object ):
             num_sql_rows = self.sql_num_entries()
             
             ## check number of entries in HDF5 datasets
-            ds_list = ['hk_median', 'hk_scale', 'signal',
+            ds_list = ['hk_median', 'hk_spread', 'signal',
                        'signal_row', 'signal_col']
             for ds_name in ds_list:
                 if ds_name in self.__fid:
@@ -174,7 +174,7 @@ class ICM_mon( object ):
     def __h5_cre_hk( self, hk ):
         '''
         Create datasets for house-keeping data.
-        seperated datasets for biweight median and scale
+        seperated datasets for biweight median and spread
 
         Todo: only include hk-data when the instrument is really performing 
               the requested measurements. 
@@ -201,17 +201,17 @@ class ICM_mon( object ):
                                 "biweight median of hous-keeping data (SWIR)"
         self.__fid["hk_median"].attrs["fields"] = \
                                     np.array([np.string_(n) for n in name_list])
-        self.__fid.create_dataset( "hk_scale", (0,), maxshape=(None,),
+        self.__fid.create_dataset( "hk_spread", (0,), maxshape=(None,),
                                    dtype=hk_buff.dtype )
-        self.__fid["hk_scale"].attrs["comment"] = \
-                                "biweight scale of hous-keeping data (SWIR)"
-        self.__fid["hk_scale"].attrs["fields"] = \
+        self.__fid["hk_spread"].attrs["comment"] = \
+                                "biweight spread of hous-keeping data (SWIR)"
+        self.__fid["hk_spread"].attrs["fields"] = \
                                     np.array([np.string_(n) for n in name_list])
                 
     def h5_write_hk( self, hk ):
         '''
         Create datasets for house-keeping data.
-        seperated datasets for biweight median and scale
+        seperated datasets for biweight median and spread
 
         Todo: only include hk-data when the instrument is really performing 
               the requested measurements. 
@@ -219,28 +219,28 @@ class ICM_mon( object ):
         '''
         assert(self.__mode != 'r')
 
-        if not ('hk_median' in self.__fid and 'hk_scale' in self.__fid):
+        if not ('hk_median' in self.__fid and 'hk_spread' in self.__fid):
             self.__h5_cre_hk( hk )
 
         hk_median = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
-        hk_scale = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
+        hk_spread = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
         for name in self.__fid['hk_median'].dtype.names:
             if hk[name].dtype.name.find( 'float' ) >= 0:
-                (mx, sx) = biweight(hk[name], scale=True)
+                (mx, sx) = biweight(hk[name], spread=True)
                 hk_median[name] = mx
-                hk_scale[name]  = sx
+                hk_spread[name] = sx
             elif hk[name].dtype.name.find( 'int' ) >= 0:
                 hk_median[name] = np.median(hk[name])
-                hk_scale[name]  = np.all(hk[name])
+                hk_spread[name] = np.all(hk[name])
             else:
                 print( name )
         dset = self.__fid['hk_median']
         dset.resize( (dset.shape[0]+1,) )
         dset[-1] = hk_median
 
-        dset = self.__fid['hk_scale']
+        dset = self.__fid['hk_spread']
         dset.resize( (dset.shape[0]+1,) )
-        dset[-1] = hk_scale
+        dset[-1] = hk_spread
 
     ## ---------- WRITE DATA (frames averaged in time) ----------
     def __h5_cre_frames( self, frames,
@@ -318,7 +318,7 @@ class ICM_mon( object ):
         '''
         assert(self.__mode != 'r')
 
-        if not 'signal' in self.__fid:
+        if 'signal' not in self.__fid:
             ext = 'none'
             if statistics is None:
                 self.__fid.attrs['rows'] = False
@@ -474,9 +474,9 @@ class ICM_mon( object ):
            algVersion      text        NOT NULL,
            dbVersion       text        NOT NULL,
            dataMedian      float       NOT NULL,
-           dataScale       float       NOT NULL,
+           dataSpread      float       NOT NULL,
            errorMedian     float       NOT NULL,
-           errorScale      float       NOT NULL,
+           errorSpread     float       NOT NULL,
            q_detTemp       integer     NOT NULL,
            q_obmTemp       integer     NOT NULL
         )''' )
@@ -498,9 +498,9 @@ class ICM_mon( object ):
          "algo_version" : column algVersion     [text free-format]
          "db_version"   : column dbVersion      [text free-format]
          "data_median"  : column dataMedian     [float]
-         "data_scale"   : column dataScale      [float]
+         "data_spread"  : column dataSpread     [float]
          "error_median" : column errorMedian    [float]
-         "error_scale"  : column errorScale     [float]
+         "error_spread" : column errorSpread    [float]
          "q_det_temp"   : column q_detTemp      [integer]
          "q_obm_temp"   : column q_obmTemp      [integer]
         '''
@@ -512,7 +512,7 @@ class ICM_mon( object ):
                   '(NULL,{orbit_ref},{orbit_used},{entry_date!r}' \
                   ',{start_time!r}'\
                   ',{icm_version!r},{algo_version!r},{db_version!r}'\
-                  ',{data_median},{data_scale},{error_median},{error_scale}'\
+                  ',{data_median},{data_spread},{error_median},{error_spread}'\
                   ',{q_det_temp},{q_obm_temp})'
         if verbose:
             print( str_sql.format(**meta_dict) )
@@ -652,7 +652,7 @@ class ICM_mon( object ):
            orbit_list  : list with orbit numbers
            orbit_range : list with orbit range: [orbit_mn, orbit_mx]
            frame_stats : add statistics of selected frames as
-                           dataMedian, dataScale, errorMedian, errorScale
+                           dataMedian, dataSpread, errorMedian, errorSpread
 
         Returns dictionary with keys: 'rowID' and 'referenceOrbit'
         '''
@@ -662,7 +662,7 @@ class ICM_mon( object ):
             return row_list
 
         if frame_stats:
-            str_sql = 'select rowID,referenceOrbit,dataMedian,dataScale,errorMedian,errorScale from icm_meta'
+            str_sql = 'select rowID,referenceOrbit,dataMedian,dataSpread,errorMedian,errorSpread from icm_meta'
         else:
             str_sql = 'select rowID,referenceOrbit from icm_meta'
             
@@ -700,7 +700,7 @@ class ICM_mon( object ):
            orbit_range : list with orbit range: [orbit_mn, orbit_mx]
 
         Returns dictionary with keys: 'rowID', 'referenceOrbit', 'dataMedian', 
-             'dataScale', 'errorMedian', 'errorScale'
+             'dataSpread', 'errorMedian', 'errorSpread'
         '''
         return self.sql_get_row_list( orbit_list=orbit_list,
                                       orbit_range=orbit_range,
@@ -757,12 +757,12 @@ def test_background( num_orbits=365, rebuild=False ):
             meta_dict['start_time'] = start_time.isoformat(' ')
             meta_dict['icm_version'] = fp.creator_version
 
-            (mx, sx) = biweight(values, scale=True)
+            (mx, sx) = biweight(values, spread=True)
             meta_dict['data_median'] = mx
-            meta_dict['data_scale'] = sx
-            (mx, sx) = biweight(errors, scale=True)
+            meta_dict['data_spread'] = sx
+            (mx, sx) = biweight(errors, spread=True)
             meta_dict['error_median'] = mx
-            meta_dict['error_scale'] = sx
+            meta_dict['error_spread'] = sx
 
             ## Tim: how to obtain the actual version of your S/W?
             meta_dict['algo_version'] = '00.01.00'
@@ -858,12 +858,12 @@ def test( num_orbits=1 ):
         meta_dict['start_time'] = fp.start_time
         meta_dict['icm_version'] = fp.creator_version
 
-        (mx, sx) = biweight(values, scale=True)
+        (mx, sx) = biweight(values, spread=True)
         meta_dict['data_median'] = mx
-        meta_dict['data_scale'] = sx
-        (mx, sx) = biweight(errors, scale=True)
+        meta_dict['data_spread'] = sx
+        (mx, sx) = biweight(errors, spread=True)
         meta_dict['error_median'] = mx
-        meta_dict['error_scale'] = sx
+        meta_dict['error_spread'] = sx
 
         ## Tim: how to obtain the actual version of your S/W?
         meta_dict['algo_version'] = '00.01.00'
@@ -922,7 +922,6 @@ def test2():
         fl_path = '/nfs/TROPOMI/ocal/proc_knmi/2015_05_02T10_28_44_SwirlsSunIsrf'
     else:
         fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
-    ocm_msm = 'after_et_l1bavg_004_block-004-004'
 
     dirList = [d for d in os.listdir( fl_path ) 
                if os.path.isdir(os.path.join(fl_path, d))]
@@ -948,12 +947,12 @@ def test2():
         meta_dict['start_time'] = fp.start_time
         meta_dict['icm_version'] = fp.creator_version
         
-        (mx, sx) = biweight(values, scale=True)
+        (mx, sx) = biweight(values, spread=True)
         meta_dict['data_median'] = mx
-        meta_dict['data_scale'] = sx
-        (mx, sx) = biweight(errors, scale=True)
+        meta_dict['data_spread'] = sx
+        (mx, sx) = biweight(errors, spread=True)
         meta_dict['error_median'] = mx
-        meta_dict['error_scale'] = sx
+        meta_dict['error_spread'] = sx
 
         ## Tim: how to obtain the actual version of your S/W?
         meta_dict['algo_version'] = '00.01.00'

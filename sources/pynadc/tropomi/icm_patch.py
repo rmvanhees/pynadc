@@ -216,7 +216,7 @@ class ICM_patch( object ):
             path = 'BAND{}/ICID_{}_GROUP_00000'.format(band, light_icid-1)
             dset = fid[path + '/OBSERVATIONS/signal']
             (background, background_std) = biweight( dset[1:,:,:],
-                                                     axis=0, scale=True )
+                                                     axis=0, spread=True )
 
         # need to read background data of other band!!
         background = np.hstack( (background, background) )

@@ -15,16 +15,14 @@ Methods to create PDF plots from SRON monitoring data
 import numpy as np
 import h5py
 
-import matplotlib as mpl
-mpl.use('TkAgg')
-import matplotlib.pyplot as plt
-
+import matplotlib
+from matplotlib import pyplot as plt
 from matplotlib import gridspec
 from matplotlib.backends.backend_pdf import PdfPages
 
-from pynadc import extendedrainbow_with_outliers
 from pynadc.tropomi.icm_mon_db import ICM_mon
 
+matplotlib.use('Agg')
 '''
 Alternative Scheme for Qualitative Data by Paul Tol (SRON)
 
@@ -32,13 +30,14 @@ Palette of colour-blind safe, print-friendly colours for qualitative data
 
 Reference:  https://personal.sron.nl/~pault
 '''
-line_colors=['#4477AA',   # donker-blauw
-             '#66CCEE',   # licht-blauw
-             '#228833',   # dof-groen 
-             '#CCBB44',   # dof-goud
-             '#EE6677',   # koraal
-             '#AA3377',   # paars
-             '#BBBBBB']   # grijs
+LINE_COLORS=('#4477AA',   # blue
+             '#66CCEE',   # cyan
+             '#228833',   # green
+             '#CCBB44',   # yellow
+             '#EE6677',   # red
+             '#AA3377',   # pink
+             '#BBBBBB',   # grey
+             '#000000')   # black
 
 class ICM_plot(object):
     '''
@@ -61,9 +60,9 @@ class ICM_plot(object):
         self.__db_version   = res_sql['dbVersion'][0]
         self.__icm_version  = res_sql['icmVersion'][0]
         self.__sign_median  = res_sql['dataMedian'][0]
-        self.__sign_scale   = res_sql['dataScale'][0]
+        self.__sign_spread  = res_sql['dataSpread'][0]
         self.__error_median = res_sql['errorMedian'][0]
-        self.__error_scale  = res_sql['errorScale'][0]
+        self.__error_spread = res_sql['errorSpread'][0]
         date = res_sql['startDateTime'][0][0:10].replace('-','')
         orbit = res_sql['referenceOrbit'][0]
         self.__pdf = PdfPages( dbname + '_{}_{:05}.pdf'.format(date, orbit) )
@@ -87,9 +86,9 @@ class ICM_plot(object):
                    + '\nalgo_version  : {}'.format(self.__algo_version) \
                    + '\ndb_version    : {}'.format(self.__db_version) \
                    + '\nsignal_median : {:.3f}'.format(self.__sign_median) \
-                   + '\nsignal_scale  : {:.3f}'.format(self.__sign_scale) \
+                   + '\nsignal_spread : {:.3f}'.format(self.__sign_spread) \
                    + '\nerror_median  : {:.3f}'.format(self.__error_median) \
-                   + '\nerror_scale   : {:.3f}'.format(self.__error_scale)
+                   + '\nerror_spread  : {:.3f}'.format(self.__error_spread)
     
         fig.text( 0.015, 0.075, info_str,
                   verticalalignment='bottom', horizontalalignment='left',
@@ -142,7 +141,7 @@ class ICM_plot(object):
 
         ax0 = plt.subplot(gs[1:4,0:2])
         ax0.plot(signal_col, np.arange(signal_col.size),
-                 lw=0.5, color=line_colors[0])
+                 lw=0.5, color=LINE_COLORS[0])
         ax0.set_xlabel( label )
         ax0.set_ylim( [0, signal_col.size-1] )
         ax0.locator_params(axis='x', nbins=3)
@@ -156,7 +155,7 @@ class ICM_plot(object):
 
         ax3 = plt.subplot(gs[4:6,2:14])
         ax3.plot(np.arange(signal_row.size), signal_row,
-                 lw=0.5, color=line_colors[0])
+                 lw=0.5, color=LINE_COLORS[0])
         ax3.set_ylabel( label )
         ax3.set_xlim( [0, signal_row.size-1] )
         ax3.set_xlabel( 'column' )
@@ -194,18 +193,18 @@ class ICM_plot(object):
         gs = gridspec.GridSpec(6,8) 
 
         ax0 = plt.subplot(gs[1:3,1:])
-        ax0.hist( buff, range=[-num_sigma * self.__sign_scale,
-                               num_sigma * self.__sign_scale], 
-                  bins=15, color=line_colors[0] )
+        ax0.hist( buff, range=[-num_sigma * self.__sign_spread,
+                               num_sigma * self.__sign_spread], 
+                  bins=15, color=LINE_COLORS[0] )
         ax0.set_title( r'Histogram is centered at the median with range of ' \
                        r'$\pm 3 \sigma$' )
         ax0.set_xlabel( d_label )
         ax0.set_ylabel( 'count' )
 
         ax1 = plt.subplot(gs[3:5,1:])
-        ax1.hist( buff_std, range=[-num_sigma * self.__error_scale,
-                                   num_sigma * self.__error_scale],
-                  bins=15, color=line_colors[0] )
+        ax1.hist( buff_std, range=[-num_sigma * self.__error_spread,
+                                   num_sigma * self.__error_spread],
+                  bins=15, color=LINE_COLORS[0] )
         ax1.set_xlabel( e_label )
         ax1.set_ylabel( 'count' )
 
@@ -313,6 +312,8 @@ class ICM_plot(object):
 ## --------------------------------------------------
 ## 
 def test_dpqm( ):
+    '''
+    '''
     import os
     
     if os.path.isdir('/Users/richardh'):
@@ -343,8 +344,8 @@ def test_dpqm( ):
 ## --------------------------------------------------
 ## 
 def test():
-    import os
-    
+    '''
+    '''
     DBNAME = 'mon_background_0005_test'
     DBNAME = 'mon_sun_isrf_test'
         
