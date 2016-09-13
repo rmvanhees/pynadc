@@ -780,7 +780,7 @@ def test_background( num_orbits=365, rebuild=False ):
                 mon.h5_set_attr( 'title',
                                  'Tropomi SWIR thermal background monitoring' )
                 mon.h5_set_attr( 'institution',
-                                 'SRON, Netherlands Institute for Space Research' )
+                                 'SRON Netherlands Institute for Space Research' )
                 mon.h5_set_attr( 'source',
                                  'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
                 mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
@@ -879,7 +879,7 @@ def test( num_orbits=1 ):
         meta_dict['db_version'] = mon.pynadc_version()
         if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
             mon.h5_set_attr( 'title', 'Tropomi SWIR dark-flux monitoring results' )
-            mon.h5_set_attr( 'institution', 'SRON, Netherlands Institute for Space Research' )
+            mon.h5_set_attr( 'institution', 'SRON Netherlands Institute for Space Research' )
             mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
             mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
             mon.h5_set_attr( 'comment',
@@ -966,7 +966,7 @@ def test2():
         
         mon = ICM_mon( DBNAME, mode='r+' )
         mon.h5_set_attr( 'title', 'Tropomi SWIR OCAL SunISRF backgrounds' )
-        mon.h5_set_attr( 'institution', 'SRON, Netherlands Institute for Space Research' )
+        mon.h5_set_attr( 'institution', 'SRON Netherlands Institute for Space Research' )
         mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi On-ground Calibration and Monitoring product' )
         mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' )
         mon.h5_set_attr( 'comment',
@@ -986,6 +986,6 @@ def test2():
         
 #--------------------------------------------------
 if __name__ == '__main__':
-    test_background(rebuild=True)
+    #test_background(rebuild=True)
     #test( 25 )
-    #test2()
+    test2()
