@@ -93,6 +93,9 @@ if __name__ == '__main__':
                                          help='select ICM products on ICID' )
     parser_icid.add_argument( 'icid', type=str, default=None,
                               help='ICIDs, comma separated' )
+    parser_icid.add_argument( '--after_dn2v', action='store_true',
+                              default=False,
+                              help='select dataset(s) calibrated upto DN2V' )
     parser_icid.add_argument( '--date', type=str, default=None,
                               help='select on dateTimeStart of measurements' )
     parser_icid.add_argument( '--orbit', type=__orbit_range__,
