@@ -1,5 +1,7 @@
 import os
 import shutil
+
+import numpy as np
 import h5py
 
 ORBIT_SPECIAL=1500
@@ -14,7 +16,7 @@ def delta_time2date( time, delta_time, iso=False ):
          + timedelta(seconds=int(time)) \
          + timedelta(milliseconds=int(delta_time))
     if iso:
-        return dt.isoformat()[0:19] + 'Z'
+        return np.string_(dt.isoformat()[0:19] + 'Z')
     else:
         return dt.strftime('%Y%m%dT%H%M%S')
 
