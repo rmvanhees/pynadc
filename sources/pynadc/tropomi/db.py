@@ -15,7 +15,7 @@ import sqlite3
 
 from tabulate import tabulate
 
-DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
+DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm_patched.db'
 
 def check_format_datetime( datetime_str ):
     '''
@@ -371,12 +371,12 @@ class S5pDB_icid( S5pDB ):
         self.__verbose = verbose
 
     def __query_icid__( self, table, icid, date, after_dn2v ):
-        cols = 'metaID, group_concat(name) as names'
+        cols = 'metaID,after_dn2v,group_concat(name) as names'
         
         q_str = 'select {} from {}'.format(cols, table)
         q_str +=  ' where ic_id in (' + str(icid)[1:-1] + ')'
         if after_dn2v:
-            q_str += ' and after_dn2v=1'
+            q_str += ' and after_dn2v!=0'
         else:
             q_str += ' and after_dn2v=0'
         
@@ -387,7 +387,7 @@ class S5pDB_icid( S5pDB ):
 
     def __query_meta__( self ):
         table = 'ICM_SIR_META'
-        cols = 'pathID,s2.name as prod_name,s3.names as ds_name'
+        cols = 'pathID,s2.name as prod_name,s3.names as ds_name,after_dn2v'
 
         return 'select {} from {} as s2'.format(cols, table)
     
@@ -396,7 +396,7 @@ class S5pDB_icid( S5pDB ):
         '''
         row_list = ()
         
-        q1_str = self.__query_location__('prod_name,ds_name') 
+        q1_str = self.__query_location__('prod_name,ds_name,after_dn2v') 
         q2_str = self.__query_meta__()
         if orbit is None:
             orbit_str = ''
@@ -426,7 +426,7 @@ class S5pDB_icid( S5pDB ):
                 for col in row[2].split(','):
                     row_list += ([os.path.join(row[0],
                                                self.__get_relpath__(row[1])),
-                                  row[1], table, col],)           
+                                  row[1], table, col, row[3]],)           
         cur.close()
         return row_list
     
@@ -487,9 +487,12 @@ class S5pDB_type( S5pDB ):
             q_str += ' as s3 on s2.metaID=s3.metaID' + orbit_str + ')'
             q_str += ' as s4 on s1.pathID=s4.pathID'
 
+            if self.__verbose:
+                print( q_str )
             cur.execute( q_str )
             for row in cur:
-                row_list += ([os.path.join(row[0], self.__get_relpath__(row[1])),
+                row_list += ([os.path.join(row[0],
+                                           self.__get_relpath__(row[1])),
                               row[1], table, row[2], row[3]],)           
         cur.close()
         return row_list
@@ -809,7 +812,7 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
 #---------------------------------------------------------------------------
 def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
                          after_dn2v=False, orbit=None, date=None, 
-                         mode='location', toScreen=False ):
+                         mode='location', toScreen=False, verbose=False ):
     '''
     Query NADC Tropomi SQLite database on products which contain measurements 
     of all listed ICIDs
@@ -857,14 +860,17 @@ def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
     assert orbit is None or isinstance(orbit, (tuple, list)), \
         '*** Fatal, parameter orbit is not a list or tuple'
 
-    db = S5pDB_icid( dbname )
+    db = S5pDB_icid( dbname, verbose=verbose )
 
     if mode == 'location':
         result = db.location( icid, orbit, date, after_dn2v )
         if toScreen:
             for entry in result:
                 h5_grp = 'BAND%_' + entry[2].split('_')[2]
-                h5_sgrp = entry[3]
+                if entry[4] == 1:
+                    h5_sgrp = entry[3] + '_AFTER_DN2V'
+                else:
+                    h5_sgrp = entry[3]
 
                 print( os.path.join(entry[0], entry[1],
                                     h5_grp, h5_sgrp) )
@@ -875,7 +881,7 @@ def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
 #---------------------------------------------------------------------------
 def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
                          after_dn2v=False, orbit=None, date=None,
-                         mode='location', toScreen=False ):
+                         mode='location', toScreen=False, verbose=False ):
     '''
     Query NADC Tropomi SQLite database on product type with data selections
 
@@ -925,7 +931,7 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
     assert orbit is None or isinstance(orbit, (tuple, list)), \
         '*** Fatal, parameter orbit is not a list or tuple'
 
-    db = S5pDB_type( dbname )
+    db = S5pDB_type( dbname, verbose=verbose )
 
     if mode == 'location':
         result = db.location( dataset, orbit, after_dn2v, date )
