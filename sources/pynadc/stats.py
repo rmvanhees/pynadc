@@ -8,7 +8,7 @@ from __future__ import division
 
 import numpy as np
 
-def biweight(data, axis=None, scale=False):
+def biweight(data, axis=None, spread=False):
     """
     Calculate Tukey's biweight.
     Implementation based on Eqn. 7.6 and 7.7 in the SWIR OCAL ATBD.
@@ -21,12 +21,12 @@ def biweight(data, axis=None, scale=False):
         dd = np.median(np.abs(deltas))
         if dd == 0:
             xb = mm
-            if scale:
+            if spread:
                 sb = 0.
         else:
             w = np.maximum(0, 1 - (deltas / (6 * dd)) ** 2) ** 2
             xb = mm + np.sum(w * deltas) / np.sum(w)
-            if scale:
+            if spread:
                 u = np.minimum(1, (deltas / (9 * dd)) ** 2)
                 sb = np.sqrt(len(xx) * np.sum(deltas ** 2 * ( 1 - u) ** 4)
                              / np.sum((1 - u) *  (1 - 5 * u)) ** 2)
@@ -45,7 +45,7 @@ def biweight(data, axis=None, scale=False):
             w = np.maximum(0, 1 - (deltas / (6 * dd)) ** 2) ** 2
             xb[~indices] = (mm + np.sum(w * deltas, axis=axis)
                             / np.sum(w, axis=axis))[~indices]
-            if scale:
+            if spread:
                 u = np.minimum(1, (deltas / (9 * dd)) ** 2)
                 len_xx = np.sum(np.isfinite(data), axis=axis)
                 sb[~indices] = np.sqrt(len_xx
@@ -53,7 +53,7 @@ def biweight(data, axis=None, scale=False):
                                                 * ( 1 - u) ** 4, axis=axis)
                                        / np.sum((1 - u) *  (1 - 5 * u), axis=axis) ** 2)[~indices]
 
-    if scale:
+    if spread:
         return (xb, sb)
     else:
         return xb
@@ -80,13 +80,13 @@ def test():
         frames = dset[1:,:,:]
             
     (background, background_std) = biweight( frames,
-                                             axis=2, scale=True )
+                                             axis=2, spread=True )
     print( background.shape, background_std.shape )
     (background, background_std) = biweight( frames,
-                                             axis=1, scale=True )
+                                             axis=1, spread=True )
     print( background.shape, background_std.shape )
     (background, background_std) = biweight( frames,
-                                             axis=0, scale=True )
+                                             axis=0, spread=True )
     print( background.shape, background_std.shape )
     print( np.amin( background ), np.amax( background ) )
     print( np.amin( background_std ), np.amax( background_std ) )
@@ -95,7 +95,7 @@ def test():
     check_sb = np.empty_like( background )
     for yy in range(check_xb.shape[0]):
         for xx in range(check_xb.shape[1]):
-            res = biweight( frames[:,yy,xx], scale=True )
+            res = biweight( frames[:,yy,xx], spread=True )
             check_xb[yy, xx] = res[0]
             check_sb[yy, xx] = res[1]
 
