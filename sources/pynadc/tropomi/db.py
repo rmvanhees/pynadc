@@ -370,12 +370,15 @@ class S5pDB_icid( S5pDB ):
         super().__init__( dbname )
         self.__verbose = verbose
 
-    def __query_icid__( self, table, icid, date ):
+    def __query_icid__( self, table, icid, date, after_dn2v ):
         cols = 'metaID, group_concat(name) as names'
         
         q_str = 'select {} from {}'.format(cols, table)
         q_str +=  ' where ic_id in (' + str(icid)[1:-1] + ')'
-        q_str += ' and after_dn2v = 0'
+        if after_dn2v:
+            q_str += ' and after_dn2v=1'
+        else:
+            q_str += ' and after_dn2v=0'
         
         q_str += self.__select_on_date__( date, prefix=' and' )
         q_str += ' GROUP BY metaID HAVING count(*)={}'.format(len(icid)) 
@@ -388,7 +391,7 @@ class S5pDB_icid( S5pDB ):
 
         return 'select {} from {} as s2'.format(cols, table)
     
-    def location( self, icid, orbit, date ):
+    def location( self, icid, orbit, date, after_dn2v=False ):
         '''
         '''
         row_list = ()
@@ -410,7 +413,7 @@ class S5pDB_icid( S5pDB ):
             if table == 'ICM_SIR_ANALYSIS':
                 continue
             
-            q3_str = self.__query_icid__( table, icid, date )
+            q3_str = self.__query_icid__( table, icid, date, after_dn2v )
             q_str = q1_str   + ' as s1' \
                     + ' join (' + q2_str + ' join (' + q3_str + ')'
             q_str += ' as s3 on s2.metaID=s3.metaID' + orbit_str + ')'
@@ -805,7 +808,7 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
 
 #---------------------------------------------------------------------------
 def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
-                         orbit=None, date=None, 
+                         after_dn2v=False, orbit=None, date=None, 
                          mode='location', toScreen=False ):
     '''
     Query NADC Tropomi SQLite database on products which contain measurements 
@@ -813,7 +816,8 @@ def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
 
     Parameters:
     -----------
-    - "args"     : argparse object with keys dbname, icid, mode
+    - "args"     : argparse object with keys dbname, icid, after_dn2v, 
+                   orbit, date, mode
     - "dbname"   : full path to S5p Tropomi SQLite database 
                   [default: DB_NAME]
     - "icid"     : list of ICIDs
@@ -826,6 +830,8 @@ def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
           select one day: date=YYMMDD
           select one month: date=YYMM
                    [default: None]
+    - "after_dn2v": select measurement(s) on calibration up to DN2V 
+                   [default: False]
     - "mode"     : defines the returned information:
         'location' :  query the file location
                    [default: 'location']
@@ -840,6 +846,7 @@ def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
     if args:
         dbname     = args.dbname
         icid       = [int(s) for s in args.icid.split(',')]
+        after_dn2v = args.after_dn2v
         orbit      = args.orbit
         date       = args.date
         mode       = args.mode
@@ -853,7 +860,7 @@ def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
     db = S5pDB_icid( dbname )
 
     if mode == 'location':
-        result = db.location( icid, orbit, date )
+        result = db.location( icid, orbit, date, after_dn2v )
         if toScreen:
             for entry in result:
                 h5_grp = 'BAND%_' + entry[2].split('_')[2]
@@ -874,7 +881,8 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
 
     Parameters:
     -----------
-    - "args"     : argparse object with keys dbname, dataset, mode
+    - "args"     : argparse object with keys dbname, dataset, after_dn2v,
+                   orbit, date, mode, 
     - "dbname"   : full path to S5p Tropomi SQLite database 
                    [default: DB_NAME]
     - "dataset"  : name or abbreviation of dataset, for example
