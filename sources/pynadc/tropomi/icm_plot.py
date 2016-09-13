@@ -15,14 +15,12 @@ Methods to create PDF plots from SRON monitoring data
 import numpy as np
 import h5py
 
-import matplotlib
-from matplotlib import pyplot as plt
-from matplotlib import gridspec
-from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib as mpl
 
+from pynadc import extendedrainbow_with_outliers
 from pynadc.tropomi.icm_mon_db import ICM_mon
 
-matplotlib.use('Agg')
+mpl.use('Agg')
 '''
 Alternative Scheme for Qualitative Data by Paul Tol (SRON)
 
@@ -56,6 +54,8 @@ class ICM_plot(object):
         <dbname>_<startDateTime of monitor entry>_<orbit of monitor entry>.pdf
     '''
     def __init__( self, dbname, res_sql, cmap="Rainbow" ):
+        from matplotlib.backends.backend_pdf import PdfPages
+
         self.__algo_version = res_sql['algVersion'][0]
         self.__db_version   = res_sql['dbVersion'][0]
         self.__icm_version  = res_sql['icmVersion'][0]
@@ -101,6 +101,9 @@ class ICM_plot(object):
                  title=None, sub_title=None, data_label=None, data_unit=None ):
         '''
         '''
+        from matplotlib import pyplot as plt
+        from matplotlib import gridspec
+       
         signal = np.copy(signal_in)
         signal_col = np.copy(signal_col_in)
         signal_row = np.copy(signal_row_in)
@@ -177,6 +180,9 @@ class ICM_plot(object):
                 error_label=None, error_unit=None ):
         '''
         '''
+        from matplotlib import pyplot as plt
+        from matplotlib import gridspec
+        
         buff = np.copy(signal_in).reshape(-1)
         buff = buff[np.isfinite(buff)] - self.__sign_median
         buff_std = np.copy(error_in).reshape(-1)
@@ -217,6 +223,9 @@ class ICM_plot(object):
                    title=None, cmap=None ):
         '''
         '''
+        from matplotlib import pyplot as plt
+        from matplotlib import gridspec
+        
         thres_min = 10 * low_thres
         thres_max = 10 * high_thres
         dpqf = (dpqm * 10).astype(np.byte)
@@ -277,6 +286,8 @@ class ICM_plot(object):
     def draw_signal( self, mon, data, data_col, data_row ):
         '''
         '''
+        from matplotlib import pyplot as plt
+
         ds_name = 'signal'
         self.__frame( data, data_col, data_row ,
                       title=mon.h5_get_attr('title' ),
@@ -375,5 +386,5 @@ def test():
     ## plot time-series
 #--------------------------------------------------
 if __name__ == '__main__':
-    #test()
-    test_dpqm()
+    test()
+    #test_dpqm()
