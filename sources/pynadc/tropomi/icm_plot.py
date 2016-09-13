@@ -16,7 +16,7 @@ import numpy as np
 import h5py
 
 import matplotlib as mpl
-mpl.use('Agg')
+mpl.use('TkAgg')
 import matplotlib.pyplot as plt
 
 from matplotlib import gridspec
@@ -96,7 +96,7 @@ class ICM_plot(object):
                   bbox={'facecolor':'white', 'pad':10},
                   fontsize=8, style='italic' )
         fig.text( 0.025, 0.875,
-                  r'$\copyright$ SRON, Netherlands Institute for Space Research' )
+                  r'$\copyright$ SRON Netherlands Institute for Space Research' )
 
     def __frame( self, signal_in, signal_col_in, signal_row_in,
                  title=None, sub_title=None, data_label=None, data_unit=None ):
@@ -233,8 +233,7 @@ class ICM_plot(object):
             fig.suptitle( title, fontsize=24 )
         gs = gridspec.GridSpec(6,16) 
 
-        #clist = ['w', 'k','#EE6677','#CCBB44']
-        clist = ['w', 'k','#228833','#CCBB44']
+        clist = ['#BBBBBB', '#EE6677','#CCBB44','w']
         cmap = mpl.colors.ListedColormap(clist)
         bounds=[-1, 0, thres_min, thres_max, 10]
         norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
@@ -335,6 +334,7 @@ def test_dpqm( ):
     res_sql = mon.sql_select_orbit( orbit, full=True )
     print( res_sql )
 
+    DBNAME = 'mon_ocal_ckd_dpqf_test'
     plot = ICM_plot( DBNAME, res_sql )
     plot.draw_quality( mon, dpqm )
     del(plot)
@@ -346,6 +346,7 @@ def test():
     import os
     
     DBNAME = 'mon_background_0005_test'
+    DBNAME = 'mon_sun_isrf_test'
         
     mon = ICM_mon( DBNAME, mode='r' )
     orbit = mon.get_orbit_latest()
