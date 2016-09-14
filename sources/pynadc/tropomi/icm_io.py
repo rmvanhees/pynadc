@@ -37,6 +37,7 @@ class ICM_io( object ):
             '*** Fatal, can not find ICM_CA_SIR file: {}'.format(icm_product)
 
         self.__product = icm_product
+        self.__rw = readwrite
         if readwrite:
             self.__fid = h5py.File( icm_product, "r+" )
         else:
@@ -62,10 +63,9 @@ class ICM_io( object ):
         self.housekeeping_data = None
         
     def __repr__( self ):
-        return "ICM_io: {}/{}/{} of bands {}".format( self.__product,
-                                                      self.__h5_path,
-                                                      self.__h5_name,
-                                                      self.bands )
+        class_name = type(self).__name__
+        return '{}({!r}, readwrite={!r})'.format( class_name,
+                                                  self.__product, self.__rw )
 
     def __del__( self ):
         '''
@@ -94,7 +94,8 @@ class ICM_io( object ):
         self.__fid.close()
     
     # ---------- RETURN VERSION of the S/W ----------
-    def pynadc_version( self ):
+    @staticmethod
+    def pynadc_version():
         '''
         Return S/W version
         '''

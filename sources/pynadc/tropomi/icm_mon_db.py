@@ -71,12 +71,12 @@ class ICM_mon( object ):
     '''
     Defines methods to create ICM monitoring databases and ingest new entries
     '''
-    def __init__( self, dbname, mode='r' ):
+    def __init__( self, dbname, readwrite=False ):
         '''
         Perform the following tasts:
         * if database does not exist 
         then 
-         1) create HDF5 database (mode='w')
+         1) create HDF5 database (readwrite=True)
          2) set attribute 'orbit_window'
          3) set attributes with 'algo_version' and 'db_version'
         else
@@ -84,35 +84,40 @@ class ICM_mon( object ):
          1) check versions of 'algo_version' and 'db_version'
          3) set class attributes
         '''
-        assert( (mode == 'r') or (mode =='r+') )
+        assert os.path.exists(dbname+'.h5') == os.path.exists(dbname+'.db') ,\
+            "*** Fatal: lonely SQLite or HDF5 database exists (corruption?)"
         self.dbname = dbname
+        self.__rw = readwrite
 
-        self.__mode = mode
         self.__fid = None
         if not os.path.exists( dbname+'.h5' ) \
            and not os.path.exists( dbname+'.db' ):
-            assert mode == 'r+', \
-                "*** Fatal: databse {} does not exist in read-mode".format(dbname)
-            self.__mode = 'w'
+            assert readwrite, \
+                "*** Fatal: attempt to create databse {} in read-mode".format(dbname)
             self.__fid = h5py.File( dbname+'.h5', 'w' )
             self.__fid.attrs['dbVersion'] = self.pynadc_version()
         else:
-            self.__fid = h5py.File( dbname+'.h5', mode )
+            if self.__rw:
+                self.__fid = h5py.File( dbname+'.h5', 'r+' )
+            else:
+                self.__fid = h5py.File( dbname+'.h5', 'r' )
             ## check versions
             db_version = self.__fid.attrs['dbVersion'].split('.')
             sw_version = self.pynadc_version().split('.')
             assert( (db_version[0] == sw_version[0])
                     and (db_version[1] == sw_version[1]) )
 
-#    def __repr__( self ):
-#        pass
+    def __repr__( self ):
+        class_name = type(self).__name__
+        return '{}({!r}, readwrite={!r})'.format( class_name,
+                                             self.dbname, self.__rw )
 
     def __del__( self ):
         '''
         first check if SQLite and HDF5 are consistent
         then close access to databases
         '''
-        if self.__mode != 'r':
+        if self.__rw:
             ## obtain number of row in SQLite database
             num_sql_rows = self.sql_num_entries()
             
@@ -156,7 +161,7 @@ class ICM_mon( object ):
          - 'icid_list' : [array] list of ic_id and ic_version used by algorithm
          - ...
         '''
-        if self.__mode == 'r' or name in self.__fid.attrs.keys():
+        if not self.__rw or name in self.__fid.attrs.keys():
             return
         
         self.__fid.attrs[name] = value
@@ -217,7 +222,7 @@ class ICM_mon( object ):
               the requested measurements. 
               Reject entries during start-up or at the end
         '''
-        assert(self.__mode != 'r')
+        assert self.__rw
 
         if not ('hk_median' in self.__fid and 'hk_spread' in self.__fid):
             self.__h5_cre_hk( hk )
@@ -316,7 +321,7 @@ class ICM_mon( object ):
          - rows : when row average/median should be calculated from frames
          - cols : when column average/median should be calculated from frames
         '''
-        assert(self.__mode != 'r')
+        assert self.__rw
 
         if 'signal' not in self.__fid:
             ext = 'none'
@@ -432,7 +437,7 @@ class ICM_mon( object ):
          - 'long_name' : descriptive name may be used for labeling plots
          - 'units' : unit of the dataset values
         '''
-        if self.__mode == 'r':
+        if not self.__rw:
             return
 
         ds_list = [ 'signal', 'signal_row', 'signal_col' ]
@@ -774,7 +779,7 @@ def test_background( num_orbits=365, rebuild=False ):
             ## then add information to monitoring database
             ## Note that ingesting results twice leads to database corruption!
             ##   Please use 'mon.sql_check_orbit'
-            mon = ICM_mon( DBNAME, mode='r+' )
+            mon = ICM_mon( DBNAME, readwrite=True )
             meta_dict['db_version'] = mon.pynadc_version()
             if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
                 mon.h5_set_attr( 'title',
@@ -799,7 +804,7 @@ def test_background( num_orbits=365, rebuild=False ):
             del( mon )
 
     ## select rows from database given an orbit range
-    mon = ICM_mon( DBNAME, mode='r' )
+    mon = ICM_mon( DBNAME, readwrite=False )
     print( mon.sql_select_orbit( [1940,2050] ) )
 
     print( mon.sql_get_row_list( orbit_range=[1940,2050] ) )
@@ -840,7 +845,7 @@ def test( num_orbits=1 ):
         print( ii )
         
         ## open access to ICM product
-        fp = ICM_io( os.path.join(fl_path, icm_file), readwrite=False )
+        fp = ICM_io( os.path.join(fl_path, icm_file), readwrite=True )
 
         ## select measurement and collect its meta-data 
         fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
@@ -875,7 +880,7 @@ def test( num_orbits=1 ):
         ## then add information to monitoring database
         ## Note that ingesting results twice leads to database corruption!
         ##   Please use 'mon.sql_check_orbit'
-        mon = ICM_mon( DBNAME, mode='r+' )
+        mon = ICM_mon( DBNAME, readwrite=True )
         meta_dict['db_version'] = mon.pynadc_version()
         if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
             mon.h5_set_attr( 'title', 'Tropomi SWIR dark-flux monitoring results' )
@@ -896,7 +901,7 @@ def test( num_orbits=1 ):
         del( mon )
 
     ## select rows from database given an orbit range
-    mon = ICM_mon( DBNAME, mode='r' )
+    mon = ICM_mon( DBNAME, readwrite=False )
     print( mon.sql_select_orbit( [1940,1950], full=True ) )
     del(mon)
         
@@ -963,7 +968,7 @@ def test2():
         hk_data = fp.housekeeping_data
         ii += 1
         
-        mon = ICM_mon( DBNAME, mode='r+' )
+        mon = ICM_mon( DBNAME, readwrite=True )
         mon.h5_set_attr( 'title', 'Tropomi SWIR OCAL SunISRF backgrounds' )
         mon.h5_set_attr( 'institution', 'SRON Netherlands Institute for Space Research' )
         mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi On-ground Calibration and Monitoring product' )
