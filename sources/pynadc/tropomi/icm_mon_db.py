@@ -785,7 +785,7 @@ def test_background( num_orbits=365, rebuild=False ):
                                  'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
                 mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
                 mon.h5_set_attr( 'comment',
-                                 'ICID {} ($t_{{exp}}={:.3f}$)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
+                                 'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
                 mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
                 mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
                 mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
@@ -867,9 +867,9 @@ def test( num_orbits=1 ):
 
         ## Tim: how to obtain the actual version of your S/W?
         meta_dict['algo_version'] = '00.01.00'
-        meta_dict['q_det_temp'] = 0                       ## obtain from hk
-        meta_dict['q_obm_temp'] = 0                       ## obtain from hk
-        meta_dict['q_algo'] = 0                           ## obtain from algo?!
+        meta_dict['q_det_temp'] = 0                    ## obtain from hk
+        meta_dict['q_obm_temp'] = 0                    ## obtain from hk
+        meta_dict['q_algo'] = 0                        ## obtain from algo?!
         hk_data = fp.housekeeping_data
 
         ## then add information to monitoring database
@@ -883,7 +883,7 @@ def test( num_orbits=1 ):
             mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
             mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
             mon.h5_set_attr( 'comment',
-                             'ICID {} ($t_{{exp}}={:.3f}$)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
+                             'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
             mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
             mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
             mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
@@ -957,9 +957,9 @@ def test2():
         ## Tim: how to obtain the actual version of your S/W?
         meta_dict['algo_version'] = '00.01.00'
         meta_dict['db_version'] = fp.pynadc_version()
-        meta_dict['q_det_temp'] = 0                       ## obtain from hk
-        meta_dict['q_obm_temp'] = 0                       ## obtain from hk
-        meta_dict['q_algo'] = 0                           ## obtain from algo?!
+        meta_dict['q_det_temp'] = 0                    ## obtain from hk
+        meta_dict['q_obm_temp'] = 0                    ## obtain from hk
+        meta_dict['q_algo'] = 0                        ## obtain from algo?!
         hk_data = fp.housekeeping_data
         ii += 1
         
@@ -969,7 +969,7 @@ def test2():
         mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi On-ground Calibration and Monitoring product' )
         mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' )
         mon.h5_set_attr( 'comment',
-                         'ICID {} ($t_{{exp}}={:.3f}$)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
+                         'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
         mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
         mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
         mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
@@ -982,9 +982,8 @@ def test2():
         del( fp )
         del( mon )
         
-        
 #--------------------------------------------------
 if __name__ == '__main__':
-    #test_background(rebuild=True)
+    test_background(rebuild=True)
     #test( 25 )
-    test2()
+    #test2()
