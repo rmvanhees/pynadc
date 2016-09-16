@@ -360,13 +360,13 @@ def test():
     DBNAME = 'mon_background_0005_test'
     DBNAME = 'mon_sun_isrf_test'
         
-    mon = ICM_mon( DBNAME, mode='r' )
+    mon = ICM_mon( DBNAME )
     orbit = mon.get_orbit_latest()
     print( orbit )
     res_sql = mon.sql_select_orbit( orbit, full=True )
     print( res_sql )
-    res_h5 = mon.h5_read_frames( res_sql['rowID'][0],
-                                 statistics='error,rows,cols' )
+    res_h5 = mon.h5_read_frame( res_sql['rowID'][0],
+                                statistics='error,rows,cols' )
     print( res_h5.keys() )
     for name in res_h5.keys():
         print( name, res_h5[name].shape )
