@@ -124,6 +124,10 @@ class ICM_io( object ):
         from datetime import datetime, timedelta
 
         self.bands = ''
+        self.ref_time   = None
+        self.delta_time = None
+        self.instrument_settings = None
+        self.housekeeping_data   = None
         if h5_path is not None:
             assert h5_path.find('%') > 0, \
                 print( '*** Fatal: h5_path should start with BAND%' )
@@ -145,19 +149,60 @@ class ICM_io( object ):
                         h5_path = 'BAND{}_{}'.format('%', name)
                         self.bands += ib
 
-        if len(self.bands) > 0:
-            ib = str(self.bands[0])
+        if len(self.bands) == 0:
+            return self.bands
+
+        ib = str(self.bands[0])
+        self.__h5_path = h5_path
+        self.__h5_name = h5_name
+        if h5_name == 'ANALOG_OFFSET_SWIR' or h5_name == 'LONG_TERM_SWIR':
             grp_path = os.path.join( h5_path.replace('%', ib), h5_name )
             grp = self.__fid[grp_path]
-            sgrp = grp['INSTRUMENT']
-            self.instrument_settings = np.squeeze(sgrp['instrument_settings'])
-            self.housekeeping_data = np.squeeze(sgrp['housekeeping_data'])
+            dset = grp[h5_name.lower() + '_group_keys']
+            group_keys = dset[:]
+            for name in group_keys['group']:
+                print( name )
+                grp_path = os.path.join( 'BAND{}_CALIBRATION'.format(ib),
+                                         name.decode('ascii') )
+                grp = self.__fid[grp_path]
+                sgrp = grp['INSTRUMENT']
+                is_data = np.squeeze(sgrp['instrument_settings'])
+                hk_data = np.squeeze(sgrp['housekeeping_data'])
+                if self.instrument_settings is None:
+                    self.instrument_settings = is_data
+                    self.housekeeping_data   = hk_data
+                else:
+                    self.instrument_settings = np.append(self.instrument_settings,
+                                                         is_data)
+                    self.housekeeping_data   = np.append(self.housekeeping_data,
+                                                         hk_data)
+                sgrp = grp['OBSERVATIONS']
+                if self.ref_time is None:
+                    self.ref_time = (datetime(2010,1,1,0,0,0) \
+                                     + timedelta(seconds=int(sgrp['time'][0])))
+                if self.delta_time is None:
+                    self.delta_time = sgrp['delta_time'][0,:].astype(int)
+                else:
+                    self.delta_time = np.append(self.delta_time,
+                                                sgrp['delta_time'][0,:].astype(int))
+        elif h5_name == 'DPQF_MAP' or h5_name == 'NOISE':
+            grp_path = os.path.join( 'BAND{}_CALIBRATION'.format(ib),
+                                     'BACKGROUND_RADIANCE_MODE_0001')
+            grp = self.__fid[grp_path]
             sgrp = grp['OBSERVATIONS']
             self.ref_time = (datetime(2010,1,1,0,0,0) \
                              + timedelta(seconds=int(sgrp['time'][0])))
             self.delta_time = sgrp['delta_time'][0,:].astype(int)
-            self.__h5_path = h5_path
-            self.__h5_name = h5_name
+        else:
+            grp_path = os.path.join( h5_path.replace('%', ib), h5_name )
+            grp = self.__fid[grp_path]
+            sgrp = grp['INSTRUMENT']
+            self.instrument_settings = np.squeeze(sgrp['instrument_settings'])
+            self.housekeeping_data   = np.squeeze(sgrp['housekeeping_data'])
+            sgrp = grp['OBSERVATIONS']
+            self.ref_time = (datetime(2010,1,1,0,0,0) \
+                             + timedelta(seconds=int(sgrp['time'][0])))
+            self.delta_time = sgrp['delta_time'][0,:].astype(int)
             
         return self.bands
 
