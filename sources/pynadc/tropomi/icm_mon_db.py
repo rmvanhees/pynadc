@@ -9,7 +9,7 @@ Methods to create and fill ICM monitoring databases
  Public methods to add new entries to the monitoring databases are:
  * h5_set_attr
  * h5_write_hk
- * h5_write_frames
+ * h5_write_frame
  * h5_set_frame_attr
  * h5_write_dpqf     ## not yet defined nor implemented
  * h5_write_isrf     ## not yet defined nor implemented
@@ -19,7 +19,7 @@ Methods to create and fill ICM monitoring databases
 -- Updating existing entries in the database --
  Public methods to update existing entries in the monitoring databases are:
  * h5_update_hk      ## not yes implemented
- * h5_update_frames  ## not yes implemented
+ * h5_update_frame   ## not yes implemented
  * sql_update_meta   ## not yes implemented
 
 -- Miscellaneous functions --
@@ -30,7 +30,7 @@ Methods to create and fill ICM monitoring databases
  * get_orbit_latest
  * h5_get_attr
  * h5_get_frame_attr
- * h5_read_frames
+ * h5_read_frame
  * h5_get_trend_colum
  * h5_get_trend_row
  * h5_get_trend_pixel
@@ -75,10 +75,9 @@ class ICM_mon( object ):
         '''
         Perform the following tasts:
         * if database does not exist 
-        then 
+        then
          1) create HDF5 database (readwrite=True)
-         2) set attribute 'orbit_window'
-         3) set attributes with 'algo_version' and 'db_version'
+         3) set attributes with 'db_version'
         else
          1) open HDF5 database, read only when orbit is already present
          1) check versions of 'algo_version' and 'db_version'
@@ -86,16 +85,20 @@ class ICM_mon( object ):
         '''
         assert os.path.exists(dbname+'.h5') == os.path.exists(dbname+'.db') ,\
             "*** Fatal: lonely SQLite or HDF5 database exists (corruption?)"
+
         self.dbname = dbname
         self.__rw = readwrite
 
         self.__fid = None
-        if not os.path.exists( dbname+'.h5' ) \
-           and not os.path.exists( dbname+'.db' ):
+        if not (os.path.exists(dbname+'.h5') or os.path.exists(dbname+'.db')):
             assert readwrite, \
                 "*** Fatal: attempt to create databse {} in read-mode".format(dbname)
             self.__fid = h5py.File( dbname+'.h5', 'w' )
+            self.__fid.attrs['institution'] = \
+                            'SRON Netherlands Institute for Space Research'
+            self.__fid.attrs['references'] = 'https://www.sron.nl/Tropomi'
             self.__fid.attrs['dbVersion'] = self.pynadc_version()
+            self.__sql_init( dbname+'.db' )
         else:
             if self.__rw:
                 self.__fid = h5py.File( dbname+'.h5', 'r+' )
@@ -133,8 +136,175 @@ class ICM_mon( object ):
         if self.__fid is not None:
             self.__fid.close()
 
+    ## ---------- initialize SQLite database ----------
+    def __sql_init( self, dbname ):
+        '''
+        Create SQLite database for ICM monitoring
+        '''
+        con = sqlite3.connect( dbname )
+        cur = con.cursor()
+        cur.execute( '''create table icm_meta (
+           rowID           integer     PRIMARY KEY AUTOINCREMENT,
+           referenceOrbit  integer     NOT NULL UNIQUE,
+           orbitsUsed      integer     NOT NULL,
+           entryDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+           startDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+           icmVersion      text        NOT NULL,
+           algVersion      text        NOT NULL,
+           dbVersion       text        NOT NULL,
+           dataMedian      float       NOT NULL,
+           dataSpread      float       NOT NULL,
+           errorMedian     float       NOT NULL,
+           errorSpread     float       NOT NULL,
+           q_detTemp       integer     NOT NULL,
+           q_obmTemp       integer     NOT NULL
+        )''' )
+        cur.execute( 'create index entryIndx on icm_meta(entryDateTime)' )
+        cur.execute( 'create index startIndx on icm_meta(startDateTime)' )
+        cur.close()
+        con.commit()
+        con.close()
+
+    ## ---------- initialize HDF5 datasets ----------
+    def h5_init( self, frame_shape, frame_dtype, statistics=None ):
+        '''
+        create datasets for measurement data
+
+        parameter statistics may contain the following strings (comma-separated)
+         - hk   : store house-keeping data
+         - error, noise or std  : store errors of given type
+         - rows : when row average/median should be calculated from frames
+         - cols : when column average/median should be calculated from frames
+        '''
+        if statistics is None:
+            self.__fid.attrs['hk'] = False
+            self.__fid.attrs['rows'] = False
+            self.__fid.attrs['cols'] = False
+            self.__fid.attrs['method'] = 'none'
+        else:
+            stat_list = statistics.split(',')
+            self.__fid.attrs['hk'] = 'hk' in stat_list
+            self.__fid.attrs['rows'] = 'row' in stat_list
+            self.__fid.attrs['cols'] = 'col' in stat_list
+            if 'std' in stat_list:
+                self.__fid.attrs['method'] = 'std'
+            elif 'error' in stat_list:
+                self.__fid.attrs['method'] = 'error'
+            elif 'noise' in stat_list:
+                self.__fid.attrs['method'] = 'noise'
+            else:
+                self.__fid.attrs['method'] = 'none'
+        ext = self.__fid.attrs['method']
+        
+        id_dtype = np.dtype( [('sql_rowid', np.int),
+                              ('orbit_ref', np.int)] )
+        id_names = np.array([np.string_(n) for n in id_dtype.names])
+        self.__fid.create_dataset( "id", (0,), maxshape=(None,),
+                                   dtype=id_dtype )
+        self.__fid["id"].attrs["comment"] = "entry identifier"
+        self.__fid["id"].attrs["fields"] = id_names
+
+        # SWIR related house-keeping data
+        if self.__fid.attrs['hk']:
+            hk_dtype = np.dtype( [('temp_det4',             np.float32),
+                                  ('temp_obm_swir',         np.float32),
+                                  ('temp_cu_sls_stim',      np.float32),
+                                  ('temp_obm_swir_grating', np.float32),
+                                  ('temp_obm_swir_if',      np.float32),
+                                  ('temp_pelt_cu_sls1',     np.float32),
+                                  ('temp_pelt_cu_sls2',     np.float32),
+                                  ('temp_pelt_cu_sls3',     np.float32),
+                                  ('temp_pelt_cu_sls4',     np.float32),
+                                  ('temp_pelt_cu_sls5',     np.float32),
+                                  ('swir_vdet_bias',        np.float32),
+                                  ('difm_status',           np.float32),
+                                  ('det4_led_status',   np.uint8),
+                                  ('wls_status',        np.uint8),
+                                  ('common_led_status', np.uint8),
+                                  ('sls1_status',       np.uint8),
+                                  ('sls2_status',       np.uint8),
+                                  ('sls3_status',       np.uint8),
+                                  ('sls4_status',       np.uint8),
+                                  ('sls5_status',       np.uint8)] )
+            hk_names = np.array([np.string_(n) for n in hk_dtype.names])
+                                
+            self.__fid.create_dataset( "hk_median", (0,), maxshape=(None,),
+                                       dtype=hk_dtype )
+            self.__fid["hk_median"].attrs["comment"] = \
+                                "biweight median of hous-keeping data (SWIR)"
+            self.__fid["hk_median"].attrs["fields"] = hk_names
+                                                      
+            self.__fid.create_dataset( "hk_spread", (0,), maxshape=(None,),
+                                       dtype=hk_dtype )
+            self.__fid["hk_spread"].attrs["comment"] = \
+                                "biweight spread of hous-keeping data (SWIR)"
+            self.__fid["hk_spread"].attrs["fields"] = hk_names
+
+        # Detector datasets
+        chunk_sz = (16, frame_shape[0] // 4, frame_shape[1] // 4)
+        self.__fid.create_dataset( "signal",
+                                   (0,) + frame_shape,
+                                   chunks=chunk_sz,
+                                   maxshape=(None,) + frame_shape,
+                                   dtype=frame_dtype )
+        self.__fid["signal"].attrs["comment"] = \
+                                    "values in detector-pixel coordinates"
+        if self.__fid.attrs['rows']:
+            nrows = (frame_shape[1],)
+            self.__fid.create_dataset( "signal_row",
+                                       (0,) + nrows,
+                                       chunks=(16,) + nrows,
+                                       maxshape=(None,) + nrows,
+                                       dtype=frame_dtype )
+            self.__fid["signal_row"].attrs["comment"] = \
+                                    "medians along the first axis of signal"
+
+        if self.__fid.attrs['cols']:
+            ncols = (frame_shape[0],)
+            self.__fid.create_dataset( "signal_col",
+                                       (0,) + ncols,
+                                       chunks=(16,) + ncols,
+                                       maxshape=(None,) + ncols,
+                                       dtype=frame_dtype )
+            self.__fid["signal_col"].attrs["comment"] = \
+                                    "medians along the second axis of signal"
+
+        if ext == 'none':
+            return
+
+        ds_name = "signal_{}".format(ext)
+        self.__fid.create_dataset( ds_name,
+                                   (0,) + frame_shape,
+                                   chunks=chunk_sz,
+                                   maxshape=(None,) + frame_shape,
+                                   dtype=frame_dtype )
+        self.__fid[ds_name].attrs["comment"] = \
+                                    "errors in detector-pixel coordinates"
+        if self.__fid.attrs['rows']:
+            nrows = (frame_shape[1],)
+            ds_name = "signal_row_{}".format(ext)
+            self.__fid.create_dataset( ds_name,
+                                       (0,) + nrows,
+                                       chunks=(16,) + nrows,
+                                       maxshape=(None,) + nrows,
+                                       dtype=frame_dtype )
+            self.__fid[ds_name].attrs["comment"] = \
+                    "medians along the first axis of signal_{}".format(ext)
+
+        if self.__fid.attrs['cols']:
+            ds_name = "signal_col_{}".format(ext)
+            ncols = (frame_shape[0],)
+            self.__fid.create_dataset( ds_name,
+                                       (0,) + ncols,
+                                       chunks=(16,) + ncols,
+                                       maxshape=(None,) + ncols,
+                                       dtype=frame_dtype )
+            self.__fid[ds_name].attrs["comment"] = \
+                    "medians along the second axis of signal_{}".format(ext)
+
     ## ---------- RETURN VERSION of the S/W ----------
-    def pynadc_version( self ):
+    @staticmethod
+    def pynadc_version():
         '''
         Return S/W version
         '''
@@ -175,174 +345,88 @@ class ICM_mon( object ):
         else:
             return None
         
-    ## ---------- WRITE HOUSE-KEEPING DATA ----------
-    def __h5_cre_hk( self, hk ):
+    ## ---------- READ/WRITE DATASET ATTRIBUTES ----------
+    def h5_set_frame_attr( self, attr, value ):
         '''
-        Create datasets for house-keeping data.
-        seperated datasets for biweight median and spread
+        Add attributes to HDF5 datasets, during definition phase.
+        Otherwise the call is silently ignored
 
-        Todo: only include hk-data when the instrument is really performing 
-              the requested measurements. 
-              Reject entries during start-up or at the end
+        Please use names according to the CF conventions:
+         - 'standard_name' : required CF-conventions attribute
+         - 'long_name' : descriptive name may be used for labeling plots
+         - 'units' : unit of the dataset values
         '''
-        # SWIR related house-keeping data
-        name_list = ('temp_det4','temp_obm_swir','temp_cu_sls_stim',
-                     'temp_obm_swir_grating','temp_obm_swir_if',
-                     'temp_pelt_cu_sls1','temp_pelt_cu_sls2',
-                     'temp_pelt_cu_sls3','temp_pelt_cu_sls4',
-                     'temp_pelt_cu_sls5','swir_vdet_bias',
-                     'difm_status', 'det4_led_status','wls_status',
-                     'common_led_status','sls1_status','sls2_status',
-                     'sls3_status','sls4_status','sls5_status')
-        dtype_list = ()
-        for name in name_list:
-            dtype_list += (hk[name].dtype.name,)
-
-        hk_buff = np.empty( 1, dtype=','.join(dtype_list) )
-        hk_buff.dtype.names = name_list
-        self.__fid.create_dataset( "hk_median", (0,), maxshape=(None,),
-                                   dtype=hk_buff.dtype )
-        self.__fid["hk_median"].attrs["comment"] = \
-                                "biweight median of hous-keeping data (SWIR)"
-        self.__fid["hk_median"].attrs["fields"] = \
-                                    np.array([np.string_(n) for n in name_list])
-        self.__fid.create_dataset( "hk_spread", (0,), maxshape=(None,),
-                                   dtype=hk_buff.dtype )
-        self.__fid["hk_spread"].attrs["comment"] = \
-                                "biweight spread of hous-keeping data (SWIR)"
-        self.__fid["hk_spread"].attrs["fields"] = \
-                                    np.array([np.string_(n) for n in name_list])
-                
-    def h5_write_hk( self, hk ):
-        '''
-        Create datasets for house-keeping data.
-        seperated datasets for biweight median and spread
-
-        Todo: only include hk-data when the instrument is really performing 
-              the requested measurements. 
-              Reject entries during start-up or at the end
-        '''
-        assert self.__rw
-
-        if not ('hk_median' in self.__fid and 'hk_spread' in self.__fid):
-            self.__h5_cre_hk( hk )
-
-        hk_median = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
-        hk_spread = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
-        for name in self.__fid['hk_median'].dtype.names:
-            if hk[name].dtype.name.find( 'float' ) >= 0:
-                (mx, sx) = biweight(hk[name], spread=True)
-                hk_median[name] = mx
-                hk_spread[name] = sx
-            elif hk[name].dtype.name.find( 'int' ) >= 0:
-                hk_median[name] = np.median(hk[name])
-                hk_spread[name] = np.all(hk[name])
-            else:
-                print( name )
-        dset = self.__fid['hk_median']
-        dset.resize( (dset.shape[0]+1,) )
-        dset[-1] = hk_median
-
-        dset = self.__fid['hk_spread']
-        dset.resize( (dset.shape[0]+1,) )
-        dset[-1] = hk_spread
-
-    ## ---------- WRITE DATA (frames averaged in time) ----------
-    def __h5_cre_frames( self, frames,
-                         rows=False, cols=False, method='none' ):
-        '''
-        create datasets for measurement data
-        '''
-        chunk_sz = (16, frames.shape[0] // 4, frames.shape[1] // 4)
-        self.__fid.create_dataset( "signal",
-                                   (0,) + frames.shape,
-                                   chunks=chunk_sz,
-                                   maxshape=(None,) + frames.shape,
-                                   dtype=frames.dtype )
-        self.__fid["signal"].attrs["comment"] = \
-                                    "values in detector-pixel coordinates"
-        if rows:
-            nrows = (frames.shape[1],)
-            self.__fid.create_dataset( "signal_row",
-                                       (0,) + nrows,
-                                       chunks=(16,) + nrows,
-                                       maxshape=(None,) + nrows,
-                                       dtype=frames.dtype )
-            self.__fid["signal_row"].attrs["comment"] = \
-                                    "medians along the first axis of signal"
-
-        if cols:
-            ncols = (frames.shape[0],)
-            self.__fid.create_dataset( "signal_col",
-                                       (0,) + ncols,
-                                       chunks=(16,) + ncols,
-                                       maxshape=(None,) + ncols,
-                                       dtype=frames.dtype )
-            self.__fid["signal_col"].attrs["comment"] = \
-                                    "medians along the second axis of signal"
-
-        if method == 'none':
+        if not self.__rw:
             return
 
-        ds_name = "signal_{}".format(method)
-        self.__fid.create_dataset( ds_name,
-                                   (0,) + frames.shape,
-                                   chunks=chunk_sz,
-                                   maxshape=(None,) + frames.shape,
-                                   dtype=frames.dtype )
-        self.__fid[ds_name].attrs["comment"] = \
-                                    "errors in detector-pixel coordinates"
-        if rows:
-            nrows = (frames.shape[1],)
-            ds_name = "signal_row_{}".format(method)
-            self.__fid.create_dataset( ds_name,
-                                       (0,) + nrows,
-                                       chunks=(16,) + nrows,
-                                       maxshape=(None,) + nrows,
-                                       dtype=frames.dtype )
-            self.__fid[ds_name].attrs["comment"] = \
-                    "medians along the first axis of signal_{}".format(method)
+        ds_list = [ 'signal', 'signal_row', 'signal_col' ]
+        ext = self.__fid.attrs['method']
+        
+        for ds_name in ds_list:
+            if not attr in self.__fid[ds_name].attrs.keys():
+                self.__fid[ds_name].attrs[attr] = value
+            if ext != 'none':
+                ds_ext = ds_name + '_{}'.format(ext)
+                if not attr in self.__fid[ds_ext].attrs.keys():
+                    self.__fid[ds_ext].attrs[attr] = value
 
-        if cols:
-            ds_name = "signal_col_{}".format(method)
-            ncols = (frames.shape[0],)
-            self.__fid.create_dataset( ds_name,
-                                       (0,) + ncols,
-                                       chunks=(16,) + ncols,
-                                       maxshape=(None,) + ncols,
-                                       dtype=frames.dtype )
-            self.__fid[ds_name].attrs["comment"] = \
-                    "medians along the second axis of signal_{}".format(method)
-
-    def h5_write_frames( self, values, errors, statistics=None ):
+    def h5_get_frame_attr( self, ds_name, attr ):
         '''
-        parameter statistics may contain the following strings (comma-separated)
-         - error, noise or std  : description of parameter errors (first field)
-         - rows : when row average/median should be calculated from frames
-         - cols : when column average/median should be calculated from frames
+        Obtain value of an HDF5 dataset attribute
+        '''
+        if attr in self.__fid[ds_name].attrs.keys():
+            return self.__fid[ds_name].attrs[attr]
+        else:
+            return None
+        
+    ## ---------- WRITE HOUSE-KEEPING DATA ----------
+    def h5_write_hk( self, id, hk ):
+        '''
+        Create datasets for house-keeping data.
+        seperated datasets for biweight median and spread
+
+        Todo: only include hk-data when the instrument is really performing 
+              the requested measurements. 
+              Reject entries during start-up or at the end
         '''
         assert self.__rw
 
-        if 'signal' not in self.__fid:
-            ext = 'none'
-            if statistics is None:
-                self.__fid.attrs['rows'] = False
-                self.__fid.attrs['cols'] = False
-                if errors is not None:
-                    ext = 'std'
-            else:
-                stat_list = statistics.split(',')
-                self.__fid.attrs['rows'] = 'rows' in stat_list
-                self.__fid.attrs['cols'] = 'cols' in stat_list
-                if errors is not None:
-                    ext = stat_list[0]
+        ## write entry identifier
+        id_entry = np.empty( 1, dtype=self.__fid['id'].dtype )
+        id_entry[0] = id
+        dset = self.__fid['id']
+        dset.resize( (dset.shape[0]+1,) )
+        dset[-1] = id_entry
 
-            self.__fid.attrs['method'] = ext
-            self.__h5_cre_frames( values, method=ext,
-                                  rows=self.__fid.attrs['rows'],
-                                  cols=self.__fid.attrs['cols'] )
-        else:
-            ext = self.__fid.attrs['method']
+        ## write SWIR house-keeping data
+        if self.__fid.attrs['hk']:
+            hk_median = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
+            hk_spread = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
+            for name in self.__fid['hk_median'].dtype.names:
+                if hk[name].dtype.name.find( 'float' ) >= 0:
+                    (mx, sx) = biweight(hk[name], spread=True)
+                    hk_median[name] = mx
+                    hk_spread[name] = sx
+                elif hk[name].dtype.name.find( 'int' ) >= 0:
+                    hk_median[name] = np.median(hk[name])
+                    hk_spread[name] = np.all(hk[name])
+                else:
+                    print( name )
+            dset = self.__fid['hk_median']
+            dset.resize( (dset.shape[0]+1,) )
+            dset[-1] = hk_median
+
+            dset = self.__fid['hk_spread']
+            dset.resize( (dset.shape[0]+1,) )
+            dset[-1] = hk_spread
+
+    ## ---------- WRITE DATA (frames averaged in time) ----------
+    def h5_write_frame( self, values, errors ):
+        '''
+        '''
+        assert self.__rw
+
+        ext = self.__fid.attrs['method']
 
         dset = self.__fid['signal']
         shape = (dset.shape[0]+1,) + dset.shape[1:]
@@ -379,7 +463,7 @@ class ICM_mon( object ):
                 dset.resize( shape )
                 dset[-1,:] = np.nanmedian( errors, axis=1 )
  
-    def h5_read_frames( self, row_id, statistics=None ):
+    def h5_read_frame( self, row_id, statistics=None ):
         '''
         Read data given row_id
 
@@ -417,6 +501,7 @@ class ICM_mon( object ):
                
         return res
     
+    ## --------------------------------------------------
     def h5_get_trend_cols( self, orbit_list=None, orbit_range=None ):
         pass
 
@@ -424,74 +509,37 @@ class ICM_mon( object ):
         pass
 
     def h5_get_trend_pixel( self, pixel_id, orbit_list=None, orbit_range=None ):
-        pass
-
-    ## ---------- READ/WRITE DATASET ATTRIBUTES ----------
-    def h5_set_frame_attr( self, attr, value ):
         '''
-        Add attributes to HDF5 datasets, during definition phase.
-        Otherwise the call is silently ignored
-
-        Please use names according to the CF conventions:
-         - 'standard_name' : required CF-conventions attribute
-         - 'long_name' : descriptive name may be used for labeling plots
-         - 'units' : unit of the dataset values
         '''
-        if not self.__rw:
-            return
-
-        ds_list = [ 'signal', 'signal_row', 'signal_col' ]
         ext = self.__fid.attrs['method']
-        
-        for ds_name in ds_list:
-            if not attr in self.__fid[ds_name].attrs.keys():
-                self.__fid[ds_name].attrs[attr] = value
-            if ext != 'none':
-                ds_ext = ds_name + '_{}'.format(ext)
-                if not attr in self.__fid[ds_ext].attrs.keys():
-                    self.__fid[ds_ext].attrs[attr] = value
 
-    def h5_get_frame_attr( self, ds_name, attr ):
-        '''
-        Obtain value of an HDF5 dataset attribute
-        '''
-        if attr in self.__fid[ds_name].attrs.keys():
-            return self.__fid[ds_name].attrs[attr]
+        row = pixel_id // 1000
+        col = pixel_id - row * 1000
+        
+        if orbit_list is not None:
+            z_list = self.sql_get_rowid( orbit_list=orbit_list )
+        elif orbit_range is not None:
+            z_list = self.sql_get_rowid( orbit_range=orbit_range )
         else:
-            return None
-        
-    ## ---------- WRITE META-DATA TO SQL database ----------
-    def __sql_cre_meta( self ):
-        '''
-        Create SQLite database for ICM monitoring
-        '''
-        dbname = self.dbname + '.db'
-        
-        con = sqlite3.connect( dbname )
-        cur = con.cursor()
-        cur.execute( '''create table icm_meta (
-           rowID           integer     PRIMARY KEY AUTOINCREMENT,
-           referenceOrbit  integer     NOT NULL UNIQUE,
-           orbitsUsed      integer     NOT NULL,
-           entryDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
-           startDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
-           icmVersion      text        NOT NULL,
-           algVersion      text        NOT NULL,
-           dbVersion       text        NOT NULL,
-           dataMedian      float       NOT NULL,
-           dataSpread      float       NOT NULL,
-           errorMedian     float       NOT NULL,
-           errorSpread     float       NOT NULL,
-           q_detTemp       integer     NOT NULL,
-           q_obmTemp       integer     NOT NULL
-        )''' )
-        cur.execute( 'create index entryIndx on icm_meta(entryDateTime)' )
-        cur.execute( 'create index startIndx on icm_meta(startDateTime)' )
-        cur.close()
-        con.commit()
-        con.close()
+            z_list = self.sql_get_rowid()
 
-    def sql_write_meta( self, meta_dict, verbose=False ):
+        res = {}
+        dset = self.__fid['id']
+        id = dset[:]
+        indx = np.nonzero(np.in1d(id['sql_rowid'],z_list))[0].tolist()
+        res['orbit_ref'] = id['orbit_ref'][indx]
+        
+        dset = self.__fid['signal']
+        res['signal'] = dset[indx, col, row]
+
+        dset = self.__fid['signal_{}'.format(ext)]
+        res['signal_{}'.format(ext)] = dset[indx, col, row]
+        
+        return res
+        
+
+    ## ---------- WRITE META-DATA TO SQL database ----------
+    def sql_write( self, meta_dict, verbose=False ):
         '''
         Append monitoring meta-data to SQLite database
         The dictionary "meta_dict" should contain the following fields:
@@ -510,9 +558,6 @@ class ICM_mon( object ):
          "q_obm_temp"   : column q_obmTemp      [integer]
         '''
         dbname = self.dbname + '.db'
-        if not os.path.exists( dbname ):
-            self.__sql_cre_meta()
-
         str_sql = 'insert into icm_meta values' \
                   '(NULL,{orbit_ref},{orbit_used},{entry_date!r}' \
                   ',{start_time!r}'\
@@ -525,9 +570,16 @@ class ICM_mon( object ):
         con = sqlite3.connect( dbname )
         cur = con.cursor()
         cur.execute( str_sql.format(**meta_dict) )
-        cur.close()
         con.commit()
+        cur.execute( 'select last_insert_rowid()' )
+        row = cur.fetchone()
+        cur.close()
         con.close()
+        if row is None:
+            return -1
+        else:
+            return row[0]
+        
 
     def sql_num_entries( self ):
         '''
@@ -649,6 +701,45 @@ class ICM_mon( object ):
 
         return row_list
     
+    def sql_get_rowid( self, orbit_list=None, orbit_range=None ):
+        '''
+        Obtain rowIDs of selected entries in the SQLite or HDF5 databases
+
+        Parameters:
+           orbit_list  : list with orbit numbers
+           orbit_range : list with orbit range: [orbit_mn, orbit_mx]
+
+        Returns boolean array
+        '''
+        dbname = self.dbname + '.db'
+        id_list = []
+        if not os.path.exists( dbname ):
+            return id_list
+
+        str_sql = 'select rowID from icm_meta'
+        if orbit_list is not None:
+            str_sql += ' where referenceOrbit in ('
+            str_sql += ','.join(str(x) for x in orbit_list)
+            str_sql += ') order by referenceOrbit'
+        elif orbit_range is not None:
+            assert( len(orbit_range) == 2 )
+
+            str_sql += ' where referenceOrbit between'
+            str_sql += ' {} and {}'.format(*orbit_range)
+            str_sql += ' order by referenceOrbit'
+        else:
+            str_sql += ' order by referenceOrbit'
+            
+        conn = sqlite3.connect( dbname )
+        cur = conn.cursor()
+        cur.execute( str_sql )
+        for row in cur:
+            id_list += [row[0],]
+        cur.close()
+        conn.close()
+        
+        return id_list
+
     def sql_get_row_list( self, orbit_list=None, orbit_range=None,
                           frame_stats=False ):
         '''
@@ -695,7 +786,6 @@ class ICM_mon( object ):
         conn.close()
  
         return row_list
-           
 
     def sql_get_trend_frames( self, orbit_list=None, orbit_range=None ):
         '''
@@ -712,203 +802,9 @@ class ICM_mon( object ):
                                       frame_stats=True )
 
 #--------------------------------------------------
-def test_background( num_orbits=365, rebuild=False ):
+def test_sun_isrf():
     '''
-    Perform some simple test to check the ICM_mon_db class
-    '''
-    from datetime import datetime, timedelta
-
-    from pynadc.tropomi.icm_io import ICM_io
-
-    DBNAME = 'mon_background_0005_test'
-    if rebuild:
-        ORBIT_WINDOW = 15
-    
-        if os.path.exists( DBNAME + '.h5' ):
-            os.remove( DBNAME + '.h5' )
-        if os.path.exists( DBNAME + '.db' ):
-            os.remove( DBNAME + '.db' )
-
-        if os.path.isdir('/Users/richardh'):
-            fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
-        elif os.path.isdir('/nfs/TROPOMI/ical/'):
-            fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
-        else:
-            fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
-        icm_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_01_001000_20151002T140000.h5'
-
-        for ii in range( num_orbits ):
-            print( ii )
-        
-            ## open access to ICM product
-            fp = ICM_io( os.path.join(fl_path, icm_file), readwrite=False )
-
-            ## select measurement and collect its meta-data 
-            fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
-
-            ## read data from ICM product and combine band 7 & 8
-            (values, errors) = fp.get_data( 'avg' )
-            values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
-            errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
-
-            meta_dict = {}
-            meta_dict['orbit_ref'] = fp.orbit + ii * ORBIT_WINDOW
-            meta_dict['orbit_window'] = ORBIT_WINDOW
-            meta_dict['orbit_used'] = ORBIT_WINDOW - (ii % 3) ## placeholder
-            meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
-            start_time = datetime.strptime( fp.start_time,
-                                            '%Y-%m-%d %H:%M:%S' ) \
-                + timedelta(days=ii)
-            meta_dict['start_time'] = start_time.isoformat(' ')
-            meta_dict['icm_version'] = fp.creator_version
-
-            (mx, sx) = biweight(values, spread=True)
-            meta_dict['data_median'] = mx
-            meta_dict['data_spread'] = sx
-            (mx, sx) = biweight(errors, spread=True)
-            meta_dict['error_median'] = mx
-            meta_dict['error_spread'] = sx
-
-            ## Tim: how to obtain the actual version of your S/W?
-            meta_dict['algo_version'] = '00.01.00'
-            meta_dict['q_det_temp'] = 0                 ## obtain from hk
-            meta_dict['q_obm_temp'] = 0                 ## obtain from hk
-            meta_dict['q_algo'] = 0                     ## obtain from algo?!
-            hk_data = fp.housekeeping_data
-    
-            ## then add information to monitoring database
-            ## Note that ingesting results twice leads to database corruption!
-            ##   Please use 'mon.sql_check_orbit'
-            mon = ICM_mon( DBNAME, readwrite=True )
-            meta_dict['db_version'] = mon.pynadc_version()
-            if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
-                mon.h5_set_attr( 'title',
-                                 'Tropomi SWIR thermal background monitoring' )
-                mon.h5_set_attr( 'institution',
-                                 'SRON Netherlands Institute for Space Research' )
-                mon.h5_set_attr( 'source',
-                                 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
-                mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
-                mon.h5_set_attr( 'comment',
-                                 'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
-                mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
-                mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
-                mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
-                mon.h5_write_hk( hk_data  )
-                mon.h5_write_frames( values, errors,
-                                     statistics='std,rows,cols'  )
-                mon.h5_set_frame_attr( 'long_name', 'signal' )
-                mon.h5_set_frame_attr( 'units', 'electron' )
-                mon.sql_write_meta( meta_dict )
-            del( fp )
-            del( mon )
-
-    ## select rows from database given an orbit range
-    mon = ICM_mon( DBNAME, readwrite=False )
-    print( mon.sql_select_orbit( [1940,2050] ) )
-
-    print( mon.sql_get_row_list( orbit_range=[1940,2050] ) )
-
-    print( mon.sql_get_row_list( orbit_list=[1954,1969,1999,2044] ) )
-        
-    print( mon.sql_get_row_list( orbit_list=[2044] ) )
-        
-    print( mon.sql_get_trend_frames( orbit_range=[2010,2050] ) )
-
-    del(mon)
-        
-#--------------------------------------------------
-def test( num_orbits=1 ):
-    '''
-    Perform some simple test to check the ICM_mon_db class
-    '''
-    from datetime import datetime
-
-    from pynadc.tropomi.icm_io import ICM_io
-
-    DBNAME = 'mon_quick_test'
-    ORBIT_WINDOW = 16
-    if os.path.exists( DBNAME + '.h5' ):
-        os.remove( DBNAME + '.h5' )
-    if os.path.exists( DBNAME + '.db' ):
-        os.remove( DBNAME + '.db' )
-
-    if os.path.isdir('/Users/richardh'):
-        fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
-    elif os.path.isdir('/nfs/TROPOMI/ical/'):
-        fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
-    else:
-        fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
-    icm_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_01_001000_20151002T140000.h5'
-
-    for ii in range( num_orbits ):
-        print( ii )
-        
-        ## open access to ICM product
-        fp = ICM_io( os.path.join(fl_path, icm_file), readwrite=True )
-
-        ## select measurement and collect its meta-data 
-        fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
-    
-        ## read data from ICM product and combine band 7 & 8
-        (values, errors) = fp.get_data( 'avg' )
-        values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
-        errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
-
-        meta_dict = {}
-        meta_dict['orbit_ref'] = fp.orbit + ii
-        meta_dict['orbit_window'] = ORBIT_WINDOW
-        meta_dict['orbit_used'] = ORBIT_WINDOW - (ii % 3) ## placeholder
-        meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
-        meta_dict['start_time'] = fp.start_time
-        meta_dict['icm_version'] = fp.creator_version
-
-        (mx, sx) = biweight(values, spread=True)
-        meta_dict['data_median'] = mx
-        meta_dict['data_spread'] = sx
-        (mx, sx) = biweight(errors, spread=True)
-        meta_dict['error_median'] = mx
-        meta_dict['error_spread'] = sx
-
-        ## Tim: how to obtain the actual version of your S/W?
-        meta_dict['algo_version'] = '00.01.00'
-        meta_dict['q_det_temp'] = 0                    ## obtain from hk
-        meta_dict['q_obm_temp'] = 0                    ## obtain from hk
-        meta_dict['q_algo'] = 0                        ## obtain from algo?!
-        hk_data = fp.housekeeping_data
-
-        ## then add information to monitoring database
-        ## Note that ingesting results twice leads to database corruption!
-        ##   Please use 'mon.sql_check_orbit'
-        mon = ICM_mon( DBNAME, readwrite=True )
-        meta_dict['db_version'] = mon.pynadc_version()
-        if mon.sql_check_orbit( meta_dict['orbit_ref'] ) < 0:
-            mon.h5_set_attr( 'title', 'Tropomi SWIR dark-flux monitoring results' )
-            mon.h5_set_attr( 'institution', 'SRON Netherlands Institute for Space Research' )
-            mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi Inflight Calibration and Monitoring product' )
-            mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' ) 
-            mon.h5_set_attr( 'comment',
-                             'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
-            mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
-            mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
-            mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
-            mon.h5_write_hk( hk_data  )
-            mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
-            mon.h5_set_frame_attr( 'long_name', 'background signal' )
-            mon.h5_set_frame_attr( 'units', 'electron' )
-            mon.sql_write_meta( meta_dict, verbose=True )
-        del( fp )
-        del( mon )
-
-    ## select rows from database given an orbit range
-    mon = ICM_mon( DBNAME, readwrite=False )
-    print( mon.sql_select_orbit( [1940,1950], full=True ) )
-    del(mon)
-        
-#--------------------------------------------------
-def test2():
-    '''
-    Perform some simple test to check the ICM_mon_db class
+    Create test database from OCAL Sun-ISRF background measurements
     '''
     from datetime import datetime
 
@@ -931,6 +827,7 @@ def test2():
     dirList = [d for d in os.listdir( fl_path ) 
                if os.path.isdir(os.path.join(fl_path, d))]
     dirList.sort()
+    
     ii = 0
     for msm in dirList:
         fp = OCM_io( os.path.join(fl_path, msm), verbose=True )
@@ -966,29 +863,136 @@ def test2():
         meta_dict['q_obm_temp'] = 0                    ## obtain from hk
         meta_dict['q_algo'] = 0                        ## obtain from algo?!
         hk_data = fp.housekeeping_data
+
+        mon = ICM_mon( DBNAME, readwrite=True )
+        if ii == 0:
+            mon.h5_set_attr( 'title', 'Tropomi SWIR OCAL SunISRF backgrounds' )
+            mon.h5_set_attr( 'source',
+                             'Copernicus Sentinel-5 Precursor Tropomi On-ground Calibration and Monitoring products' )
+            mon.h5_set_attr( 'comment',
+                             'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
+            mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
+            mon.h5_set_attr( 'icid_list',
+                             [fp.instrument_settings['ic_id'],] )
+            mon.h5_set_attr( 'ic_version',
+                             [fp.instrument_settings['ic_version'],] )
+
+            ## initialize HDF5 datasets
+            mon.h5_init( (256,1000), np.float64, statistics='hk,std,col,row' )
+            mon.h5_set_frame_attr( 'long_name', 'signal' )
+            mon.h5_set_frame_attr( 'units', 'electron / s' )
+
+        sql_rowid = mon.sql_write( meta_dict )
+        if sql_rowid > 0:
+            mon.h5_write_hk( (sql_rowid,ii), hk_data )
+            mon.h5_write_frame( values, errors )
+
+        del( mon )
+        del( fp )
         ii += 1
         
-        mon = ICM_mon( DBNAME, readwrite=True )
-        mon.h5_set_attr( 'title', 'Tropomi SWIR OCAL SunISRF backgrounds' )
-        mon.h5_set_attr( 'institution', 'SRON Netherlands Institute for Space Research' )
-        mon.h5_set_attr( 'source', 'Copernicus Sentinel-5 Precursor Tropomi On-ground Calibration and Monitoring product' )
-        mon.h5_set_attr( 'references', 'https://www.sron.nl/Tropomi' )
-        mon.h5_set_attr( 'comment',
-                         'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
-        mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
-        mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
-        mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
-        mon.h5_write_hk( hk_data  )
-        mon.h5_write_frames( values, errors, statistics='std,rows,cols'  )
-        mon.h5_set_frame_attr( 'long_name', 'signal' )
-        mon.h5_set_frame_attr( 'units', 'electron / s' )
-        mon.sql_write_meta( meta_dict, verbose=True )
+#--------------------------------------------------
+def test( num_orbits=1 ):
+    '''
+    Perform some simple test to check the ICM_mon_db class
+    '''
+    from datetime import datetime
 
+    from pynadc.tropomi.icm_io import ICM_io
+
+    DBNAME = 'mon_quick_test'
+    ORBIT_WINDOW = 16
+    if os.path.exists( DBNAME + '.h5' ):
+        os.remove( DBNAME + '.h5' )
+    if os.path.exists( DBNAME + '.db' ):
+        os.remove( DBNAME + '.db' )
+
+    if os.path.isdir('/Users/richardh'):
+        fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001100/2012/09/18'
+    elif os.path.isdir('/nfs/TROPOMI/ical/'):
+        fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001100/2012/09/18'
+    else:
+        fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001100/2012/09/18'
+    icm_file = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_01_001100_20151002T140000.h5'
+
+    ## ----- initialize ICM monitor databases -----
+    ## Note that you do not need to open an product using ICM_io, but then
+    ##      you need to provide some the required information yourself
+    fp = ICM_io( os.path.join(fl_path, icm_file) )
+    fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
+    
+    mon = ICM_mon( DBNAME, readwrite=True )
+    mon.h5_set_attr( 'title', 'Tropomi SWIR dark-flux monitoring results' )
+    mon.h5_set_attr( 'source',
+                     'Copernicus Sentinel-5 Precursor Tropomi In-flight Calibration and Monitoring products' )
+    mon.h5_set_attr( 'comment',
+                     'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
+    mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
+    mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
+    mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
+
+    ## initialize HDF5 datasets
+    mon.h5_init( (256,1000), np.float64, statistics='hk,std,col,row' )
+    mon.h5_set_frame_attr( 'long_name', 'background signal' )
+    mon.h5_set_frame_attr( 'units', 'electron' )
+    del(mon)
+    del(fp)
+    
+    for ii in range( num_orbits ):
+        print( ii )
+        
+        ## open access to ICM product
+        fp = ICM_io( os.path.join(fl_path, icm_file) )
+
+        ## select measurement and collect its meta-data 
+        fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
+    
+        ## read data from ICM product and combine band 7 & 8
+        (values, errors) = fp.get_data( 'avg' )
+        values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
+        errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
+
+        meta_dict = {}
+        meta_dict['orbit_ref'] = fp.orbit + ii
+        meta_dict['orbit_window'] = ORBIT_WINDOW
+        meta_dict['orbit_used'] = ORBIT_WINDOW - (ii % 3) ## placeholder
+        meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
+        meta_dict['start_time'] = fp.start_time
+
+        ## Tim: how to obtain the actual version of your S/W?
+        meta_dict['algo_version'] = '00.01.00'
+        meta_dict['icm_version'] = fp.creator_version
+        meta_dict['db_version'] = fp.pynadc_version()
+
+        (mx, sx) = biweight(values, spread=True)
+        meta_dict['data_median'] = mx
+        meta_dict['data_spread'] = sx
+        (mx, sx) = biweight(errors, spread=True)
+        meta_dict['error_median'] = mx
+        meta_dict['error_spread'] = sx
+
+        meta_dict['q_det_temp'] = 0                    ## obtain from hk
+        meta_dict['q_obm_temp'] = 0                    ## obtain from hk
+        meta_dict['q_algo'] = 0                        ## obtain from algo?!
+        hk_data = fp.housekeeping_data
+
+        ## then add information to monitoring database
+        ## Note that ingesting results twice leads to database corruption!
+        ##   Please use 'mon.sql_check_orbit'
+        mon = ICM_mon( DBNAME, readwrite=True )
+        sql_rowid = mon.sql_write( meta_dict )
+        if sql_rowid > 0:
+            mon.h5_write_hk( (sql_rowid, meta_dict['orbit_ref']), hk_data  )
+            mon.h5_write_frame( values, errors )
         del( fp )
         del( mon )
+
+    ## select rows from database given an orbit range
+    mon = ICM_mon( DBNAME, readwrite=False )
+    print( mon.sql_select_orbit( [1900,1910], full=True ) )
+    del(mon)
         
 #--------------------------------------------------
 if __name__ == '__main__':
-    test_background(rebuild=True)
-    #test( 25 )
-    #test2()
+    test( 31 )
+    #test_sun_isrf()
