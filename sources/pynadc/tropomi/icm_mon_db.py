@@ -948,9 +948,11 @@ def test( num_orbits=1 ):
         fp.select( 'BACKGROUND_RADIANCE_MODE_0005' )
     
         ## read data from ICM product and combine band 7 & 8
-        (values, errors) = fp.get_data( 'avg' )
-        values = np.hstack((values[0][:-1,:], values[1][:-1,:]))
-        errors = np.hstack((errors[0][:-1,:], errors[1][:-1,:]))
+        res = fp.get_data()
+        values = np.hstack((res['signal_avg'][0][:-1,:],
+                            res['signal_avg'][1][:-1,:]))
+        errors = np.hstack((res['signal_avg_std'][0][:-1,:], 
+                            res['signal_avg_std'][1][:-1,:]))
 
         meta_dict = {}
         meta_dict['orbit_ref'] = fp.orbit + ii
