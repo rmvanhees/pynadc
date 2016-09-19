@@ -32,23 +32,27 @@ class ICM_io( object ):
     5) close file
     '''
     def __init__( self, icm_product, readwrite=False, verbose=False ):
-        # import numbers
+        '''
+        '''
         assert os.path.isfile( icm_product ), \
             '*** Fatal, can not find ICM_CA_SIR file: {}'.format(icm_product)
 
+        # initialize class-attributes
+        self.__verbose = verbose
         self.__product = icm_product
         self.__rw = readwrite
+        self.__h5_path = None
+        self.__h5_name = None
+        self.__msm_mode = None
+        self.__patched_msm = []
+
+        # open ICM product as HDF5 file
         if readwrite:
             self.__fid = h5py.File( icm_product, "r+" )
         else:
             self.__fid = h5py.File( icm_product, "r" )
 
-        self.__verbose = verbose
-        self.__h5_path = None 
-        self.__h5_name = None 
-        self.__msm_mode = None
-        self.__patched_msm = []
-
+        # initialize public class-attributes
         self.orbit = int(self.__fid.attrs['reference_orbit'])
         self.start_time = self.__fid.attrs['time_coverage_start'].decode('ascii').strip('Z').replace('T',' ')
         grp = self.__fid['/METADATA/ESA_METADATA/earth_explorer_header/fixed_header']
@@ -113,9 +117,11 @@ class ICM_io( object ):
         Parameters:
          - h5_name : name of measurement group
          - h5_path : name of path in HDF5 file to measurement group
-                     use "BAND%_.../..."
+                     use: BAND%_ANALYSIS, BAND%_CALIBRATION, BAND%_IRRADIANCE,
+                          or BAND%_RADIANCE
 
         Updated object attributes:
+         - bands               : available spectral bands
          - ref_time            : reference time of measurement (datetime-object)
          - delta_time          : offset w.r.t. reference time (milli-seconds)
          - instrument_settings : copy of instrument settings
@@ -128,6 +134,9 @@ class ICM_io( object ):
         self.delta_time = None
         self.instrument_settings = None
         self.housekeeping_data   = None
+
+        # if path is given, then only determine avaialble spectral bands
+        # else determine path and avaialble spectral bands
         if h5_path is not None:
             assert h5_path.find('%') > 0, \
                 print( '*** Fatal: h5_path should start with BAND%' )
@@ -149,19 +158,21 @@ class ICM_io( object ):
                         h5_path = 'BAND{}_{}'.format('%', name)
                         self.bands += ib
 
+        # return in case no data was found
         if len(self.bands) == 0:
             return self.bands
-
-        ib = str(self.bands[0])
         self.__h5_path = h5_path
         self.__h5_name = h5_name
+
+        # NOTE it is assumed that the instrument settings and housekeeping data
+        # are equal for the bands available
+        ib = str(self.bands[0])
         if h5_name == 'ANALOG_OFFSET_SWIR' or h5_name == 'LONG_TERM_SWIR':
             grp_path = os.path.join( h5_path.replace('%', ib), h5_name )
             grp = self.__fid[grp_path]
             dset = grp[h5_name.lower() + '_group_keys']
             group_keys = dset[:]
             for name in group_keys['group']:
-                print( name )
                 grp_path = os.path.join( 'BAND{}_CALIBRATION'.format(ib),
                                          name.decode('ascii') )
                 grp = self.__fid[grp_path]
@@ -207,125 +218,132 @@ class ICM_io( object ):
         return self.bands
 
     #-------------------------
-    def get_data( self, msm_mode ):
+    def get_msm_names( self, msm_mode ):
         '''
-        Pull averaged frame-data from dataset
-        - msm_mode must be one of 'biweight', 'sls', 'avg', 'avg_col',
-                   'avg_error', 'avg_noise', 'avg_quality_level', 'avg_row', 
-                   'avg_std'
+        This function returns the names of the measurement datasets
+        The names of the measurement datasets are different for
+          1) datasets under BAND%_ANALYSIS, BAND%_CALIBRATION, BAND%_IRRADIANCE 
+            and BAND%_RADIANCE
+          2) datasets under ANALYSIS of BAND%_CALIBRATION
+          3) dataset of dynamic CKD
+        '''
+        dset_msm = []
+        if self.__h5_path.find('ANALYSIS') >= 0:
+            dset_grp = ''
+            if self.__h5_name == 'ANALOG_OFFSET_SWIR' \
+               or self.__h5_name == 'LONG_TERM_SWIR':
+                dset_msm.append(self.__h5_name.lower() + '_value')
+                dset_msm.append(self.__h5_name.lower() + '_error')
+            elif self.__h5_name == 'DPQF_MAP':
+                dset_msm.append('dpqf_map')
+                dset_msm.append('dpqm_dark_flux')
+                dset_msm.append('dpqm_noise')
+            elif self.__h5_name == 'NOISE':
+                dset_msm.append('noise')
+                dset_msm.append('noise_estimated_background')
+        elif self.__h5_path.find('CALIBRATION') >= 0:
+            if msm_mode == 'biweight':
+                dset_grp = 'ANALYSIS'
+                dset_msm.append('biweight_value')
+                dset_msm.append('biweight_error')
+            elif msm_mode == 'sls':
+                dset_grp = 'ANALYSIS'
+                dset_msm.append('det_lit_area_signal')
+                dset_msm.append('det_lit_area_error')
+            else:
+                dset_grp = 'OBSERVATIONS'
+                dset_msm.append('signal_avg')
+                dset_msm.append('signal_avg_col')
+                dset_msm.append('signal_avg_row')
+                dset_msm.append('signal_avg_std')
+        elif self.__h5_path.find('IRRADIANCE') >= 0:
+            dset_grp = 'OBSERVATIONS'
+            dset_msm.append('irradiance_avg')
+            dset_msm.append('irradiance_avg_col')
+            dset_msm.append('irradiance_avg_row')
+            dset_msm.append('irradiance_avg_std')
+        elif self.__h5_path.find('RADIANCE') >= 0:
+            dset_grp = 'OBSERVATIONS'
+            dset_msm.append('radiance_avg')
+            dset_msm.append('radiance_avg_col')
+            dset_msm.append('radiance_avg_row')
+            dset_msm.append('radiance_avg_std')
 
-        The function returns a tuple with the data values and their errors.
-        - these values and errors are stored as a list of ndarrays (one array
-          per band)
+        return (dset_grp, dset_msm)
+        
+    #-------------------------
+    def get_data( self, msm_mode=None ):
+        '''
+        Read measurement data from "selected" dataset(s), see method select
+
+        Parameter:
+        - msm_mode must be None, 'biweight' or 'sls'
+
+        The function returns a dictionary with msm_names and their values
+        - these values are stored as a list of ndarrays (one array per band)
         - FillValue are set to NaN
         '''
-        if msm_mode == 'biweight':
-            dset_grp = 'ANALYSIS'
-            dset_values = 'biweight_value'
-            dset_errors = 'biweight_error'
-        else:
-            dset_grp = 'OBSERVATIONS'
-            if self.__h5_path.find('CALIBRATION') >= 0:
-                dset_values = 'signal_{}'.format(msm_mode)
-                dset_errors = None
-                if msm_mode == 'avg':
-                    dset_errors = 'signal_{}_std'.format(msm_mode)
-            elif self.__h5_path.find('IRRADIANCE') >= 0:
-                dset_values = 'irradiance_{}'.format(msm_mode)
-                dset_errors = None
-                if msm_mode == 'avg':
-                    dset_errors = 'irradiance_{}_std'.format(msm_mode)
-            elif self.__h5_path.find('RADIANCE') >= 0:
-                dset_values = 'radiance_{}'.format(msm_mode)
-                dset_errors = None
-                if msm_mode == 'avg':
-                    dset_errors = 'radiance_{}_std'.format(msm_mode)
+        FILLVALUE = float.fromhex('0x1.ep+122')
 
-        values = None
-        errors = None
-        fillvalue = float.fromhex('0x1.ep+122')
+        (dset_grp, msm_list) = self.get_msm_names( msm_mode )
+        
+        res = {}
         for ib in self.bands:
             sgrp = self.__fid[os.path.join( self.__h5_path.replace('%', ib),
                                             self.__h5_name, dset_grp )]
-            data = np.squeeze(sgrp[dset_values])
-            if sgrp[dset_values].attrs['_FillValue'] == fillvalue:
-                data[(data == fillvalue)] = np.nan
-            if values is None:
-                values = [data]
-            else:
-                values.append(data)
-                
-            if dset_errors is not None:
-                data = np.squeeze(sgrp[dset_errors])
-                if sgrp[dset_errors].attrs['_FillValue'] == fillvalue:
-                    data[(data == fillvalue)] = np.nan
-                if errors is None:
-                    errors = [data]
+            for msm in msm_list:
+                data = np.squeeze(sgrp[msm])
+                if sgrp[msm].attrs['_FillValue'] == FILLVALUE:
+                    data[(data == FILLVALUE)] = np.nan
+                if msm not in res.keys():
+                    res[msm] = [data]
                 else:
-                    errors.append(data)
+                    res[msm].append(data)
         
-        return (values, errors)
+        return res
 
     #-------------------------
-    def set_data( self, msm_mode, values, errors=None ):
+    def set_data( self, res ):
         '''
-        Push (patched) averaged frame-data to dataset
-        - values and errors should be provided as a list of ndarrays 
-          (one array per band)
+        Write measurement data to "selected" dataset(s), reverse of 
+        method get_data. It can only write data to an existing dataset.
+
+        Requires a dictionary alike the one returned by method get_data
         '''
-        if msm_mode == 'biweight':
-            dset_grp = 'ANALYSIS'
-            dset_values = 'biweight_value'
-            dset_errors = 'biweight_error'
-        elif msm_mode == 'sls':
-            dset_grp = 'ANALYSIS'
-            dset_values = 'det_lit_area_signal'            
-        elif msm_mode == 'sls_background':
-            dset_grp = 'ANALYSIS'
-            dset_values = 'det_lit_area_signal'            
-        else:
-            dset_grp = 'OBSERVATIONS'
-            if self.__h5_path.find('CALIBRATION') >= 0:
-                dset_values = 'signal_{}'.format(msm_mode)
-                dset_errors = None
-                if msm_mode == 'avg':
-                    dset_errors = 'signal_{}_std'.format(msm_mode)
-            elif self.__h5_path.find('IRRADIANCE') >= 0:
-                dset_values = 'irradiance_{}'.format(msm_mode)
-                dset_errors = None
-                if msm_mode == 'avg':
-                    dset_errors = 'irradiance_{}_std'.format(msm_mode)
-            elif self.__h5_path.find('RADIANCE') >= 0:
-                dset_values = 'radiance_{}'.format(msm_mode)
-                dset_errors = None
-                if msm_mode == 'avg':
-                    dset_errors = 'radiance_{}_std'.format(msm_mode)
+        grp_list = ['OBSERVATIONS', 'ANALYSIS', '']
 
         ii = 0
         for ib in self.bands:
-            ds_path = os.path.join( self.__h5_path.replace('%', ib),
-                                    self.__h5_name, dset_grp )
-            if not ds_path in self.__fid:
-                continue
-            
-            sgrp = self.__fid[ds_path]
-            if msm_mode[0:3] != 'sls':
-                if values is not None:
-                    sgrp[dset_values][...] = values[ii][...]
+            for dset_grp in grp_list:
+                ds_path = os.path.join( self.__h5_path.replace('%', ib),
+                                        self.__h5_name, dset_grp )
+                if ds_path not in self.__fid:
+                    continue
+                
+                sgrp = self.__fid[ds_path]
+                for key in res.keys():
+                    if key not in sgrp:
+                        continue
 
-                if errors is not None:
-                    sgrp[dset_errors][...] = errors[ii][...]
-            else:
-                if values is not None:
-                    sgrp[dset_values][...] = values
-
-                if errors is not None:
-                    sgrp[dset_errors][...] = errors
+                    if key[0:12] == 'det_lit_area':
+                        sgrp[key][...] = res[key]
+                    else:
+                        sgrp[key][...] = res[key][ii][...]
             ii += 1
 
-        self.__patched_msm.append( os.path.join( self.__h5_path,
-                                                 self.__h5_name,
-                                                 dset_values ) )
+        for dset_grp in grp_list:
+            ds_path = os.path.join( self.__h5_path.replace('%', self.bands[0]),
+                                    self.__h5_name, dset_grp )
+            if ds_path not in self.__fid:
+                continue
+                
+            sgrp = self.__fid[ds_path]
+            for key in res.keys():
+                if key in sgrp:
+                    print(dset_grp, key )
+                    self.__patched_msm.append( os.path.join( self.__h5_path,
+                                                             self.__h5_name,
+                                                             key ) )
 
 #--------------------------------------------------
 def test():
@@ -337,46 +355,59 @@ def test():
     if os.path.isdir('/Users/richardh'):
         fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
     else:
-        fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
-    fl_name = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01890_01_001000_20151002T140000.h5'
+        fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001100/2012/09/18'
+    fl_name = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_01_001100_20151002T140000.h5'
 
-    print( fl_name )
-    fp = ICM_io( os.path.join(fl_path, fl_name), verbose=True )
+    fp = ICM_io( os.path.join(fl_path, fl_name) )
+    fp.select( 'ANALOG_OFFSET_SWIR' )
     print( fp )
-    fp.select( 'BACKGROUND_MODE_1063' )
-    print( fp )
-    fp.select( 'BACKGROUND_MODE_1063', h5_path='BAND%_CALIBRATION' )
     print( fp.ref_time )
     print( fp.delta_time )
+    res= fp.get_data()
+    for key in res.keys():
+        print( key, len(res[key]), res[key][0].shape )
+
+    fp.select( 'BACKGROUND_MODE_1063', h5_path='BAND%_CALIBRATION' )
     print( fp )
-    (values, error) = fp.get_data( msm_mode='biweight' )
-    print( 'biweight: ', len(values), values[0].shape )
-    
-    (values, error) = fp.get_data( msm_mode='avg' )
-    print( 'avg: ', len(values), values[0].shape )
+    res= fp.get_data()
+    for key in res.keys():
+        print( key, len(res[key]), res[key][0].shape )
 
-    (values, error) = fp.get_data( msm_mode='avg_col' )
-    print( 'avg_col: ', len(values), values[0].shape )
+    res = fp.get_data( msm_mode='biweight' )
+    for key in res.keys():
+        print( key, len(res[key]), res[key][0].shape )
 
-    (values, error) = fp.get_data( msm_mode='avg_row' )
-    print( 'avg_row: ', len(values), values[0].shape )
+    fp.select( 'SOLAR_IRRADIANCE_MODE_0202' )
+    print( fp )
+    res= fp.get_data()
+    for key in res.keys():
+        print( key, len(res[key]), res[key][0].shape )
+
+    fp.select( 'EARTH_RADIANCE_MODE_0004' )
+    print( fp )
+    res= fp.get_data()
+    for key in res.keys():
+        print( key, len(res[key]), res[key][0].shape )
 
     if os.path.isdir('/Users/richardh'):
         fl_path2 = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
     else:
         fl_path2 = '/data/richardh/Tropomi'
-    fl_name2 = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01890_02_001000_20151002T140000.h5'
+    fl_name2 = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_01_001101_20151002T140000.h5'
     shutil.copy( os.path.join(fl_path, fl_name),
                  os.path.join(fl_path2, fl_name2) )
     fp = ICM_io( os.path.join(fl_path2, fl_name2),
                  verbose=True, readwrite=True )
     fp.select( 'BACKGROUND_MODE_1063' )
     print( fp )
-    (values, error) = fp.get_data( msm_mode='avg' )
-    values[0][:,:] = 2
-    values[1][:,:] = 3
-    fp.set_data( 'avg', values )
-    
+    res = fp.get_data()
+    del res['signal_avg_col']
+    del res['signal_avg_row']
+    res['signal_avg'][0][:,:] = 2
+    res['signal_avg'][1][:,:] = 3
+    res['signal_avg_std'][0][:,:] = 0.25
+    fp.set_data( res )
+   
     del fp
 
 #--------------------------------------------------
