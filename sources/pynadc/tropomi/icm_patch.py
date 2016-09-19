@@ -258,10 +258,10 @@ def test():
     
     from pynadc.tropomi.icm_io import ICM_io
 
-    data_dir = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
+    data_dir = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/18'
     temp_dir = '/tmp'
-    icm_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_01_001000_20151002T140000.h5'
-    tmp_file = 'S5P_ICM_CA_SIR_20120919T051721_20120919T065655_01939_02_001000_20151002T140000.h5'
+    icm_file = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_01_001100_20151002T140000.h5'
+    tmp_file = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_02_001100_20151002T140000.h5'
 
     patch = ICM_patch()
     shutil.copy( os.path.join(data_dir, icm_file),
@@ -272,8 +272,9 @@ def test():
     fp.select( 'DARK_MODE_1605' )
     res = patch.background( fp.instrument_settings['exposure_time'],
                             fp.instrument_settings['nr_coadditions'] )
-    fp.set_data( 'avg', np.split(res[0], 2, axis=1),
-                 errors=np.split(res[1], 2, axis=1) )
+    res = { 'signal_avg' : np.split(res[0], 2, axis=1),
+            'signal_avg_std' : np.split(res[1], 2, axis=1) }
+    fp.set_data( res )
     
     fp.select( 'SLS_MODE_0610' )
     for ii in range(5):
@@ -282,15 +283,17 @@ def test():
         if nr_valid > 0:
             break
         
-    res = patch.sls( sls_id )
-    print( 'SLS values: ', res[0].shape )
-    print( 'SLS background: ', res[1].shape )
-    print( 'SLS errors: ', res[2].shape )
-    fp.set_data( 'sls', res[0][:fp.delta_time.shape[0],:,:] )
+    res_sls = patch.sls( sls_id )
+    print( 'SLS values: ', res_sls[0].shape )
+    print( 'SLS background: ', res_sls[1].shape )
+    print( 'SLS errors: ', res_sls[2].shape )
+    res = { 'det_lit_area_signal' : res_sls[0][:fp.delta_time.shape[0],:,:] }
+    fp.set_data( msm_mode='sls', res )
 
     fp.select( 'BACKGROUND_MODE_0609' )
-    fp.set_data( 'avg', np.split(res[1], 2, axis=1),
-                 errors=np.split(res[2], 2, axis=1) )
+    res = { 'signal_avg' : np.split(res_sls[1], 2, axis=1),
+            'signal_avg_std' : np.split(res[2], 2, axis=1) }
+    fp.set_data( res )
     del( fp )
     del( patch )
 
