@@ -106,7 +106,7 @@ class ICM_io( object ):
         from importlib import util
 
         version_spec = util.find_spec( "pynadc.version" )
-        assert (version_spec is not None)
+        assert version_spec is not None
 
         from pynadc import version
         return version.__version__
@@ -139,7 +139,7 @@ class ICM_io( object ):
         # else determine path and avaialble spectral bands
         if h5_path is not None:
             assert h5_path.find('%') > 0, \
-                print( '*** Fatal: h5_path should start with BAND%' )
+                '*** Fatal: h5_path should start with BAND%'
 
             for ib in '12345678':
                 grp_path = os.path.join( h5_path.replace('%', ib), h5_name )
@@ -171,8 +171,8 @@ class ICM_io( object ):
             grp_path = os.path.join( h5_path.replace('%', ib), h5_name )
             grp = self.__fid[grp_path]
             dset = grp[h5_name.lower() + '_group_keys']
-            group_keys = dset[:]
-            for name in group_keys['group']:
+            group_keys = dset['group'][:]
+            for name in group_keys:
                 grp_path = os.path.join( 'BAND{}_CALIBRATION'.format(ib),
                                          name.decode('ascii') )
                 grp = self.__fid[grp_path]
@@ -340,7 +340,6 @@ class ICM_io( object ):
             sgrp = self.__fid[ds_path]
             for key in res.keys():
                 if key in sgrp:
-                    print(dset_grp, key )
                     self.__patched_msm.append( os.path.join( self.__h5_path,
                                                              self.__h5_name,
                                                              key ) )
@@ -353,12 +352,12 @@ def test():
     import shutil
     
     if os.path.isdir('/Users/richardh'):
-        fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
+        fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/18'
     else:
         fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001100/2012/09/18'
     fl_name = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_01_001100_20151002T140000.h5'
 
-    fp = ICM_io( os.path.join(fl_path, fl_name) )
+    fp = ICM_io( os.path.join(fl_path, fl_name), verbose=True )
     fp.select( 'ANALOG_OFFSET_SWIR' )
     print( fp )
     print( fp.ref_time )
@@ -390,7 +389,7 @@ def test():
         print( key, len(res[key]), res[key][0].shape )
 
     if os.path.isdir('/Users/richardh'):
-        fl_path2 = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/19'
+        fl_path2 = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/18'
     else:
         fl_path2 = '/data/richardh/Tropomi'
     fl_name2 = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_01_001101_20151002T140000.h5'
