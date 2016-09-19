@@ -3,7 +3,7 @@
 # This software is distributed under the BSD 2-clause license.
 
 '''
-Methods to read and write to a Tropomi ICM_CA_SIR product
+Access to data-sets in a Tropomi ICM_CA_SIR product, including read and alter
 
 '''
 from __future__ import print_function
@@ -18,21 +18,24 @@ import h5py
 class ICM_io( object ):
     '''
     This class should offer all the necessary functionality to read and patch
-    a Tropomi ICM_CA_SIR product
+    dataset in a Tropomi ICM_CA_SIR product
 
     Usage:
     1) open file (new class initiated)
     2) select group of a particular measurement
-    3) read data (median/averaged full frame(s), only)
+    3) read data
     .
     . <user actions>
     .
     4) write patched data
-    * back to step 2) or
-    5) close file
+    .
+    . back to step 2) or
+    .
+    5) close access to file
     '''
     def __init__( self, icm_product, readwrite=False, verbose=False ):
         '''
+        Initialize access to an ICM product
         '''
         assert os.path.isfile( icm_product ), \
             '*** Fatal, can not find ICM_CA_SIR file: {}'.format(icm_product)
@@ -74,8 +77,8 @@ class ICM_io( object ):
     def __del__( self ):
         '''
         Before closing the product, we make sure that the output product
-        describes what has been altered by the S/W. 
-        To keep any change traceable.
+        describes what has been altered by the S/W. To keep any change 
+        traceable.
         '''
         if len(self.__patched_msm) > 0:
             '''
@@ -114,11 +117,15 @@ class ICM_io( object ):
     #-------------------------
     def select( self, h5_name, h5_path=None ):
         '''
+        Select a measurement as <processing class>_<ic_id>
+
         Parameters:
          - h5_name : name of measurement group
          - h5_path : name of path in HDF5 file to measurement group
                      use: BAND%_ANALYSIS, BAND%_CALIBRATION, BAND%_IRRADIANCE,
                           or BAND%_RADIANCE
+
+        Return: string with spectral bands found in product
 
         Updated object attributes:
          - bands               : available spectral bands
@@ -274,14 +281,14 @@ class ICM_io( object ):
     #-------------------------
     def get_data( self, msm_mode=None ):
         '''
-        Read measurement data from "selected" dataset(s), see method select
+        Read datasets from a measurement selected by class-method "select"
 
         Parameter:
         - msm_mode must be None, 'biweight' or 'sls'
 
         The function returns a dictionary with msm_names and their values
         - these values are stored as a list of ndarrays (one array per band)
-        - FillValue are set to NaN
+        - (float) FillValues are set to NaN
         '''
         FILLVALUE = float.fromhex('0x1.ep+122')
 
@@ -305,10 +312,9 @@ class ICM_io( object ):
     #-------------------------
     def set_data( self, res ):
         '''
-        Write measurement data to "selected" dataset(s), reverse of 
-        method get_data. It can only write data to an existing dataset.
+        Alter datasets from a measurement selected by class-method "select"
 
-        Requires a dictionary alike the one returned by method get_data
+        Requires a dictionary alike the one returned by class-method "get_data"
         '''
         grp_list = ['OBSERVATIONS', 'ANALYSIS', '']
 
