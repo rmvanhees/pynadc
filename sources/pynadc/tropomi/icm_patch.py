@@ -256,19 +256,24 @@ def test():
     '''
     import shutil
     
+    from pynadc.tropomi import db
     from pynadc.tropomi.icm_io import ICM_io
-
-    data_dir = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001000/2012/09/18'
+    
+    res = db.get_product_by_icid(icid=[610,1605])
+    assert len(res) > 0
+    
+    data_dir = res[0][0]
     temp_dir = '/tmp'
-    icm_file = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_01_001100_20151002T140000.h5'
-    tmp_file = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_02_001100_20151002T140000.h5'
-
+    icm_file = res[0][1]
+    tmp_file = icm_file.replace('_01_', '_02_')
+    print( os.path.join(data_dir, icm_file) )
+    
     patch = ICM_patch()
     shutil.copy( os.path.join(data_dir, icm_file),
                  os.path.join(temp_dir, tmp_file) )
     fp = ICM_io( os.path.join(temp_dir, tmp_file),
                  verbose=True, readwrite=True )
-
+    
     fp.select( 'DARK_MODE_1605' )
     res = patch.background( fp.instrument_settings['exposure_time'],
                             fp.instrument_settings['nr_coadditions'] )
@@ -284,19 +289,19 @@ def test():
             break
         
     res_sls = patch.sls( sls_id )
-    print( 'SLS values: ', res_sls[0].shape )
+    print( 'SLS values:     ', res_sls[0].shape )
     print( 'SLS background: ', res_sls[1].shape )
-    print( 'SLS errors: ', res_sls[2].shape )
+    print( 'SLS errors:     ', res_sls[2].shape )
     res = { 'det_lit_area_signal' : res_sls[0][:fp.delta_time.shape[0],:,:] }
-    fp.set_data( msm_mode='sls', res )
-
+    fp.set_data( res )
+    
     fp.select( 'BACKGROUND_MODE_0609' )
-    res = { 'signal_avg' : np.split(res_sls[1], 2, axis=1),
-            'signal_avg_std' : np.split(res[2], 2, axis=1) }
+    res = { 'signal_avg'     : np.split(res_sls[1], 2, axis=1),
+            'signal_avg_std' : np.split(res_sls[2], 2, axis=1) }
     fp.set_data( res )
     del( fp )
     del( patch )
 
 if __name__ == '__main__':
     test()
-    
+
