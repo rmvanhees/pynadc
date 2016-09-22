@@ -3,58 +3,145 @@
 # This software is distributed under the BSD 2-clause license.
 
 '''
-Methods to create and fill ICM monitoring databases
+Defined functions and class-methods
+-----------------------------------
+-- create a new database --
+ * mon = ICM_mon( dbname, readwrite=True )
 
--- Adding new entries to the database --
- Public methods to add new entries to the monitoring databases are:
- * h5_set_attr
- * h5_write_hk
- * h5_write_frame
- * h5_set_frame_attr
- * h5_write_dpqf     ## not yet defined nor implemented
- * h5_write_isrf     ## not yet defined nor implemented
- * h5_write_stray    ## not yet defined nor implemented
- * sql_write_meta
+-- add/read HDF5 attributes:
+ * h5_set_attr( attr_name, value )
+ * h5_get_attr( attr_name )
+ * h5_set_ds_attr( ds_name, attr_name, value )
+ * h5_get_ds_attr( ds_name, attr_name )
 
--- Updating existing entries in the database --
- Public methods to update existing entries in the monitoring databases are:
+-- miscellaneous functions --
+ * pynadc_version()
+ * get_method()
+ * get_ds_list()
+
+-- add new entries to database --
+ Public methods to add new entries to the monitor databases are:
+ * sql_write( meta_dict )
+ * h5_write_hk( hk_data )
+ * h5_write( values, erros )
+ * h5_write_dpqm( dict_dpqm )
+
+-- read entries from database
+ * h5_read( dict_frame )
+ * h5_read_dpqm( dict_dpqm )
+ * h5_get_trend( ds_name, data )   ## not yes implemented
+
+-- update existing entries in database --
+ Public methods to update existing entries in the monitor databases are:
  * h5_update_hk      ## not yes implemented
  * h5_update_frame   ## not yes implemented
  * sql_update_meta   ## not yes implemented
 
--- Miscellaneous functions --
- * pynadc_version
+-- query database --
+ Public methods to query the monitor databases are:
+ * get_orbit_latest()
+ * sql_num_entries()
+ * sql_check_orbit()
+ * sql_select_orbit()
+ * sql_get_row_list()
+ * sql_get_trend()
 
--- Query the database --
- Public methods to query the monitoring databases are:
- * get_orbit_latest
- * h5_get_attr
- * h5_get_frame_attr
- * h5_read_frame
- * h5_get_trend_colum
- * h5_get_trend_row
- * h5_get_trend_pixel
+SQLite Database layout
+----------------------
+ <mode=frame>
+ Table icm_meta (
+      rowID           integer     PRIMARY KEY AUTOINCREMENT,
+      referenceOrbit  integer     NOT NULL UNIQUE,
+      orbitsUsed      integer     NOT NULL,
+      entryDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+      startDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+      icmVersion      text        NOT NULL,
+      algVersion      text        NOT NULL,
+      dbVersion       text        NOT NULL,
+      dataMedian      float       NOT NULL,
+      dataSpread      float       NOT NULL,
+      errorMedian     float       NOT NULL,
+      errorSpread     float       NOT NULL,
+      q_detTemp       integer     NOT NULL,
+      q_obmTemp       integer     NOT NULL
+ )
 
- * sql_num_entries
- * sql_check_orbit
- * sql_select_orbit
- * sql_get_row_list
- * sql_get_trend_frames
+ <mode=dpqm>
+ Table icm_meta (
+      rowID           integer     PRIMARY KEY AUTOINCREMENT,
+      referenceOrbit  integer     NOT NULL UNIQUE,
+      orbitsUsed      integer     NOT NULL,
+      entryDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+      startDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+      icmVersion      text        NOT NULL,
+      algVersion      text        NOT NULL,
+      dbVersion       text        NOT NULL,
+      dpqf_01         int         NOT NULL,
+      dpqf_08         int         NOT NULL,
+      dpqf_dark_01    int         NOT NULL,
+      dpqf_dark_08    int         NOT NULL,
+      dpqf_noise_01   int         NOT NULL,
+      dpqf_noise_08   int         NOT NULL,
+      q_detTemp       integer     NOT NULL,
+      q_obmTemp       integer     NOT NULL
+ )
 
--- Configuration management --
+HDF5 Database layout
+---------------
+-- datasets --
+ * id
+ * hk_median
+ * hk_spread
+
+ <mode=frame>
+ * signal
+ * signal_<method>
+ * signal_col
+ * signal_col_<method>
+ * signal_row
+ * signal_row_<method>
+
+ <mode=dpqm>
+ * dpqf_map
+ * dpqm_dark_flux
+ * dpqm_noise
+
+-- attributes --
+ * title        :  string
+ * comment      :  string
+ * institution  :  string
+ * source       :  string
+ * reference    :  string
+ * algoVersion  :  string
+ * dbVersion    :  string
+ * icmVersion   :  string
+ * orbit_window :  integer
+
+ * mode    :  string
+ * method  :  string
+ * hk      :  boolean
+ * cols    :  boolean
+ * rows    :  boolean
+ * ds_list :  list of strings
+
+ * icid_list  : list if integers
+ * ic_version : list if integers
+
+Configuration management
+------------------------
 * ICM product version [KNMI]
-  The version of the ICM processor is visible in the SQLite monitoring database,
+  The version of the ICM processor is visible in the SQLite monitor database,
   reprocessed L1b products will initiate a reprocessing of the results in the
-  monitoring database
+  monitor database
 
 * Monitor algorithm version [SRON]
-  Major version updates of the Monitoring algorithms should indicate that a 
-  reprocessing of the monitoring results is necessary, otherwise no reprocessing
+  Major version updates of the monitor algorithms should indicate that a 
+  reprocessing of the monitor results is necessary, otherwise no reprocessing
   is necessary
 
 * Monitor database format [SRON]
-  Major version updates of the Monitoring databases should indicate that a 
-  reprocessing of the monitoring results is necessary, otherwise no reprocessing
+  Major version updates of the monitor databases should indicate that a 
+  reprocessing of the monitor results is necessary, otherwise no reprocessing
   is necessary
 '''
 
@@ -69,11 +156,12 @@ from pynadc.stats import biweight
 ##--------------------------------------------------
 class ICM_mon( object ):
     '''
-    Defines methods to create ICM monitoring databases and ingest new entries
+    Defines methods to create ICM monitor databases and ingest new entries
     '''
-    def __init__( self, dbname, readwrite=False ):
+    def __init__( self, dbname, readwrite=False,
+                  mode='frame', statistics='std,hk,col,row' ):
         '''
-        Perform the following tasts:
+        Perform the following tasks:
         * if database does not exist 
         then
          1) create HDF5 database (readwrite=True)
@@ -82,23 +170,63 @@ class ICM_mon( object ):
          1) open HDF5 database, read only when orbit is already present
          1) check versions of 'algo_version' and 'db_version'
          3) set class attributes
+
+        Parameters
+        ----------
+        dbname :  string
+              Name of the monitor database without extension '.db' or '.h5'
+        readwrite :  boolean, optional
+              Open HDF5 database read/append mode. The default is to open the
+              HDF5 database in readonly mode
+        mode   :  {'frame','dpqm','isrf'}, optional
+              Differentiate between ICM monitor databases for 'frames': values 
+              mapped on detector frames, 'dpqm': quality data between 0 and 1 
+              mapped on detector frames, or 'isrf': ISRF data of detector 
+              regions. The default is 'frame'
+        statistics : {'none|std|error|noise','hk','col','row'}, optional
+              Define which datasets are stored in the HDF5 database, except the
+              values. Error estimates can be absent 'none', or standard 
+              deviations 'std', or algorithm/calibration errors 'error', or 
+              noise 'noise'. Presence of housekeeping data, column and/or row 
+              statistics can be indicated by resp. 'hk', 'col' and 'row'. 
+              Default is 'std,hk,col,row'
+        The parameters 'mode' and 'statistics' are only applied when a new 
+        database is created.
         '''
         assert os.path.exists(dbname+'.h5') == os.path.exists(dbname+'.db') ,\
             "*** Fatal: lonely SQLite or HDF5 database exists (corruption?)"
 
         self.dbname = dbname
         self.__rw = readwrite
-
+        
         self.__fid = None
         if not (os.path.exists(dbname+'.h5') or os.path.exists(dbname+'.db')):
             assert readwrite, \
                 "*** Fatal: attempt to create databse {} in read-mode".format(dbname)
             self.__fid = h5py.File( dbname+'.h5', 'w' )
-            self.__fid.attrs['institution'] = \
-                            'SRON Netherlands Institute for Space Research'
-            self.__fid.attrs['references'] = 'https://www.sron.nl/Tropomi'
-            self.__fid.attrs['dbVersion'] = self.pynadc_version()
-            self.__sql_init( dbname+'.db' )
+            self.__fid.attrs['mode'] = mode
+
+            if statistics == '':
+                self.__fid.attrs['hk'] = False
+                self.__fid.attrs['rows'] = False
+                self.__fid.attrs['cols'] = False
+                self.__fid.attrs['method'] = 'none'
+            else:
+                stat_list = statistics.split(',')
+                self.__fid.attrs['hk'] = 'hk' in stat_list
+                self.__fid.attrs['rows'] = 'row' in stat_list
+                self.__fid.attrs['cols'] = 'col' in stat_list
+                if 'std' in stat_list:
+                    self.__fid.attrs['method'] = 'std'
+                elif 'error' in stat_list:
+                    self.__fid.attrs['method'] = 'error'
+                elif 'noise' in stat_list:
+                    self.__fid.attrs['method'] = 'noise'
+                else:
+                    self.__fid.attrs['method'] = 'none'
+
+            self.__sql_init()
+            self.__h5_init((256,1000), np.float)   ## works only for SWIR!!!
         else:
             if self.__rw:
                 self.__fid = h5py.File( dbname+'.h5', 'r+' )
@@ -109,6 +237,9 @@ class ICM_mon( object ):
             sw_version = self.pynadc_version().split('.')
             assert( (db_version[0] == sw_version[0])
                     and (db_version[1] == sw_version[1]) )
+
+        self.__method = self.__fid.attrs['method']
+        self.__mode   = self.__fid.attrs['mode']
 
     def __repr__( self ):
         class_name = type(self).__name__
@@ -125,8 +256,7 @@ class ICM_mon( object ):
             num_sql_rows = self.sql_num_entries()
             
             ## check number of entries in HDF5 datasets
-            ds_list = ['hk_median', 'hk_spread', 'signal',
-                       'signal_row', 'signal_col']
+            ds_list = ['hk_median', 'hk_spread'] + self.__fid.attrs['ds_list'].tolist()
             for ds_name in ds_list:
                 if ds_name in self.__fid:
                     num_ds_rows = self.__fid[ds_name].shape[0]
@@ -137,28 +267,48 @@ class ICM_mon( object ):
             self.__fid.close()
 
     ## ---------- initialize SQLite database ----------
-    def __sql_init( self, dbname ):
+    def __sql_init( self ):
         '''
-        Create SQLite database for ICM monitoring
+        Create SQLite monitor database
         '''
-        con = sqlite3.connect( dbname )
+        con = sqlite3.connect( self.dbname+'.db' )
         cur = con.cursor()
-        cur.execute( '''create table icm_meta (
-           rowID           integer     PRIMARY KEY AUTOINCREMENT,
-           referenceOrbit  integer     NOT NULL UNIQUE,
-           orbitsUsed      integer     NOT NULL,
-           entryDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
-           startDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
-           icmVersion      text        NOT NULL,
-           algVersion      text        NOT NULL,
-           dbVersion       text        NOT NULL,
-           dataMedian      float       NOT NULL,
-           dataSpread      float       NOT NULL,
-           errorMedian     float       NOT NULL,
-           errorSpread     float       NOT NULL,
-           q_detTemp       integer     NOT NULL,
-           q_obmTemp       integer     NOT NULL
-        )''' )
+        if self.__fid.attrs['mode'] == 'dpqm':
+            cur.execute( '''create table icm_meta (
+            rowID           integer     PRIMARY KEY AUTOINCREMENT,
+            referenceOrbit  integer     NOT NULL UNIQUE,
+            orbitsUsed      integer     NOT NULL,
+            entryDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+            startDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+            icmVersion      text        NOT NULL,
+            algVersion      text        NOT NULL,
+            dbVersion       text        NOT NULL,
+            dpqf_01         int         NOT NULL,
+            dpqf_08         int         NOT NULL,
+            dpqf_dark_01    int         NOT NULL,
+            dpqf_dark_08    int         NOT NULL,
+            dpqf_noise_01   int         NOT NULL,
+            dpqf_noise_08   int         NOT NULL,
+            q_detTemp       integer     NOT NULL,
+            q_obmTemp       integer     NOT NULL
+            )''' )
+        else:
+            cur.execute( '''create table icm_meta (
+            rowID           integer     PRIMARY KEY AUTOINCREMENT,
+            referenceOrbit  integer     NOT NULL UNIQUE,
+            orbitsUsed      integer     NOT NULL,
+            entryDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+            startDateTime   datetime    NOT NULL default '0000-00-00 00:00:00',
+            icmVersion      text        NOT NULL,
+            algVersion      text        NOT NULL,
+            dbVersion       text        NOT NULL,
+            dataMedian      float       NOT NULL,
+            dataSpread      float       NOT NULL,
+            errorMedian     float       NOT NULL,
+            errorSpread     float       NOT NULL,
+            q_detTemp       integer     NOT NULL,
+            q_obmTemp       integer     NOT NULL
+            )''' )
         cur.execute( 'create index entryIndx on icm_meta(entryDateTime)' )
         cur.execute( 'create index startIndx on icm_meta(startDateTime)' )
         cur.close()
@@ -166,36 +316,25 @@ class ICM_mon( object ):
         con.close()
 
     ## ---------- initialize HDF5 datasets ----------
-    def h5_init( self, frame_shape, frame_dtype, statistics=None ):
+    def __h5_init( self, frame_shape, frame_dtype ):
         '''
-        create datasets for measurement data
+        Create datasets in HDF5 monitor database
 
-        parameter statistics may contain the following strings (comma-separated)
-         - hk   : store house-keeping data
-         - error, noise or std  : store errors of given type
-         - rows : when row average/median should be calculated from frames
-         - cols : when column average/median should be calculated from frames
+        Parameters
+        ----------
+        frame_shape :  tuple
+           Shape of datasets
+        frame_dtype :  data-type
+           Desired data-type of dataset
         '''
-        if statistics is None:
-            self.__fid.attrs['hk'] = False
-            self.__fid.attrs['rows'] = False
-            self.__fid.attrs['cols'] = False
-            self.__fid.attrs['method'] = 'none'
-        else:
-            stat_list = statistics.split(',')
-            self.__fid.attrs['hk'] = 'hk' in stat_list
-            self.__fid.attrs['rows'] = 'row' in stat_list
-            self.__fid.attrs['cols'] = 'col' in stat_list
-            if 'std' in stat_list:
-                self.__fid.attrs['method'] = 'std'
-            elif 'error' in stat_list:
-                self.__fid.attrs['method'] = 'error'
-            elif 'noise' in stat_list:
-                self.__fid.attrs['method'] = 'noise'
-            else:
-                self.__fid.attrs['method'] = 'none'
-        ext = self.__fid.attrs['method']
+        method = self.__fid.attrs['method']
         
+        self.__fid.attrs['institution'] = \
+                                'SRON Netherlands Institute for Space Research'
+        self.__fid.attrs['references'] = 'https://www.sron.nl/Tropomi'
+        self.__fid.attrs['dbVersion'] = self.pynadc_version()
+
+        # Table with row identifiers
         id_dtype = np.dtype( [('sql_rowid', np.int),
                               ('orbit_ref', np.int)] )
         id_names = np.array([np.string_(n) for n in id_dtype.names])
@@ -241,67 +380,101 @@ class ICM_mon( object ):
             self.__fid["hk_spread"].attrs["fields"] = hk_names
 
         # Detector datasets
+        ds_list = []
         chunk_sz = (16, frame_shape[0] // 4, frame_shape[1] // 4)
-        self.__fid.create_dataset( "signal",
-                                   (0,) + frame_shape,
-                                   chunks=chunk_sz,
-                                   maxshape=(None,) + frame_shape,
-                                   dtype=frame_dtype )
-        self.__fid["signal"].attrs["comment"] = \
-                                    "values in detector-pixel coordinates"
-        if self.__fid.attrs['rows']:
-            nrows = (frame_shape[1],)
-            self.__fid.create_dataset( "signal_row",
-                                       (0,) + nrows,
-                                       chunks=(16,) + nrows,
-                                       maxshape=(None,) + nrows,
+        if self.__fid.attrs['mode'] == 'dpqm':
+            self.__fid.create_dataset( "dpqf_map",
+                                       (0,) + frame_shape,
+                                       chunks=chunk_sz,
+                                       maxshape=(None,) + frame_shape,
                                        dtype=frame_dtype )
-            self.__fid["signal_row"].attrs["comment"] = \
-                                    "medians along the first axis of signal"
+            self.__fid["dpqf_map"].attrs["comment"] = \
+                                        "Quality in detector-pixel coordinates"
+            ds_list.append("dpqf_map")
+            self.__fid.create_dataset( "dpqm_dark_flux",
+                                       (0,) + frame_shape,
+                                       chunks=chunk_sz,
+                                       maxshape=(None,) + frame_shape,
+                                       dtype=frame_dtype )
+            self.__fid["dpqm_dark_flux"].attrs["comment"] = \
+                                        "Quality in detector-pixel coordinates"
+            ds_list.append("dpqm_dark_flux")
+            self.__fid.create_dataset( "dpqm_noise",
+                                       (0,) + frame_shape,
+                                       chunks=chunk_sz,
+                                       maxshape=(None,) + frame_shape,
+                                       dtype=frame_dtype )
+            self.__fid["dpqm_noise"].attrs["comment"] = \
+                                        "Quality in detector-pixel coordinates"
+            ds_list.append("dpqm_noise")
+        else:
+            self.__fid.create_dataset( "signal",
+                                       (0,) + frame_shape,
+                                       chunks=chunk_sz,
+                                       maxshape=(None,) + frame_shape,
+                                       dtype=frame_dtype )
+            self.__fid["signal"].attrs["comment"] = \
+                                        "values in detector-pixel coordinates"
+            ds_list.append("signal")
 
-        if self.__fid.attrs['cols']:
-            ncols = (frame_shape[0],)
-            self.__fid.create_dataset( "signal_col",
-                                       (0,) + ncols,
-                                       chunks=(16,) + ncols,
-                                       maxshape=(None,) + ncols,
-                                       dtype=frame_dtype )
-            self.__fid["signal_col"].attrs["comment"] = \
+            if self.__fid.attrs['cols']:
+                ncols = (frame_shape[0],)
+                self.__fid.create_dataset( "signal_col",
+                                           (0,) + ncols,
+                                           chunks=(16,) + ncols,
+                                           maxshape=(None,) + ncols,
+                                           dtype=frame_dtype )
+                self.__fid["signal_col"].attrs["comment"] = \
                                     "medians along the second axis of signal"
+                ds_list.append("signal_col")
 
-        if ext == 'none':
-            return
+            if self.__fid.attrs['rows']:
+                nrows = (frame_shape[1],)
+                self.__fid.create_dataset( "signal_row",
+                                           (0,) + nrows,
+                                           chunks=(16,) + nrows,
+                                           maxshape=(None,) + nrows,
+                                           dtype=frame_dtype )
+                self.__fid["signal_row"].attrs["comment"] = \
+                                    "medians along the first axis of signal"
+                ds_list.append("signal_row")
 
-        ds_name = "signal_{}".format(ext)
-        self.__fid.create_dataset( ds_name,
-                                   (0,) + frame_shape,
-                                   chunks=chunk_sz,
-                                   maxshape=(None,) + frame_shape,
-                                   dtype=frame_dtype )
-        self.__fid[ds_name].attrs["comment"] = \
-                                    "errors in detector-pixel coordinates"
-        if self.__fid.attrs['rows']:
-            nrows = (frame_shape[1],)
-            ds_name = "signal_row_{}".format(ext)
+            ds_name = "signal_{}".format(method)
             self.__fid.create_dataset( ds_name,
-                                       (0,) + nrows,
-                                       chunks=(16,) + nrows,
-                                       maxshape=(None,) + nrows,
+                                       (0,) + frame_shape,
+                                       chunks=chunk_sz,
+                                       maxshape=(None,) + frame_shape,
                                        dtype=frame_dtype )
             self.__fid[ds_name].attrs["comment"] = \
-                    "medians along the first axis of signal_{}".format(ext)
+                                        "errors in detector-pixel coordinates"
+            ds_list.append(ds_name)
+            
+            if self.__fid.attrs['rows']:
+                nrows = (frame_shape[1],)
+                ds_name = "signal_row_{}".format(method)
+                self.__fid.create_dataset( ds_name,
+                                           (0,) + nrows,
+                                           chunks=(16,) + nrows,
+                                           maxshape=(None,) + nrows,
+                                           dtype=frame_dtype )
+                self.__fid[ds_name].attrs["comment"] = \
+                    "medians along the first axis of signal_{}".format(method)
+                ds_list.append(ds_name)
+                
+            if self.__fid.attrs['cols']:
+                ds_name = "signal_col_{}".format(method)
+                ncols = (frame_shape[0],)
+                self.__fid.create_dataset( ds_name,
+                                           (0,) + ncols,
+                                           chunks=(16,) + ncols,
+                                           maxshape=(None,) + ncols,
+                                           dtype=frame_dtype )
+                self.__fid[ds_name].attrs["comment"] = \
+                    "medians along the second axis of signal_{}".format(method)
+                ds_list.append(ds_name)
 
-        if self.__fid.attrs['cols']:
-            ds_name = "signal_col_{}".format(ext)
-            ncols = (frame_shape[0],)
-            self.__fid.create_dataset( ds_name,
-                                       (0,) + ncols,
-                                       chunks=(16,) + ncols,
-                                       maxshape=(None,) + ncols,
-                                       dtype=frame_dtype )
-            self.__fid[ds_name].attrs["comment"] = \
-                    "medians along the second axis of signal_{}".format(ext)
-
+        self.__fid.attrs['ds_list'] = np.array([np.string_(n) for n in ds_list])
+                
     ## ---------- RETURN VERSION of the S/W ----------
     @staticmethod
     def pynadc_version():
@@ -319,11 +492,19 @@ class ICM_mon( object ):
     def get_method( self ):
         return self.__fid.attrs['method']
 
+    def get_ds_list( self ):
+        return [n.decode('ascii') for n in self.__fid.attrs['ds_list']]
+
     ## ---------- READ/WRITE GOBAL ATTRIBUTES ----------
     def h5_set_attr( self, name, value ):
         '''
         Add global attributes to HDF5 database, during definition phase.
         Otherwise the call is silently ignored
+
+        Parameters
+        ----------
+        name  : string
+        value : scalar or array-like
 
         Please use standard names for attributes:
          - 'orbit_window' : [scalar] size of the orbit window 
@@ -339,6 +520,10 @@ class ICM_mon( object ):
     def h5_get_attr( self, name ):
         '''
         Obtain value of an HDF5 database attribute
+
+        Parameters
+        ----------
+        name  : string
         '''
         if name in self.__fid.attrs.keys():
             return self.__fid.attrs[name]
@@ -346,11 +531,17 @@ class ICM_mon( object ):
             return None
         
     ## ---------- READ/WRITE DATASET ATTRIBUTES ----------
-    def h5_set_frame_attr( self, attr, value ):
+    def h5_set_ds_attr( self, ds_name, attr, value ):
         '''
         Add attributes to HDF5 datasets, during definition phase.
         Otherwise the call is silently ignored
 
+        Parameters
+        ----------
+        ds_name  : string
+        attr     : string
+        value : scalar or array-like
+        
         Please use names according to the CF conventions:
          - 'standard_name' : required CF-conventions attribute
          - 'long_name' : descriptive name may be used for labeling plots
@@ -359,20 +550,23 @@ class ICM_mon( object ):
         if not self.__rw:
             return
 
-        ds_list = [ 'signal', 'signal_row', 'signal_col' ]
-        ext = self.__fid.attrs['method']
-        
-        for ds_name in ds_list:
+        if len(ds_name ) == 0:
+            for ds_name in self.get_ds_list():
+                if not attr in self.__fid[ds_name].attrs.keys():
+                    self.__fid[ds_name].attrs[attr] = value
+        else:
             if not attr in self.__fid[ds_name].attrs.keys():
                 self.__fid[ds_name].attrs[attr] = value
-            if ext != 'none':
-                ds_ext = ds_name + '_{}'.format(ext)
-                if not attr in self.__fid[ds_ext].attrs.keys():
-                    self.__fid[ds_ext].attrs[attr] = value
 
-    def h5_get_frame_attr( self, ds_name, attr ):
+    def h5_get_ds_attr( self, ds_name, attr ):
         '''
         Obtain value of an HDF5 dataset attribute
+
+        Parameters
+        ----------
+        ds_name  : string
+        attr     : string
+
         '''
         if attr in self.__fid[ds_name].attrs.keys():
             return self.__fid[ds_name].attrs[attr]
@@ -382,12 +576,15 @@ class ICM_mon( object ):
     ## ---------- WRITE HOUSE-KEEPING DATA ----------
     def h5_write_hk( self, id, hk ):
         '''
-        Create datasets for house-keeping data.
-        seperated datasets for biweight median and spread
+        Write ID of entry and biweight median and spread of house-keeping data
 
-        Todo: only include hk-data when the instrument is really performing 
-              the requested measurements. 
-              Reject entries during start-up or at the end
+        Parameters
+        ----------
+        id  : tuple
+           Tuple with rowID and orbit-number obtained from SQLite database
+        hk  : array of type housekeeping_data, optional
+           All housekeeping data of the used measurements
+
         '''
         assert self.__rw
 
@@ -421,86 +618,130 @@ class ICM_mon( object ):
             dset[-1] = hk_spread
 
     ## ---------- WRITE DATA (frames averaged in time) ----------
-    def h5_write_frame( self, values, errors ):
+    def h5_write( self, values, errors ):
         '''
+        Write values and errors to HDF5 database with mode=frame
+
+        Parameters
+        ----------
+        values :  ndarray
+        errors :  ndarray
         '''
         assert self.__rw
-
-        ext = self.__fid.attrs['method']
+        assert self.__mode == 'frame'
 
         dset = self.__fid['signal']
         shape = (dset.shape[0]+1,) + dset.shape[1:]
         dset.resize( shape )
         dset[-1,:,:] = values
 
-        if ext != 'none':
-            dset = self.__fid['signal_{}'.format(ext)]
+        if self.__method != 'none':
+            dset = self.__fid['signal_{}'.format(self.__method)]
             shape = (dset.shape[0]+1,) + dset.shape[1:]
             dset.resize( shape )
             dset[-1,:,:] = errors
 
-        if self.__fid.attrs['rows']:
-            dset = self.__fid['signal_row']
-            shape = (dset.shape[0]+1,) + dset.shape[1:]
-            dset.resize( shape )
-            dset[-1,:] = np.nanmedian( values, axis=0 )
-
-            if ext != 'none':
-                dset = self.__fid['signal_row_{}'.format(ext)]
-                shape = (dset.shape[0]+1,) + dset.shape[1:]
-                dset.resize( shape )
-                dset[-1,:] = np.nanmedian( errors, axis=0 )
- 
         if self.__fid.attrs['cols']:
             dset = self.__fid['signal_col']
             shape = (dset.shape[0]+1,) + dset.shape[1:]
             dset.resize( shape )
             dset[-1,:] = np.nanmedian( values, axis=1 )
 
-            if ext != 'none':
-                dset = self.__fid['signal_col_{}'.format(ext)]
+            if self.__method != 'none':
+                dset = self.__fid['signal_col_{}'.format(self.__method)]
                 shape = (dset.shape[0]+1,) + dset.shape[1:]
                 dset.resize( shape )
                 dset[-1,:] = np.nanmedian( errors, axis=1 )
  
-    def h5_read_frame( self, row_id, statistics=None ):
-        '''
-        Read data given row_id
-
-        parameter statistics may contain the following strings (comma-separated)
-         - rows  : return row-averaged results
-         - cols  : return column-averaged results
-         - error : return also error estimates
-        '''
-        res = {}
-        ext = self.__fid.attrs['method']
-        stat_list = statistics.split(',')
-
-        dset = self.__fid['signal']
-        res['signal'] = dset[row_id-1,:,:]
-
-        if ext != 'none' and 'error' in stat_list:
-            dset = self.__fid['signal_{}'.format(ext)]
-            res['signal_{}'.format(ext)] = dset[row_id-1,:,:]
-            
-        if self.__fid.attrs['rows'] and 'rows' in stat_list:
+        if self.__fid.attrs['rows']:
             dset = self.__fid['signal_row']
-            res['signal_row'] = dset[row_id-1,:]
+            shape = (dset.shape[0]+1,) + dset.shape[1:]
+            dset.resize( shape )
+            dset[-1,:] = np.nanmedian( values, axis=0 )
 
-            if ext != 'none' and 'error' in stat_list:
-                dset = self.__fid['signal_row_{}'.format(ext)]
-                res['signal_row_{}'.format(ext)] = dset[row_id-1,:]
-               
-        if self.__fid.attrs['cols'] and 'cols' in stat_list:
-            dset = self.__fid['signal_col']
-            res['signal_col'] = dset[row_id-1,:]
+            if self.__method != 'none':
+                dset = self.__fid['signal_row_{}'.format(self.__method)]
+                shape = (dset.shape[0]+1,) + dset.shape[1:]
+                dset.resize( shape )
+                dset[-1,:] = np.nanmedian( errors, axis=0 )
+ 
+    def h5_read( self, orbit ):
+        '''
+        Read signal data-sets given a reference orbit-number from 
+        HDF5 database with mode=frame
 
-            if ext != 'none' and 'error' in stat_list:
-                dset = self.__fid['signal_col_{}'.format(ext)]
-                res['signal_col_{}'.format(ext)] = dset[row_id-1,:]
+        Parameters
+        ----------
+        orbit  :  integer
+           Reference orbit-numer
+           
+        Returns
+        -------
+        dict_frame  :  dictionary
+           Dictionary with ndarrays of all signal data-sets (only one entry)
+        '''
+        assert self.__mode == 'frame'
+        
+        res = {}
+        dset = self.__fid['id']
+        id = dset[:]
+        indx = np.where( id['orbit_ref'] == orbit )[0]
+
+        for name in self.get_ds_list():
+            dset = self.__fid[name]
+            res[name] = dset[indx,...]
                
         return res
     
+    ## ---------- WRITE DATA (quality maps) ----------
+    def h5_write_dpqm( self, dict_dpqm ):
+        '''
+        Write dynamic CKD DPQF_MAP to HDF5 database with mode=dpqm
+
+        Parameters
+        ----------
+        dict_dpqm  :  dictionary
+           Dictionary with ndarrays as return by icm_io.get_data()
+        '''
+        assert self.__rw
+        assert self.__mode == 'dpqm'
+
+        for name in self.get_ds_list():
+            dset = self.__fid[name]
+            shape = (dset.shape[0]+1,) + dset.shape[1:]
+            dset.resize( shape )
+            values = np.hstack((dict_dpqm[name][0][:-1,:],
+                                dict_dpqm[name][1][:-1,:]))
+            dset[-1,:,:] = values
+ 
+    def h5_read_dpqm( self, orbit ):
+        '''
+        Read all DPQF_MAP datasets given a reference orbit-number from
+        HDF5 database with mode=dpqm
+
+        Parameters
+        ----------
+        orbit  :  integer
+           Reference orbit-numer
+           
+        Returns
+        -------
+        dict_dpqm  :  dictionary
+           Dictionary with ndarrays of all DPQF_MAP data-sets (only one entry)
+        '''
+        assert self.__mode == 'dpqm'
+
+        dset = self.__fid['id']
+        id = dset[:]
+        indx = np.where( id['orbit_ref'] == orbit )[0]
+
+        res = {}
+        for name in self.get_ds_list():
+            dset = self.__fid[name]
+            res[name] = dset[indx,...]
+
+        return res
+
     ## --------------------------------------------------
     def h5_get_trend_cols( self, orbit_list=None, orbit_range=None ):
         pass
@@ -511,8 +752,6 @@ class ICM_mon( object ):
     def h5_get_trend_pixel( self, pixel_id, orbit_list=None, orbit_range=None ):
         '''
         '''
-        ext = self.__fid.attrs['method']
-
         row = pixel_id // 1000
         col = pixel_id - row * 1000
         
@@ -532,16 +771,15 @@ class ICM_mon( object ):
         dset = self.__fid['signal']
         res['signal'] = dset[indx, col, row]
 
-        dset = self.__fid['signal_{}'.format(ext)]
-        res['signal_{}'.format(ext)] = dset[indx, col, row]
+        dset = self.__fid['signal_{}'.format(self.__method)]
+        res['signal_{}'.format(self.__method)] = dset[indx, col, row]
         
         return res
-        
 
     ## ---------- WRITE META-DATA TO SQL database ----------
     def sql_write( self, meta_dict, verbose=False ):
         '''
-        Append monitoring meta-data to SQLite database
+        Append monitor meta-data to SQLite database
         The dictionary "meta_dict" should contain the following fields:
          "orbit_ref"    : column referenceOrbit [integer]
          "orbit_used"   : column orbitsUsed     [integer]
@@ -558,12 +796,23 @@ class ICM_mon( object ):
          "q_obm_temp"   : column q_obmTemp      [integer]
         '''
         dbname = self.dbname + '.db'
-        str_sql = 'insert into icm_meta values' \
-                  '(NULL,{orbit_ref},{orbit_used},{entry_date!r}' \
-                  ',{start_time!r}'\
-                  ',{icm_version!r},{algo_version!r},{db_version!r}'\
-                  ',{data_median},{data_spread},{error_median},{error_spread}'\
-                  ',{q_det_temp},{q_obm_temp})'
+        if self.__mode == 'dpqm':
+            str_sql = 'insert into icm_meta values' \
+                      '(NULL,{orbit_ref},{orbit_used},{entry_date!r}' \
+                      ',{start_time!r}'\
+                      ',{icm_version!r},{algo_version!r},{db_version!r}'\
+                      ',{dpqf_01},{dpqf_08}' \
+                      ',{dpqf_dark_01},{dpqf_dark_08}' \
+                      ',{dpqf_noise_01},{dpqf_noise_08}' \
+                      ',{q_det_temp},{q_obm_temp})'
+        else:
+            str_sql = 'insert into icm_meta values' \
+                      '(NULL,{orbit_ref},{orbit_used},{entry_date!r}' \
+                      ',{start_time!r}'\
+                      ',{icm_version!r},{algo_version!r},{db_version!r}'\
+                      ',{data_median},{data_spread}' \
+                      ',{error_median},{error_spread}'\
+                      ',{q_det_temp},{q_obm_temp})'
         if verbose:
             print( str_sql.format(**meta_dict) )
 
@@ -827,6 +1076,27 @@ def test_sun_isrf():
     dirList = [d for d in os.listdir( fl_path ) 
                if os.path.isdir(os.path.join(fl_path, d))]
     dirList.sort()
+    for msm in dirList:
+        fp = OCM_io( os.path.join(fl_path, msm), verbose=True )
+        if fp.select( 31623 ) > 0:
+            break
+    mon = ICM_mon( DBNAME, readwrite=True )
+    mon.h5_set_attr( 'title', 'Tropomi SWIR OCAL SunISRF backgrounds' )
+    mon.h5_set_attr( 'source',
+                     'Copernicus Sentinel-5 Precursor Tropomi On-ground Calibration and Monitoring products' )
+    mon.h5_set_attr( 'comment',
+                     'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'],
+                                                               float(fp.instrument_settings['exposure_time'])) )
+    mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
+    mon.h5_set_attr( 'icid_list',
+                     [fp.instrument_settings['ic_id'],] )
+    mon.h5_set_attr( 'ic_version',
+                     [fp.instrument_settings['ic_version'],] )
+    for ds_name in mon.get_ds_list():
+        mon.h5_set_ds_attr( ds_name, 'long_name', ds_name )
+        mon.h5_set_ds_attr( ds_name, 'units', 'electron / s' )
+    del(fp)
+    del(mon)
     
     ii = 0
     for msm in dirList:
@@ -836,10 +1106,8 @@ def test_sun_isrf():
         
         print( fp )
         (values, errors) = fp.get_data()
-        print( 'dimensions of values: ', len(values), values[0].shape )
         values = np.hstack((values[0], values[1]))
         errors = np.hstack((errors[0], errors[1]))
-        print( 'dimensions of values: ', values.shape )
         
         meta_dict = {}
         meta_dict['orbit_ref'] = ii
@@ -847,7 +1115,11 @@ def test_sun_isrf():
         meta_dict['orbit_used'] = fp.num_msm
         meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
         meta_dict['start_time'] = fp.start_time
+
+        ## Tim: how to obtain the actual version of your S/W?
+        meta_dict['algo_version'] = '00.01.00'
         meta_dict['icm_version'] = fp.creator_version
+        meta_dict['db_version'] = fp.pynadc_version()
         
         (mx, sx) = biweight(values, spread=True)
         meta_dict['data_median'] = mx
@@ -856,41 +1128,125 @@ def test_sun_isrf():
         meta_dict['error_median'] = mx
         meta_dict['error_spread'] = sx
 
-        ## Tim: how to obtain the actual version of your S/W?
-        meta_dict['algo_version'] = '00.01.00'
-        meta_dict['db_version'] = fp.pynadc_version()
         meta_dict['q_det_temp'] = 0                    ## obtain from hk
         meta_dict['q_obm_temp'] = 0                    ## obtain from hk
         meta_dict['q_algo'] = 0                        ## obtain from algo?!
         hk_data = fp.housekeeping_data
 
         mon = ICM_mon( DBNAME, readwrite=True )
-        if ii == 0:
-            mon.h5_set_attr( 'title', 'Tropomi SWIR OCAL SunISRF backgrounds' )
-            mon.h5_set_attr( 'source',
-                             'Copernicus Sentinel-5 Precursor Tropomi On-ground Calibration and Monitoring products' )
-            mon.h5_set_attr( 'comment',
-                             'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
-            mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
-            mon.h5_set_attr( 'icid_list',
-                             [fp.instrument_settings['ic_id'],] )
-            mon.h5_set_attr( 'ic_version',
-                             [fp.instrument_settings['ic_version'],] )
-
-            ## initialize HDF5 datasets
-            mon.h5_init( (256,1000), np.float64, statistics='hk,std,col,row' )
-            mon.h5_set_frame_attr( 'long_name', 'signal' )
-            mon.h5_set_frame_attr( 'units', 'electron / s' )
-
         sql_rowid = mon.sql_write( meta_dict )
         if sql_rowid > 0:
             mon.h5_write_hk( (sql_rowid,ii), hk_data )
-            mon.h5_write_frame( values, errors )
-
-        del( mon )
-        del( fp )
+            mon.h5_write( values, errors )
         ii += 1
         
+    del( fp )
+    del( mon )
+    
+#--------------------------------------------------
+def test_quality():
+    '''
+    '''
+    from datetime import datetime
+
+    from pynadc.tropomi import db
+    from pynadc.tropomi.icm_io import ICM_io
+
+    DBNAME = 'mon_quality_test'
+    ORBIT_WINDOW = 15
+    if os.path.exists( DBNAME + '.h5' ):
+        os.remove( DBNAME + '.h5' )
+    if os.path.exists( DBNAME + '.db' ):
+        os.remove( DBNAME + '.db' )
+
+    res_list = db.get_product_by_type(dataset='DPQF_MAP')
+    fp = ICM_io( os.path.join(res_list[0][0], res_list[0][1]) )
+    fp.select( 'DPQF_MAP' )
+    
+    mon = ICM_mon( DBNAME, readwrite=True, mode='dpqm', statistics='hk')
+    mon.h5_set_attr( 'title', 'Tropomi SWIR Quality (dynamic DPQF CKD)' )
+    mon.h5_set_attr( 'source',
+                     'Copernicus Sentinel-5 Precursor Tropomi In-flight Calibration and Monitoring products' )
+    mon.h5_set_attr( 'comment',
+                     'ICID {} ($t_{{exp}}={:.3f}$ sec)'.format(fp.instrument_settings['ic_id'], float(fp.instrument_settings['exposure_time'])) )
+    mon.h5_set_attr( 'orbit_window', ORBIT_WINDOW )
+    mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
+    mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
+
+    for ds_name in mon.get_ds_list():
+        mon.h5_set_ds_attr( ds_name, 'long_name', ds_name )
+        mon.h5_set_ds_attr( ds_name, 'units', '1' )
+    del(mon)
+    del(fp)
+    
+    for res in res_list:
+        fp = ICM_io( os.path.join(res[0], res[1]) )
+        print(fp)
+        fp.select( 'DPQF_MAP' )
+        msm = fp.get_data()
+
+        meta_dict = {}
+        meta_dict['orbit_ref'] = fp.orbit
+        meta_dict['orbit_window'] = ORBIT_WINDOW
+        meta_dict['orbit_used'] = ORBIT_WINDOW
+        meta_dict['entry_date'] = datetime.utcnow().isoformat(' ')
+        meta_dict['start_time'] = fp.start_time
+
+        ## Tim: how to obtain the actual version of your S/W?
+        meta_dict['algo_version'] = '00.01.00'
+        meta_dict['icm_version'] = fp.creator_version
+        meta_dict['db_version'] = fp.pynadc_version()
+
+        thres_min = 1
+        thres_max = 8
+        dpqm = np.hstack((msm['dpqf_map'][0][:-1,:],
+                          msm['dpqf_map'][1][:-1,:]))
+        dpqf = (dpqm * 10).astype(np.byte)
+        unused_cols = np.where(np.sum(dpqm, axis=0) < (256 // 4))
+        if unused_cols[0].size > 0:
+            dpqf[:,unused_cols[0]] = -1
+        unused_rows = np.where(np.sum(dpqm, axis=1) < (1000 // 4))
+        if unused_rows[0].size > 0:
+            dpqf[:,unused_rows[0]] = -1
+        meta_dict['dpqf_01'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
+        meta_dict['dpqf_08'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
+        dpqm = np.hstack((msm['dpqm_dark_flux'][0][:-1,:],
+                          msm['dpqm_dark_flux'][1][:-1,:]))
+        dpqf = (dpqm * 10).astype(np.byte)
+        unused_cols = np.where(np.nansum(dpqm, axis=0) < (256 // 4))
+        if unused_cols[0].size > 0:
+            dpqf[:,unused_cols[0]] = -1
+        unused_rows = np.where(np.nansum(dpqm, axis=1) < (1000 // 4))
+        if unused_rows[0].size > 0:
+            dpqf[:,unused_rows[0]] = -1
+        meta_dict['dpqf_dark_01'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
+        meta_dict['dpqf_dark_08'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
+        dpqm = np.hstack((msm['dpqm_noise'][0][:-1,:],
+                          msm['dpqm_noise'][1][:-1,:]))
+        dpqf = (dpqm * 10).astype(np.byte)
+        unused_cols = np.where(np.sum(dpqm, axis=0) < (256 // 4))
+        if unused_cols[0].size > 0:
+            dpqf[:,unused_cols[0]] = -1
+        unused_rows = np.where(np.sum(dpqm, axis=1) < (1000 // 4))
+        if unused_rows[0].size > 0:
+            dpqf[:,unused_rows[0]] = -1
+        meta_dict['dpqf_noise_01'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
+        meta_dict['dpqf_noise_08'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
+
+        meta_dict['q_det_temp'] = 0                    ## obtain from hk
+        meta_dict['q_obm_temp'] = 0                    ## obtain from hk
+        meta_dict['q_algo'] = 0                        ## obtain from algo?!
+        hk_data = fp.housekeeping_data
+        
+        mon = ICM_mon( DBNAME, readwrite=True )
+        sql_rowid = mon.sql_write( meta_dict )
+        if sql_rowid > 0:
+            mon.h5_write_hk( (sql_rowid, meta_dict['orbit_ref']), hk_data  )
+            mon.h5_write_dpqm( msm )
+
+    del( fp )
+    del( mon )
+            
 #--------------------------------------------------
 def test( num_orbits=1 ):
     '''
@@ -931,10 +1287,11 @@ def test( num_orbits=1 ):
     mon.h5_set_attr( 'icid_list', [fp.instrument_settings['ic_id'],] )
     mon.h5_set_attr( 'ic_version', [fp.instrument_settings['ic_version'],] )
 
-    ## initialize HDF5 datasets
-    mon.h5_init( (256,1000), np.float64, statistics='hk,std,col,row' )
-    mon.h5_set_frame_attr( 'long_name', 'background signal' )
-    mon.h5_set_frame_attr( 'units', 'electron' )
+    mon.h5_set_ds_attr( 'signal', 'long_name', 'background signal' )
+    mon.h5_set_ds_attr( 'signal_std', 'long_name', 'background signal_std' )
+    mon.h5_set_ds_attr( 'signal_col', 'long_name', 'background signal_col' )
+    mon.h5_set_ds_attr( 'signal_row', 'long_name', 'background signal_row' )
+    mon.h5_set_ds_attr( '', 'units', 'electron' )
     del(mon)
     del(fp)
     
@@ -985,7 +1342,7 @@ def test( num_orbits=1 ):
         sql_rowid = mon.sql_write( meta_dict )
         if sql_rowid > 0:
             mon.h5_write_hk( (sql_rowid, meta_dict['orbit_ref']), hk_data  )
-            mon.h5_write_frame( values, errors )
+            mon.h5_write( values, errors )
         del( fp )
         del( mon )
 
@@ -998,3 +1355,4 @@ def test( num_orbits=1 ):
 if __name__ == '__main__':
     test( 31 )
     #test_sun_isrf()
+    #test_quality()
