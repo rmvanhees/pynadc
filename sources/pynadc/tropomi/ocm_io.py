@@ -37,7 +37,7 @@ class OCM_io( object ):
         assert os.path.isdir( ocm_msm ), \
             '*** Fatal, can not find OCAL measurement: {}'.format(ocm_msm)
 
-        self.__msm = ocm_msm
+        self.__product = ocm_msm
         self.__fid_b7 = h5py.File(os.path.join(ocm_msm, 'trl1brb7g.lx.nc'), "r")
         self.__fid_b8 = h5py.File(os.path.join(ocm_msm, 'trl1brb8g.lx.nc'), "r")
 
@@ -57,8 +57,8 @@ class OCM_io( object ):
         self.housekeeping_data = None
         
     def __repr__( self ):
-        return "OCM_io: {} - ICID: {}".format( self.__msm,
-                                                      self.__icid )
+        class_name = type(self).__name__
+        return '{}({!r})'.format( class_name, self.__product )
 
     def __del__( self ):
         '''
