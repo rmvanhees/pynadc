@@ -204,13 +204,35 @@ class ICM_io( object ):
                     self.delta_time = np.append(self.delta_time,
                                                 sgrp['delta_time'][0,:].astype(int))
         elif h5_name == 'DPQF_MAP' or h5_name == 'NOISE':
-            grp_path = os.path.join( 'BAND{}_CALIBRATION'.format(ib),
-                                     'BACKGROUND_RADIANCE_MODE_0001')
+            grp_path = os.path.join( h5_path.replace('%', ib),
+                                     'ANALOG_OFFSET_SWIR' )
             grp = self.__fid[grp_path]
-            sgrp = grp['OBSERVATIONS']
-            self.ref_time = (datetime(2010,1,1,0,0,0) \
-                             + timedelta(seconds=int(sgrp['time'][0])))
-            self.delta_time = sgrp['delta_time'][0,:].astype(int)
+            dset = grp['analog_offset_swir_group_keys']
+            group_keys = dset['group'][:]
+            for name in group_keys:
+                grp_path = os.path.join( 'BAND{}_CALIBRATION'.format(ib),
+                                         name.decode('ascii') )
+                grp = self.__fid[grp_path]
+                sgrp = grp['INSTRUMENT']
+                is_data = np.squeeze(sgrp['instrument_settings'])
+                hk_data = np.squeeze(sgrp['housekeeping_data'])
+                if self.instrument_settings is None:
+                    self.instrument_settings = is_data
+                    self.housekeeping_data   = hk_data
+                else:
+                    self.instrument_settings = np.append(self.instrument_settings,
+                                                         is_data)
+                    self.housekeeping_data   = np.append(self.housekeeping_data,
+                                                         hk_data)
+                sgrp = grp['OBSERVATIONS']
+                if self.ref_time is None:
+                    self.ref_time = (datetime(2010,1,1,0,0,0) \
+                                     + timedelta(seconds=int(sgrp['time'][0])))
+                if self.delta_time is None:
+                    self.delta_time = sgrp['delta_time'][0,:].astype(int)
+                else:
+                    self.delta_time = np.append(self.delta_time,
+                                                sgrp['delta_time'][0,:].astype(int))
         else:
             grp_path = os.path.join( h5_path.replace('%', ib), h5_name )
             grp = self.__fid[grp_path]
