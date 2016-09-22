@@ -17,10 +17,9 @@ import h5py
 
 import matplotlib as mpl
 
-from pynadc import extendedrainbow_with_outliers
 from pynadc.tropomi.icm_mon_db import ICM_mon
 
-mpl.use('Agg')
+mpl.use('TkAgg')
 '''
 Alternative Scheme for Qualitative Data by Paul Tol (SRON)
 
@@ -103,6 +102,8 @@ class ICM_plot(object):
         '''
         from matplotlib import pyplot as plt
         from matplotlib import gridspec
+
+        from pynadc import extendedrainbow_with_outliers
        
         signal = np.copy(signal_in)
         signal_col = np.copy(signal_col_in)
@@ -338,15 +339,9 @@ def test_dpqm( ):
         b8 = fid['BAND8/dpqf_map'][:-1,:]
         dpqm = np.hstack( (b7, b8) )
 
-    DBNAME = 'mon_background_0005_test'
-        
-    mon = ICM_mon( DBNAME, mode='r' )
-    orbit = mon.get_orbit_latest()
-    print( orbit )
-    res_sql = mon.sql_select_orbit( orbit, full=True )
-    print( res_sql )
-
     DBNAME = 'mon_ocal_ckd_dpqf_test'
+        
+    mon = ICM_mon( DBNAME )
     plot = ICM_plot( DBNAME, res_sql )
     plot.draw_quality( mon, dpqm )
     del(plot)
@@ -357,7 +352,6 @@ def test_dpqm( ):
 def test():
     '''
     '''
-    DBNAME = 'mon_background_0005_test'
     DBNAME = 'mon_sun_isrf_test'
         
     mon = ICM_mon( DBNAME )
@@ -387,4 +381,4 @@ def test():
 #--------------------------------------------------
 if __name__ == '__main__':
     test()
-    #test_dpqm()
+    test_dpqm()
