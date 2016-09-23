@@ -1071,7 +1071,7 @@ def test_sun_isrf():
     elif os.path.isdir('/nfs/TROPOMI/ocal/'):
         fl_path = '/nfs/TROPOMI/ocal/proc_knmi/2015_05_02T10_28_44_SwirlsSunIsrf'
     else:
-        fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001000/2012/09/19'
+        fl_path = '/data/richardh/Tropomi/ISRF/2015_05_02T10_28_44_SwirlsSunIsrf'
 
     dirList = [d for d in os.listdir( fl_path ) 
                if os.path.isdir(os.path.join(fl_path, d))]
@@ -1105,9 +1105,11 @@ def test_sun_isrf():
             continue
         
         print( fp )
-        (values, errors) = fp.get_data()
-        values = np.hstack((values[0], values[1]))
-        errors = np.hstack((errors[0], errors[1]))
+        res = fp.get_data()
+        values = np.hstack((res['signal'][0][:-1,:],
+                            res['signal'][1][:-1,:]))
+        errors = np.hstack((res['signal_error'][0][:-1,:],
+                            res['signal_error'][1][:-1,:]))
         
         meta_dict = {}
         meta_dict['orbit_ref'] = ii
@@ -1353,6 +1355,6 @@ def test( num_orbits=1 ):
         
 #--------------------------------------------------
 if __name__ == '__main__':
-    test( 31 )
-    #test_sun_isrf()
+    #test( 31 )
+    test_sun_isrf()
     #test_quality()
