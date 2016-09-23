@@ -119,13 +119,17 @@ class ICM_io( object ):
         '''
         Select a measurement as <processing class>_<ic_id>
 
-        Parameters:
-         - h5_name : name of measurement group
-         - h5_path : name of path in HDF5 file to measurement group
-                     use: BAND%_ANALYSIS, BAND%_CALIBRATION, BAND%_IRRADIANCE,
-                          or BAND%_RADIANCE
+        Parameters
+        ----------
+        h5_name :  string
+          name of measurement group
+        h5_path : {'BAND%_ANALYSIS', 'BAND%_CALIBRATION', 
+                   'BAND%_IRRADIANCE', 'BAND%_RADIANCE'}
+          name of path in HDF5 file to measurement group
 
-        Return: string with spectral bands found in product
+        Returns
+        -------
+        String with spectral bands found in product
 
         Updated object attributes:
          - bands               : available spectral bands
@@ -249,7 +253,14 @@ class ICM_io( object ):
     #-------------------------
     def get_msm_names( self, msm_mode ):
         '''
-        This function returns the names of the measurement datasets
+        Parameters
+        ----------
+        msm_mode : {None, 'biweight', 'sls'}
+
+        Returns
+        -------
+        List with names of the measurement datasets
+
         The names of the measurement datasets are different for
           1) datasets under BAND%_ANALYSIS, BAND%_CALIBRATION, BAND%_IRRADIANCE 
             and BAND%_RADIANCE
@@ -305,10 +316,14 @@ class ICM_io( object ):
         '''
         Read datasets from a measurement selected by class-method "select"
 
-        Parameter:
-        - msm_mode must be None, 'biweight' or 'sls'
+        Parameters
+        ---------- 
+        msm_mode :  {None, 'biweight', 'sls'}
 
-        The function returns a dictionary with msm_names and their values
+        Returns
+        -------
+        Python dictionary with msm_names as keys and their values
+
         - these values are stored as a list of ndarrays (one array per band)
         - (float) FillValues are set to NaN
         '''
@@ -381,8 +396,10 @@ def test():
     
     if os.path.isdir('/Users/richardh'):
         fl_path = '/Users/richardh/Data/S5P_ICM_CA_SIR/001000/2012/09/18'
-    else:
+    elif os.path.isdir('/nfs/TROPOMI/ical/'):
         fl_path = '/nfs/TROPOMI/ical/S5P_ICM_CA_SIR/001100/2012/09/18'
+    else:
+        fl_path = '/data/richardh/Tropomi/ical/S5P_ICM_CA_SIR/001100/2012/09/18'
     fl_name = 'S5P_TEST_ICM_CA_SIR_20120918T131651_20120918T145629_01890_01_001100_20151002T140000.h5'
 
     fp = ICM_io( os.path.join(fl_path, fl_name), verbose=True )
