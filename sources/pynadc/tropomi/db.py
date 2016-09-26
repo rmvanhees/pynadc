@@ -178,12 +178,16 @@ class S5pDB_name( S5pDB ):
         q2_str = self.__query_location__() + ' where pathID={}'
 
         cur = self.cursor()
+        if self.__verbose:
+            print( q1_str )
         cur.execute( q1_str )
         row = cur.fetchone()
         if row is None:
             cur.close()
             return ()
         else:
+            if self.__verbose:
+                print( q2_str.format(row[0]) )
             cur.execute( q2_str.format(row[0]) )
             root = cur.fetchone()
             cur.close()
@@ -234,6 +238,8 @@ class S5pDB_name( S5pDB ):
             else:
                 columns = 'name, ic_id, dateTimeStart, scanline'
 
+            if self.__verbose:
+                q2_str.format(columns, table, meta_id)
             cur.execute( q2_str.format(columns, table, meta_id) )
             for row in cur:
                 row_entry = {}
@@ -381,7 +387,7 @@ class S5pDB_icid( S5pDB ):
             q_str += ' and after_dn2v=0'
         
         q_str += self.__select_on_date__( date, prefix=' and' )
-        q_str += ' GROUP BY metaID HAVING count(*)={}'.format(len(icid)) 
+        q_str += ' GROUP BY metaID HAVING count(*)={}'.format(len(icid))
 
         return q_str
 
@@ -534,6 +540,8 @@ class S5pDB_tbl_icid( S5pDB ):
         query_str = 'select * from {} where ic_id={} order by ic_version'
 
         cur = self.cursor( Row=True )
+        if self.__verbose:
+            print( query_str.format(table, ic_id) )
         cur.execute( query_str.format(table, ic_id) )
         row = cur.fetchone()
         cur.close()
@@ -547,7 +555,8 @@ class S5pDB_tbl_icid( S5pDB ):
         return row_list
 
 #---------------------------------------------------------------------------
-def get_orbit_latest( args=None, dbname=DB_NAME, toScreen=False ):
+def get_orbit_latest( args=None, dbname=DB_NAME, 
+                      toScreen=False, verbose=False ):
     '''
     Query NADC S5p-Tropomi ICM-database for the largest available referenceOrbit
 
@@ -561,8 +570,9 @@ def get_orbit_latest( args=None, dbname=DB_NAME, toScreen=False ):
     '''
     if args:
         dbname  = args.dbname
+        verbose = args.debug
 
-    db = S5pDB_orbit( dbname )
+    db = S5pDB_orbit( dbname, verbose=verbose )
 
     result = db.latest()
     if toScreen:
@@ -570,7 +580,8 @@ def get_orbit_latest( args=None, dbname=DB_NAME, toScreen=False ):
     return result
    
 #---------------------------------------------------------------------------
-def get_orbit_for_date( date, args=None, dbname=DB_NAME, toScreen=False ):
+def get_orbit_for_date( date, args=None, dbname=DB_NAME,
+                        toScreen=False, verbose=False ):
     '''
     Query NADC S5p-Tropomi ICM-database for all orbits during a given day
 
@@ -585,6 +596,7 @@ def get_orbit_for_date( date, args=None, dbname=DB_NAME, toScreen=False ):
     '''
     if args:
         dbname  = args.dbname
+        verbose = args.debug
         date    = args.date
 
     if date is None:
@@ -592,7 +604,7 @@ def get_orbit_for_date( date, args=None, dbname=DB_NAME, toScreen=False ):
         
         date = date.today().isoformat()
 
-    db = S5pDB_orbit( dbname )
+    db = S5pDB_orbit( dbname, verbose=verbose )
 
     result = db.date( date )
     if toScreen:
@@ -601,7 +613,7 @@ def get_orbit_for_date( date, args=None, dbname=DB_NAME, toScreen=False ):
    
 #---------------------------------------------------------------------------
 def get_product_by_date( args=None, dbname=DB_NAME, date=None,
-                         mode='location', toScreen=False ):
+                         mode='location', toScreen=False, verbose=False ):
     '''
     Query NADC S5p-Tropomi ICM-database on start date of measurements. 
 
@@ -625,9 +637,10 @@ def get_product_by_date( args=None, dbname=DB_NAME, date=None,
                    [default: False]
     '''
     if args:
-        dbname     = args.dbname
-        date       = args.date
-        mode       = args.mode
+        dbname  = args.dbname
+        verbose = args.debug
+        date    = args.date
+        mode    = args.mode
 
     assert date, \
         '*** Fatal, no measurement start date provided'
@@ -635,7 +648,7 @@ def get_product_by_date( args=None, dbname=DB_NAME, date=None,
     assert os.path.isfile( dbname ),\
         '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
-    db = S5pDB_date( dbname )
+    db = S5pDB_date( dbname, verbose=verbose )
 
     if mode == 'location':
         result = db.location( date )
@@ -648,7 +661,7 @@ def get_product_by_date( args=None, dbname=DB_NAME, date=None,
 
 #---------------------------------------------------------------------------
 def get_product_by_name( args=None, product=None, dbname=DB_NAME, 
-                         mode='location', toScreen=False ):
+                         mode='location', toScreen=False, verbose=False ):
     '''
     Query NADC S5p-Tropomi ICM-database on product-name. 
 
@@ -677,14 +690,15 @@ def get_product_by_name( args=None, product=None, dbname=DB_NAME,
     [mode='content'], a tuple with dictionaries of available datasets
     '''
     if args:
-        dbname   = args.dbname
-        product  = args.product
-        mode     = args.mode
+        dbname  = args.dbname
+        verbose = args.debug
+        product = args.product
+        mode    = args.mode
 
     assert product, \
         '*** Fatal, no product-name provided'
 
-    db = S5pDB_name( dbname )
+    db = S5pDB_name( dbname, verbose=verbose )
     if mode == 'location':
         result = db.location( product )
         if toScreen and len(result) == 2:
@@ -725,7 +739,7 @@ def get_product_by_name( args=None, product=None, dbname=DB_NAME,
 
 #---------------------------------------------------------------------------
 def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
-                          mode='location', toScreen=False ):
+                          mode='location', toScreen=False, verbose=False ):
     '''
     Query NADC S5p-Tropomi ICM-database on reference orbit. 
 
@@ -745,9 +759,10 @@ def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
                    [default: False]
     '''
     if args:
-        dbname     = args.dbname
-        orbit      = args.orbit
-        mode       = args.mode
+        dbname  = args.dbname
+        verbose = args.debug
+        orbit   = args.orbit
+        mode    = args.mode
 
     assert orbit is None or isinstance(orbit, (tuple, list)), \
         '*** Fatal, parameter orbit is not a list or tuple'
@@ -755,7 +770,7 @@ def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
     assert os.path.isfile( dbname ),\
         '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
-    db = S5pDB_orbit( dbname )
+    db = S5pDB_orbit( dbname, verbose=verbose )
 
     if mode == 'location':
         result = db.location( orbit )
@@ -768,7 +783,7 @@ def get_product_by_orbit( args=None, dbname=DB_NAME, orbit=None,
 
 #---------------------------------------------------------------------------
 def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
-                          mode='location', toScreen=False ):
+                          mode='location', toScreen=False, verbose=False ):
     '''
     Query NADC S5p-Tropomi ICM-database on receive time of products.
 
@@ -788,9 +803,10 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
                    [default: False]
     '''
     if args:
-        dbname     = args.dbname
-        rtime      = args.rtime
-        mode       = args.mode
+        dbname  = args.dbname
+        verbose = args.debug
+        rtime   = args.rtime
+        mode    = args.mode
 
     assert rtime, \
         '*** Fatal, no receive time of product provided'
@@ -798,7 +814,7 @@ def get_product_by_rtime( args=None, dbname=DB_NAME, rtime=None,
     assert os.path.isfile( dbname ),\
         '*** Fatal, can not find SQLite database: {}'.format(dbname)
 
-    db = S5pDB_rtime( dbname )
+    db = S5pDB_rtime( dbname, verbose=verbose )
 
     if mode == 'location':
         result = db.location( rtime )
@@ -848,6 +864,7 @@ def get_product_by_icid( args=None, dbname=DB_NAME, icid=None,
     '''
     if args:
         dbname     = args.dbname
+        verbose    = args.debug
         icid       = [int(s) for s in args.icid.split(',')]
         after_dn2v = args.after_dn2v
         orbit      = args.orbit
@@ -919,6 +936,7 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
     '''
     if args:
         dbname     = args.dbname
+        verbose    = args.debug
         dataset    = args.dataset
         after_dn2v = args.after_dn2v
         orbit      = args.orbit
@@ -951,7 +969,7 @@ def get_product_by_type( args=None, dbname=DB_NAME, dataset=None,
 
 #---------------------------------------------------------------------------
 def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
-                             check=False, toScreen=False ):
+                             check=False, toScreen=False, verbose=False ):
     '''
     Query NADC S5p-Tropomi ICM-database on ICID to obtain instrument settings
 
@@ -973,11 +991,12 @@ def get_instrument_settings( args=None, dbname=DB_NAME, ic_id=None,
       file_name  :  name of ICM_SIR product
     '''
     if args:
-        dbname = args.dbname
-        ic_id  = args.icid
-        check  = args.check
+        dbname  = args.dbname
+        verbose = args.debug
+        ic_id   = args.icid
+        check   = args.check
 
-    db = S5pDB_tbl_icid( dbname )
+    db = S5pDB_tbl_icid( dbname, verbose=verbose )
     if ic_id is None:
         result = db.all()
 
