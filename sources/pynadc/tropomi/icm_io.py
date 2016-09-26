@@ -408,29 +408,29 @@ def test():
     print( fp.ref_time )
     print( fp.delta_time )
     res= fp.get_data()
-    for key in res.keys():
+    for key in res:
         print( key, len(res[key]), res[key][0].shape )
 
     fp.select( 'BACKGROUND_MODE_1063', h5_path='BAND%_CALIBRATION' )
     print( fp )
     res= fp.get_data()
-    for key in res.keys():
+    for key in res:
         print( key, len(res[key]), res[key][0].shape )
 
     res = fp.get_data( msm_mode='biweight' )
-    for key in res.keys():
+    for key in res:
         print( key, len(res[key]), res[key][0].shape )
 
     fp.select( 'SOLAR_IRRADIANCE_MODE_0202' )
     print( fp )
     res= fp.get_data()
-    for key in res.keys():
+    for key in res:
         print( key, len(res[key]), res[key][0].shape )
 
     fp.select( 'EARTH_RADIANCE_MODE_0004' )
     print( fp )
     res= fp.get_data()
-    for key in res.keys():
+    for key in res:
         print( key, len(res[key]), res[key][0].shape )
 
     if os.path.isdir('/Users/richardh'):

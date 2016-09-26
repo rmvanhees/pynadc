@@ -37,10 +37,6 @@ SQLite Database layout
       dbVersion       text        NOT NULL,
       dpqf_01         int         NOT NULL,
       dpqf_08         int         NOT NULL,
-      dpqf_dark_01    int         NOT NULL,
-      dpqf_dark_08    int         NOT NULL,
-      dpqf_noise_01   int         NOT NULL,
-      dpqf_noise_08   int         NOT NULL,
       q_detTemp       integer     NOT NULL,
       q_obmTemp       integer     NOT NULL
  )
@@ -306,7 +302,7 @@ class ICM_mon( object ):
     def __repr__( self ):
         class_name = type(self).__name__
         return '{}({!r}, readwrite={!r})'.format( class_name,
-                                             self.dbname, self.__rw )
+                                                  self.dbname, self.__rw )
 
     def __del__( self ):
         '''
@@ -347,10 +343,6 @@ class ICM_mon( object ):
             dbVersion       text        NOT NULL,
             dpqf_01         int         NOT NULL,
             dpqf_08         int         NOT NULL,
-            dpqf_dark_01    int         NOT NULL,
-            dpqf_dark_08    int         NOT NULL,
-            dpqf_noise_01   int         NOT NULL,
-            dpqf_noise_08   int         NOT NULL,
             q_detTemp       integer     NOT NULL,
             q_obmTemp       integer     NOT NULL
             )''' )
@@ -551,6 +543,9 @@ class ICM_mon( object ):
         from pynadc import version
         return version.__version__
 
+    def get_mode( self ):
+        return self.__fid.attrs['mode']
+
     def get_method( self ):
         return self.__fid.attrs['method']
 
@@ -636,15 +631,15 @@ class ICM_mon( object ):
             return None
         
     ## ---------- WRITE HOUSE-KEEPING DATA ----------
-    def h5_write_hk( self, id, hk ):
+    def h5_write_hk( self, id_data, hk_data ):
         '''
         Write ID of entry and biweight median and spread of house-keeping data
 
         Parameters
         ----------
-        id  : tuple
+        id_data  : tuple
            Tuple with rowID and orbit-number obtained from SQLite database
-        hk  : array of type housekeeping_data, optional
+        hk_data  : array of type housekeeping_data, optional
            All housekeeping data of the used measurements
 
         '''
@@ -652,7 +647,7 @@ class ICM_mon( object ):
 
         ## write entry identifier
         id_entry = np.empty( 1, dtype=self.__fid['id'].dtype )
-        id_entry[0] = id
+        id_entry[0] = id_data
         dset = self.__fid['id']
         dset.resize( (dset.shape[0]+1,) )
         dset[-1] = id_entry
@@ -660,15 +655,15 @@ class ICM_mon( object ):
         ## write SWIR house-keeping data
         if self.__fid.attrs['hk']:
             hk_median = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
-            hk_spread = np.empty( 1, dtype=self.__fid['hk_median'].dtype )
+            hk_spread = np.empty( 1, dtype=self.__fid['hk_spread'].dtype )
             for name in self.__fid['hk_median'].dtype.names:
-                if hk[name].dtype.name.find( 'float' ) >= 0:
-                    (mx, sx) = biweight(hk[name], spread=True)
+                if hk_data[name].dtype.name.find( 'float' ) >= 0:
+                    (mx, sx) = biweight(hk_data[name], spread=True)
                     hk_median[name] = mx
                     hk_spread[name] = sx
-                elif hk[name].dtype.name.find( 'int' ) >= 0:
-                    hk_median[name] = np.median(hk[name])
-                    hk_spread[name] = np.all(hk[name])
+                elif hk_data[name].dtype.name.find( 'int' ) >= 0:
+                    hk_median[name] = np.median(hk_data[name])
+                    hk_spread[name] = np.all(hk_data[name])
                 else:
                     print( name )
             dset = self.__fid['hk_median']
@@ -746,8 +741,8 @@ class ICM_mon( object ):
 
         res = {}
         dset = self.__fid['id']
-        id = dset[:]
-        indx = np.where( id['orbit_ref'] == orbit )[0]
+        id_data = dset[:]
+        indx = np.where( id_data['orbit_ref'] == orbit )[0]
 
         for name in self.get_ds_list():
             dset = self.__fid[name]
@@ -794,12 +789,14 @@ class ICM_mon( object ):
         assert self.__mode == 'dpqm'
 
         dset = self.__fid['id']
-        id = dset[:]
-        indx = np.where( id['orbit_ref'] == orbit )[0]
+        id_data = dset[:]
+        indx = np.where( id_data['orbit_ref'] == orbit )[0]
+        print( orbit, indx )
 
         res = {}
         for name in self.get_ds_list():
             dset = self.__fid[name]
+            print( name, dset.shape )
             res[name] = dset[indx,...]
 
         return res
@@ -823,9 +820,9 @@ class ICM_mon( object ):
 
         res = {}
         dset = self.__fid['id']
-        id = dset[:]
-        indx = np.nonzero(np.in1d(id['sql_rowid'],z_list))[0].tolist()
-        res['orbit_ref'] = id['orbit_ref'][indx]
+        id_data = dset[:]
+        indx = np.nonzero(np.in1d(id_data['sql_rowid'],z_list))[0].tolist()
+        res['orbit_ref'] = id_data['orbit_ref'][indx]
         
         dset = self.__fid['signal']
         res['signal'] = dset[indx, col, row]
@@ -853,8 +850,6 @@ class ICM_mon( object ):
                       ',{start_time!r}'\
                       ',{icm_version!r},{algo_version!r},{db_version!r}'\
                       ',{dpqf_01},{dpqf_08}' \
-                      ',{dpqf_dark_01},{dpqf_dark_08}' \
-                      ',{dpqf_noise_01},{dpqf_noise_08}' \
                       ',{q_det_temp},{q_obm_temp})'
         else:
             str_sql = 'insert into icm_meta values' \
@@ -1205,8 +1200,8 @@ def test_sun_isrf():
         meta_dict['error_median'] = mx
         meta_dict['error_spread'] = sx
 
-        meta_dict['q_det_temp'] = 0                    ## obtain from hk
-        meta_dict['q_obm_temp'] = 0                    ## obtain from hk
+        meta_dict['q_det_temp'] = 0                    ## obtain from hk_data
+        meta_dict['q_obm_temp'] = 0                    ## obtain from hk_data
         meta_dict['q_algo'] = 0                        ## obtain from algo?!
         hk_data = fp.housekeeping_data
 
@@ -1287,28 +1282,6 @@ def test_quality():
             dpqf[:,unused_rows[0]] = -1
         meta_dict['dpqf_01'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
         meta_dict['dpqf_08'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
-        dpqm = np.hstack((msm['dpqm_dark_flux'][0][:-1,:],
-                          msm['dpqm_dark_flux'][1][:-1,:]))
-        dpqf = (dpqm * 10).astype(np.byte)
-        unused_cols = np.where(np.nansum(dpqm, axis=0) < (256 // 4))
-        if unused_cols[0].size > 0:
-            dpqf[:,unused_cols[0]] = -1
-        unused_rows = np.where(np.nansum(dpqm, axis=1) < (1000 // 4))
-        if unused_rows[0].size > 0:
-            dpqf[:,unused_rows[0]] = -1
-        meta_dict['dpqf_dark_01'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
-        meta_dict['dpqf_dark_08'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
-        dpqm = np.hstack((msm['dpqm_noise'][0][:-1,:],
-                          msm['dpqm_noise'][1][:-1,:]))
-        dpqf = (dpqm * 10).astype(np.byte)
-        unused_cols = np.where(np.sum(dpqm, axis=0) < (256 // 4))
-        if unused_cols[0].size > 0:
-            dpqf[:,unused_cols[0]] = -1
-        unused_rows = np.where(np.sum(dpqm, axis=1) < (1000 // 4))
-        if unused_rows[0].size > 0:
-            dpqf[:,unused_rows[0]] = -1
-        meta_dict['dpqf_noise_01'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
-        meta_dict['dpqf_noise_08'] = np.sum(((dpqf >= 0) & (dpqf < thres_min)))
 
         meta_dict['q_det_temp'] = 0                    ## obtain from hk
         meta_dict['q_obm_temp'] = 0                    ## obtain from hk
@@ -1431,5 +1404,5 @@ def test( num_orbits=1 ):
 #--------------------------------------------------
 if __name__ == '__main__':
     #test( 31 )
-    test_sun_isrf()
-    #test_quality()
+    #test_sun_isrf()
+    test_quality()

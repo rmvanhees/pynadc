@@ -114,7 +114,7 @@ class OCM_io( object ):
 
         self.__icid = ic_id
         if self.__fid_b7 is not None:
-            if not 'BAND7' in self.__fid_b7:
+            if 'BAND7' not in self.__fid_b7:
                 return 0
             
             gid = self.__fid_b7['BAND7']
@@ -223,8 +223,6 @@ def test2():
     '''
     Perform some simple test to check the OCM_io class
     '''
-    import shutil
-    
     if os.path.isdir('/Users/richardh'):
         fl_path = '/Users/richardh/Data/'
     elif os.path.isdir('/nfs/TROPOMI/ocal/proc_knmi'):
@@ -237,8 +235,7 @@ def test2():
     print( fp )
     if fp.select( 31524 ) > 0:
         print( fp.num_msm )
-        print( fp.ref_time )
-        print( fp.delta_time.shape )
+        print( fp.ref_time, len(fp.delta_time) )
         res = fp.get_data()
         for key in res.keys():
             print( key, len(res[key]), res[key][0].shape )
@@ -250,8 +247,6 @@ def test():
     '''
     Perform some simple test to check the OCM_io class
     '''
-    import shutil
-    
     if os.path.isdir('/Users/richardh'):
         fl_path = '/Users/richardh/Data/S5P_OCM_CA_SIR/001000/2012/09/19'
     elif os.path.isdir('/nfs/TROPOMI/ocal/proc_knmi'):
@@ -262,10 +257,9 @@ def test():
 
     fp = OCM_io( os.path.join(fl_path, ocm_dir), verbose=True )
     print( fp )
-    if fp.select( 31624 ) > 0:
+    if fp.select( 31623 ) > 0:
         print( fp.num_msm )
-        print( fp.ref_time )
-        print( fp.delta_time.shape )
+        print( fp.ref_time, len(fp.delta_time) )
         res = fp.get_data()
         for key in res.keys():
             print( key, len(res[key]), res[key][0].shape )
@@ -274,5 +268,4 @@ def test():
 
 #--------------------------------------------------
 if __name__ == '__main__':
-    test()
-    
+    test2()

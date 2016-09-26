@@ -52,16 +52,21 @@ class ICM_plot(object):
     The PDF will have the following name:
         <dbname>_<startDateTime of monitor entry>_<orbit of monitor entry>.pdf
     '''
-    def __init__( self, dbname, res_sql, cmap="Rainbow" ):
+    def __init__( self, dbname, res_sql, cmap="Rainbow", mode='frame' ):
         from matplotlib.backends.backend_pdf import PdfPages
 
+        self.__mode = mode
         self.__algo_version = res_sql['algVersion'][0]
         self.__db_version   = res_sql['dbVersion'][0]
         self.__icm_version  = res_sql['icmVersion'][0]
-        self.__sign_median  = res_sql['dataMedian'][0]
-        self.__sign_spread  = res_sql['dataSpread'][0]
-        self.__error_median = res_sql['errorMedian'][0]
-        self.__error_spread = res_sql['errorSpread'][0]
+        if mode == 'frame':
+            self.__sign_median  = res_sql['dataMedian'][0]
+            self.__sign_spread  = res_sql['dataSpread'][0]
+            self.__error_median = res_sql['errorMedian'][0]
+            self.__error_spread = res_sql['errorSpread'][0]
+        else:
+            self.__dpqf_01 = res_sql['dpqf_01'][0]
+            self.__dpqf_08 = res_sql['dpqf_08'][0]
         date = res_sql['startDateTime'][0][0:10].replace('-','')
         orbit = res_sql['referenceOrbit'][0]
         self.__pdf = PdfPages( dbname + '_{}_{:05}.pdf'.format(date, orbit) )
@@ -73,7 +78,7 @@ class ICM_plot(object):
     def __del__( self ):
         self.__pdf.close()
 
-    def __icm_info( self, fig ):
+    def __icm_info( self, fig, dict_stats=None ):
         '''
         '''
         from datetime import datetime
@@ -83,11 +88,18 @@ class ICM_plot(object):
         info_str = 'date : {}'.format(cre_date) \
                    + '\nicm_version   : {}'.format(self.__icm_version) \
                    + '\nalgo_version  : {}'.format(self.__algo_version) \
-                   + '\ndb_version    : {}'.format(self.__db_version) \
-                   + '\nsignal_median : {:.3f}'.format(self.__sign_median) \
-                   + '\nsignal_spread : {:.3f}'.format(self.__sign_spread) \
-                   + '\nerror_median  : {:.3f}'.format(self.__error_median) \
-                   + '\nerror_spread  : {:.3f}'.format(self.__error_spread)
+                   + '\ndb_version    : {}'.format(self.__db_version)
+        if dict_stats is not None:
+            for key in dict_stats:
+                info_str += '\n{}  :  {}'.format(key, dict_stats[key])
+        elif self.__mode == 'frame':
+            info_str += '\nsignal_median : {:.3f}'.format(self.__sign_median) \
+                    + '\nsignal_spread : {:.3f}'.format(self.__sign_spread) \
+                    + '\nerror_median  : {:.3f}'.format(self.__error_median) \
+                    + '\nerror_spread  : {:.3f}'.format(self.__error_spread)
+        else:
+            info_str += '\ndpqf_01 : {}'.format(self.__dpqf_01) \
+                    + '\ndark_08 : {}'.format(self.__dpqf_08) \
     
         fig.text( 0.015, 0.075, info_str,
                   verticalalignment='bottom', horizontalalignment='left',
@@ -221,7 +233,7 @@ class ICM_plot(object):
         plt.close()
     
     def __quality( self, dpqm, low_thres=0.1, high_thres=0.8,
-                   title=None, cmap=None ):
+                   title=None, sub_title=None, cmap=None ):
         '''
         '''
         from matplotlib import pyplot as plt
@@ -265,6 +277,8 @@ class ICM_plot(object):
         ax1.imshow( dpqf, cmap=cmap, norm=norm,
                     aspect=1, vmin=-1, vmax=10,
                     interpolation='none', origin='lower' )
+        if sub_title is not None:
+            ax1.set_title( sub_title )
 
         dpqf_row_01 = np.sum( ((dpqf >= 0) & (dpqf < thres_min)), axis=0 )
         dpqf_row_08 = np.sum( ((dpqf >= 0) & (dpqf < thres_max)), axis=0 )
@@ -280,6 +294,9 @@ class ICM_plot(object):
         ax3.set_xlabel( 'column' )
         ax3.grid(True)
 
+        dict_stats = { 'dpqf_01' : np.sum(((dpqf >= 0) & (dpqf < thres_min))),
+                       'dpqf_08' : np.sum(((dpqf >= 0) & (dpqf < thres_max)))}
+        self.__icm_info( fig, dict_stats )
         plt.tight_layout()
         self.__pdf.savefig()
         plt.close()
@@ -316,10 +333,13 @@ class ICM_plot(object):
                      data_unit=mon.h5_get_frame_attr(data_label, 'units'),
                      error_unit=mon.h5_get_frame_attr(error_label, 'units') )
 
-    def draw_quality( self, mon, dpqm ):
+    def draw_quality( self, mon, dict_dpqm ):
         '''
         '''
-        self.__quality( dpqm, title=mon.h5_get_attr('title') )
+        for key in sorted(dict_dpqm.keys()):
+            self.__quality( dict_dpqm[key], title=mon.h5_get_attr('title'),
+                            sub_title=key )
+
 ## 
 ## --------------------------------------------------
 ## 
@@ -328,22 +348,32 @@ def test_dpqm( ):
     '''
     import os
     
-    if os.path.isdir('/Users/richardh'):
-        data_dir = '/Users/richardh/Data'
-    else:
-        data_dir ='/nfs/TROPOMI/ocal/ckd/ckd_release_swir/dpqf' 
-    dpqm_fl=os.path.join(data_dir, 'ckd.dpqf.detector4.nc')
+#    if os.path.isdir('/Users/richardh'):
+#        data_dir = '/Users/richardh/Data'
+#    else:
+#        data_dir ='/nfs/TROPOMI/ocal/ckd/ckd_release_swir/dpqf' 
+#    dpqm_fl=os.path.join(data_dir, 'ckd.dpqf.detector4.nc')
     
-    with h5py.File( dpqm_fl, 'r' ) as fid:
-        b7 = fid['BAND7/dpqf_map'][:-1,:]
-        b8 = fid['BAND8/dpqf_map'][:-1,:]
-        dpqm = np.hstack( (b7, b8) )
+#    with h5py.File( dpqm_fl, 'r' ) as fid:
+#        b7 = fid['BAND7/dpqf_map'][:-1,:]
+#        b8 = fid['BAND8/dpqf_map'][:-1,:]
+#        dpqm = np.hstack( (b7, b8) )
 
-    DBNAME = 'mon_ocal_ckd_dpqf_test'
-        
+    DBNAME = 'mon_quality_test'
+
     mon = ICM_mon( DBNAME )
-    plot = ICM_plot( DBNAME, res_sql )
-    plot.draw_quality( mon, dpqm )
+    print( mon.get_mode() )
+    orbit = mon.get_orbit_latest()
+    print( orbit )
+    res_sql = mon.sql_select_orbit( orbit, full=True )
+    print( res_sql )
+    res_h5 = mon.h5_read_dpqm( orbit )
+    print( res_h5.keys() )
+    for name in res_h5:
+        print( name, res_h5[name].shape )
+    
+    plot = ICM_plot( DBNAME, res_sql, mode=mon.get_mode() )
+    plot.draw_quality( mon, res_h5 )
     del(plot)
     del(mon)
 ## 
@@ -359,10 +389,9 @@ def test():
     print( orbit )
     res_sql = mon.sql_select_orbit( orbit, full=True )
     print( res_sql )
-    res_h5 = mon.h5_read_frame( res_sql['rowID'][0],
-                                statistics='error,rows,cols' )
+    res_h5 = mon.h5_read( res_sql['rowID'][0] )
     print( res_h5.keys() )
-    for name in res_h5.keys():
+    for name in res_h5:
         print( name, res_h5[name].shape )
 
     ## plot latest entry
@@ -380,5 +409,5 @@ def test():
     ## plot time-series
 #--------------------------------------------------
 if __name__ == '__main__':
-    test()
+    #test()
     test_dpqm()

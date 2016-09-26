@@ -275,10 +275,10 @@ def test():
                  verbose=True, readwrite=True )
     
     fp.select( 'DARK_MODE_1605' )
-    res = patch.background( fp.instrument_settings['exposure_time'],
-                            fp.instrument_settings['nr_coadditions'] )
-    res = { 'signal_avg' : np.split(res[0], 2, axis=1),
-            'signal_avg_std' : np.split(res[1], 2, axis=1) }
+    res_dark = patch.background( fp.instrument_settings['exposure_time'],
+                                 fp.instrument_settings['nr_coadditions'] )
+    res = { 'signal_avg' : np.split(res_dark[0], 2, axis=1),
+            'signal_avg_std' : np.split(res_dark[1], 2, axis=1) }
     fp.set_data( res )
     
     fp.select( 'SLS_MODE_0610' )
@@ -304,4 +304,3 @@ def test():
 
 if __name__ == '__main__':
     test()
-
