@@ -3,48 +3,7 @@
 # This software is distributed under the BSD 2-clause license.
 
 '''
-Defined functions and class-methods
------------------------------------
--- create a new database --
- * mon = ICM_mon( dbname, readwrite=True )
-
--- add/read HDF5 attributes:
- * h5_set_attr( attr_name, value )
- * h5_get_attr( attr_name )
- * h5_set_ds_attr( ds_name, attr_name, value )
- * h5_get_ds_attr( ds_name, attr_name )
-
--- miscellaneous functions --
- * pynadc_version()
- * get_method()
- * get_ds_list()
-
--- add new entries to database --
- Public methods to add new entries to the monitor databases are:
- * sql_write( meta_dict )
- * h5_write_hk( hk_data )
- * h5_write( values, erros )
- * h5_write_dpqm( dict_dpqm )
-
--- read entries from database
- * h5_read( dict_frame )
- * h5_read_dpqm( dict_dpqm )
- * h5_get_trend( ds_name, data )   ## not yes implemented
-
--- update existing entries in database --
- Public methods to update existing entries in the monitor databases are:
- * h5_update_hk      ## not yes implemented
- * h5_update_frame   ## not yes implemented
- * sql_update_meta   ## not yes implemented
-
--- query database --
- Public methods to query the monitor databases are:
- * get_orbit_latest()
- * sql_num_entries()
- * sql_check_orbit()
- * sql_select_orbit()
- * sql_get_row_list()
- * sql_get_trend()
+The SRON monitor database consists of a SQLite database and a HDF5 database
 
 SQLite Database layout
 ----------------------
@@ -89,43 +48,146 @@ SQLite Database layout
 HDF5 Database layout
 ---------------
 -- datasets --
- * id
- * hk_median
- * hk_spread
+ * id : compound dataset
+     Entry identifier, to match entries of the SQLite and HDF5 database.
+     struct {
+               "sql_rowid"        +0    native long
+               "orbit_ref"        +8    native long
+     } 16 bytes
+
+ * hk_median : compound dataset
+     Biweight median of the housekeeping data (non-SWIR information is removed).
+     struct {
+               "temp_det4"        +0    native float
+               "temp_obm_swir"    +4    native float
+               "temp_cu_sls_stim" +8    native float
+               "temp_obm_swir_grating" +12   native float
+               "temp_obm_swir_if" +16   native float
+               "temp_pelt_cu_sls1" +20   native float
+               "temp_pelt_cu_sls2" +24   native float
+               "temp_pelt_cu_sls3" +28   native float
+               "temp_pelt_cu_sls4" +32   native float
+               "temp_pelt_cu_sls5" +36   native float
+               "swir_vdet_bias"   +40   native float
+               "difm_status"      +44   native float
+               "det4_led_status"  +48   native unsigned char
+               "wls_status"       +49   native unsigned char
+               "common_led_status" +50   native unsigned char
+               "sls1_status"      +51   native unsigned char
+               "sls2_status"      +52   native unsigned char
+               "sls3_status"      +53   native unsigned char
+               "sls4_status"      +54   native unsigned char
+               "sls5_status"      +55   native unsigned char
+     } 56 bytes
+
+ * hk_spread : compound dataset
+     Biweight spread of the housekeeping data (non-SWIR information is removed).
+     Same structure as for "hk_median"
 
  <mode=frame>
- * signal
- * signal_<method>
- * signal_col
- * signal_col_<method>
- * signal_row
- * signal_row_<method>
+ * signal :  ndarray with same shape as the SWIR detector, row 257 removed
+    Parameter derived for each detector pixel, described in the attributes
+    "long_name" and "units"
+ * signal_<method> :  ndarray like "signal", method={std|error|noise}
+    Standard deviation/error/noise of the dataset "signal"
+ * signal_col :  ndarray with same number of columns as the SWIR detector
+    Biweight median of dataset "signal" over the rows
+ * signal_col_<method> :  ndarray like "signal_col"
+    Biweight median of dataset "signal_<method>" over the rows
+ * signal_row : ndarray with same number of rows as the SWIR detector
+    Biweight median of dataset "signal" over the columns
+ * signal_row_<method> :  ndarray like "signal_row"
+    Biweight median of dataset "signal_<method>" over the columns
 
  <mode=dpqm>
- * dpqf_map
- * dpqm_dark_flux
- * dpqm_noise
+ * dpqf_map :  ndarray with same shape as the SWIR detector, row 257 removed
+    Pixel quality
+ * dpqm_dark_flux :  ndarray like "dpqf_map"
+    Pixel quality derived from dark measurements
+ * dpqm_noise :  ndarray like "dpqf_map"
+    Pixel quality derived from noise statistics
 
 -- attributes --
  * title        :  string
+    Short description of the file contents
  * comment      :  string
+    Short description of data used
  * institution  :  string
+    Where the databases were produced
  * source       :  string
- * reference    :  string
+    Reference to the original data
+ * references   :  string
+    References that describe the data or methods used to produce it
  * algoVersion  :  string
+    Version of the algorithms used to produce it
  * dbVersion    :  string
+    Version of the database S/W used to produce it
  * icmVersion   :  string
+    Version of the ICM products used as input
  * orbit_window :  integer
+    Size of the orbit window of the ICM products used
 
  * mode    :  string
+    Kind of data used, currently foreseen are: dpqm, isrf or frame (= default)
  * method  :  string
+    Defines error estimate: standard deviation "std", error or noise
  * hk      :  boolean
+    Presence of housekeeping data
  * cols    :  boolean
+    Presence of column statistics
  * rows    :  boolean
- * ds_list :  list of strings
+    Presence of row statistics
 
+ * ds_list :  list of strings
+    Listing of dataset present in the HDF5 database
  * icid_list  : list if integers
+    Listing of ICIDs used in the calculations
  * ic_version : list if integers
+    Listing of instrument configuration version used in the calculations
+
+Functions and class-methods defined in the class ICM_mon
+--------------------------------------------------------
+-- create a new database --
+ * mon = ICM_mon( dbname, readwrite=True )
+
+-- add/read HDF5 attributes:
+ * h5_set_attr( attr_name, value )
+ * h5_get_attr( attr_name )
+ * h5_set_ds_attr( ds_name, attr_name, value )
+ * h5_get_ds_attr( ds_name, attr_name )
+
+-- add new entries to database --
+ Public methods to add new entries to the monitor databases are:
+ * sql_write( meta_dict )
+ * h5_write_hk( hk_data )
+ * h5_write( values, erros )
+ * h5_write_dpqm( dict_dpqm )
+
+-- read entries from database
+ * h5_read( dict_frame )
+ * h5_read_dpqm( dict_dpqm )
+ * h5_get_trend( ds_name, data )   ## not yes implemented
+
+-- update existing entries in database --
+ Public methods to update existing entries in the monitor databases are:
+ * h5_update_hk      ## not yes implemented
+ * h5_update_frame   ## not yes implemented
+ * sql_update_meta   ## not yes implemented
+
+-- query database --
+ Public methods to query the monitor databases are:
+ * get_orbit_latest()
+ * sql_num_entries()
+ * sql_check_orbit( orbit )
+ * sql_select_orbit( orbit )
+ * sql_get_row_list()
+ * sql_get_rowid()
+ * sql_get_trend()
+
+-- miscellaneous functions --
+ * pynadc_version()
+ * get_method()
+ * get_ds_list()
 
 Configuration management
 ------------------------
@@ -681,7 +743,7 @@ class ICM_mon( object ):
            Dictionary with ndarrays of all signal data-sets (only one entry)
         '''
         assert self.__mode == 'frame'
-        
+
         res = {}
         dset = self.__fid['id']
         id = dset[:]
@@ -749,12 +811,9 @@ class ICM_mon( object ):
     def h5_get_trend_rows( self, orbit_list=None, orbit_range=None ):
         pass
 
-    def h5_get_trend_pixel( self, pixel_id, orbit_list=None, orbit_range=None ):
+    def h5_get_trend_pixel( self, col, row, orbit_list=None, orbit_range=None ):
         '''
         '''
-        row = pixel_id // 1000
-        col = pixel_id - row * 1000
-        
         if orbit_list is not None:
             z_list = self.sql_get_rowid( orbit_list=orbit_list )
         elif orbit_range is not None:
@@ -780,20 +839,12 @@ class ICM_mon( object ):
     def sql_write( self, meta_dict, verbose=False ):
         '''
         Append monitor meta-data to SQLite database
-        The dictionary "meta_dict" should contain the following fields:
-         "orbit_ref"    : column referenceOrbit [integer]
-         "orbit_used"   : column orbitsUsed     [integer]
-         "entry_date"   : column entryDateTime  [text format YY-MM-DD hh:mm:ss]
-         "start_time"   : column startDateTime  [text format YY-MM-DD hh:mm:ss]
-         "icm_version"  : column icmVersion     [text free-format]
-         "algo_version" : column algVersion     [text free-format]
-         "db_version"   : column dbVersion      [text free-format]
-         "data_median"  : column dataMedian     [float]
-         "data_spread"  : column dataSpread     [float]
-         "error_median" : column errorMedian    [float]
-         "error_spread" : column errorSpread    [float]
-         "q_det_temp"   : column q_detTemp      [integer]
-         "q_obm_temp"   : column q_obmTemp      [integer]
+
+        Parameters
+        ----------
+        meta_dict : dictionary
+           The dictionary "meta_dict" should contain all fields if table 
+           ICM_META, except "rowID"
         '''
         dbname = self.dbname + '.db'
         if self.__mode == 'dpqm':
@@ -876,6 +927,11 @@ class ICM_mon( object ):
         '''
         Check if data from referenceOrbit is already present in database
 
+        Parameters
+        ----------
+        orbit  :  integer
+           Reference orbit-numer
+
         Returns rowID equals -1 when row is not present, else rowID > 0
         '''
         dbname = self.dbname + '.db'
@@ -899,14 +955,20 @@ class ICM_mon( object ):
                           q_det_temp=None, q_obm_temp=None ):
         '''
         Obtain list of rowIDs and orbit numbers for given orbit(range)
-        Parameters:
-           orbit      : scalar or range orbit_min, orbit_max
-           orbit_used : minimal number of orbits used to calculate results 
-           q_det_temp : select only entries with stable detector temperature
-           q_obm_temp : select only entries with stable OBM temperature
-           full       : add data of all columns to output dictionary
 
-        Returns dictionary with keys: 'rowID' and 'referenceOrbit'
+        Parameters
+        ----------
+        orbit      : scalar or list
+           Reference orbit-numer or range by orbit_min, orbit_max
+        orbit_used : integer, optional
+           Minimal number of orbits used to calculate results 
+        q_det_temp : float, optional
+           Select only entries with stable detector temperature
+        q_obm_temp : float, optional
+           Select only entries with stable OBM temperature
+        full       : boolean, optional
+           Return all fields of the selected rows from table ICM_META,
+           else only return rowID & referenceOrbit
         '''
         dbname = self.dbname + '.db'
         row_list = {}
@@ -954,11 +1016,16 @@ class ICM_mon( object ):
         '''
         Obtain rowIDs of selected entries in the SQLite or HDF5 databases
 
-        Parameters:
-           orbit_list  : list with orbit numbers
-           orbit_range : list with orbit range: [orbit_mn, orbit_mx]
+        Parameters
+        ----------
+        orbit_list  : list
+           Reference orbit-numbers
+        orbit_range : list
+           Reference orbit-number range: [orbit_mn, orbit_mx]
 
-        Returns boolean array
+        Returns
+        -------
+        List with selected rowIDs
         '''
         dbname = self.dbname + '.db'
         id_list = []
@@ -994,13 +1061,21 @@ class ICM_mon( object ):
         '''
         Obtain list of rowIDs and orbit numbers for given orbit(range)
         Parameters:
-           orbit_list  : list with orbit numbers
-           orbit_range : list with orbit range: [orbit_mn, orbit_mx]
-           frame_stats : add statistics of selected frames as
-                           dataMedian, dataSpread, errorMedian, errorSpread
+        ----------
+        orbit_list  : list
+           Reference orbit-numbers
+        orbit_range : list
+           Reference orbit-number range: [orbit_mn, orbit_mx]
+        frame_stats : boolean
+           If true then add statistics of selected entries, given are 
+           dataMedian, dataSpread, errorMedian, errorSpread
 
-        Returns dictionary with keys: 'rowID' and 'referenceOrbit'
+        Returns
+        -------
+        Dictionary with keys: 'rowID' and 'referenceOrbit'
         '''
+        assert self.__mode == 'frame'
+
         dbname = self.dbname + '.db'
         row_list = {}
         if not os.path.exists( dbname ):
@@ -1036,7 +1111,7 @@ class ICM_mon( object ):
  
         return row_list
 
-    def sql_get_trend_frames( self, orbit_list=None, orbit_range=None ):
+    def sql_get_trend( self, orbit_list=None, orbit_range=None ):
         '''
         Obtain list of rowIDs and orbit numbers for given orbit(range)
         Parameters:
