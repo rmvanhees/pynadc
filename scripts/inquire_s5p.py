@@ -10,7 +10,7 @@ from __future__ import division
 
 from pynadc.tropomi import db
 
-DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm.db'
+DB_NAME = '/nfs/TROPOMI/ical/share/db/sron_s5p_icm_patched.db'
 
 def __orbit_range__(string):
     res = [int(str) for str in string.split(',')]
