@@ -32,20 +32,32 @@ class OCM_io( object ):
     * back to step 2) or
     5) close file
     '''
-    def __init__( self, ocm_msm, verbose=False ):
-        # import numbers
-        assert os.path.isdir( ocm_msm ), \
-            '*** Fatal, can not find OCAL measurement: {}'.format(ocm_msm)
+    def __init__( self, ocm_dir, verbose=False ):
+        '''
+        Initialize access to an ICM products
 
-        self.__product = ocm_msm
-        self.__fid_b7 = h5py.File(os.path.join(ocm_msm, 'trl1brb7g.lx.nc'), "r")
-        self.__fid_b8 = h5py.File(os.path.join(ocm_msm, 'trl1brb8g.lx.nc'), "r")
+        Parameters
+        ----------
+        ocm_dir :  string
+           Patch to on-ground calibration measurement
 
+        Note that each band is stored in a seperate product: trl1brb?g.lx.nc
+        '''
+        assert os.path.isdir( ocm_dir ), \
+            '*** Fatal, can not find OCAL measurement: {}'.format(ocm_dir)
+
+        # initialize class-attributes
+        self.__product = ocm_dir
         self.__verbose = verbose
         self.__icid = None 
         self.__msm_mode = None
         self.__patched_msm = []
 
+        # open OCM products as HDF5 file
+        self.__fid_b7 = h5py.File(os.path.join(ocm_dir, 'trl1brb7g.lx.nc'), "r")
+        self.__fid_b8 = h5py.File(os.path.join(ocm_dir, 'trl1brb8g.lx.nc'), "r")
+
+        # initialize public class-attributes
         self.orbit   = -1
         self.num_msm = 0
         self.start_time = self.__fid_b7.attrs['time_coverage_start'].decode('ascii').strip('Z').replace('T',' ')
@@ -61,18 +73,14 @@ class OCM_io( object ):
         return '{}({!r})'.format( class_name, self.__product )
 
     def __del__( self ):
-        '''
-        Before closing the product, we make sure that the output product
-        describes what has been altered by the S/W. 
-        To keep any change traceable.
-        '''
         if self.__fid_b7 is not None:
             self.__fid_b7.close()
         if self.__fid_b8 is not None:
             self.__fid_b8.close()
     
     # ---------- RETURN VERSION of the S/W ----------
-    def pynadc_version( self ):
+    @staticmethod
+    def pynadc_version():
         '''
         Return S/W version
         '''
@@ -87,8 +95,14 @@ class OCM_io( object ):
     #-------------------------
     def select( self, ic_id ):
         '''
-        Parameters:
-         - ic_id  : "BAND%/ICID_{}_GROUP_%".format(ic_id)
+        Parameters
+        ----------
+        ic_id  :  integer
+          used as "BAND%/ICID_{}_GROUP_%".format(ic_id)
+
+        Returns
+        -------
+        Number of measurements found
 
         Updated object attributes:
          - ref_time            : reference time of measurement (datetime-object)
@@ -124,52 +138,112 @@ class OCM_io( object ):
         '''
         Pull averaged frame-data from dataset
 
-        The function returns a tuple with the data values and their errors.
-        - these values and errors are stored as a list of ndarrays (one array
-          per band)
-        - FillValue are set to NaN
+        Parameters
+        ---------- 
+        skip_first_frame :  boolean
+           skip first frame because its memory effect is unkown. Default is True
+
+        Returns
+        -------
+        Python dictionary with msm_names as keys and their values
+
+        - these values are stored as a list of ndarrays (one array per band)
+        - (float) FillValues are set to NaN
         '''
+        FILLVALUE = float.fromhex('0x1.ep+122')
         if skip_first_frame:
             offs = 1
         else:
             offs = 0
             
-        values = None
-        errors = None
-        fillvalue = float.fromhex('0x1.ep+122')
+        res = {}
+        val_b7 = None
+        err_b7 = None
         if self.__fid_b7 is not None:
             gid = self.__fid_b7['BAND7']
             grp_name = 'ICID_{:05}_GROUP'.format(self.__icid)
             for grp in [s for s in gid.keys() if s.startswith(grp_name)]:
                 sgid = gid[os.path.join(grp,'OBSERVATIONS')]
-                data = sgid['signal'][offs:,:-1,:]
-                if sgid['signal'].attrs['_FillValue'] == fillvalue:
-                    data[(data == fillvalue)] = np.nan
+                data = sgid['signal'][offs:,:,:]
+                if sgid['signal'].attrs['_FillValue'] == FILLVALUE:
+                    data[(data == FILLVALUE)] = np.nan
                 (mx, sx) = biweight( data, axis=0, spread=True )
-                if values is None:
-                    values = [mx]
-                    errors = [sx]
+                if val_b7 is None:
+                    val_b7 = mx
+                    err_b7 = sx
+                elif val_b7.shape == mx.shape:
+                    val_b7 = np.vstack( (np.expand_dims(val_b7, axis=0),
+                                         np.expand_dims(mx, axis=0)) )
+                    err_b7 = np.vstack( (np.expand_dims(err_b7, axis=0),
+                                         np.expand_dims(sx, axis=0)) )
                 else:
-                    values.append(mx)
-                    errors.append(sx)
-
+                    val_b7 = np.vstack( (val_b7, np.expand_dims(mx, axis=0)) )
+                    err_b7 = np.vstack( (err_b7, np.expand_dims(sx, axis=0)) )
+               
+        val_b8 = None
+        err_b8 = None
         if self.__fid_b8 is not None:
             gid = self.__fid_b8['BAND8']
             grp_name = 'ICID_{:05}_GROUP'.format(self.__icid)
             for grp in [s for s in gid.keys() if s.startswith(grp_name)]:
                 sgid = gid[os.path.join(grp,'OBSERVATIONS')]
-                data = sgid['signal'][offs:,:-1,:]
-                if sgid['signal'].attrs['_FillValue'] == fillvalue:
-                    data[(data == fillvalue)] = np.nan
+                data = sgid['signal'][offs:,:,:]
+                if sgid['signal'].attrs['_FillValue'] == FILLVALUE:
+                    data[(data == FILLVALUE)] = np.nan
                 (mx, sx) = biweight( data, axis=0, spread=True )
-                if values is None:
-                    values = [mx]
-                    errors = [sx]
+                if val_b8 is None:
+                    val_b8 = mx
+                    err_b8 = sx
+                elif val_b8.shape == mx.shape:
+                    val_b8 = np.vstack( (np.expand_dims(val_b8, axis=0),
+                                         np.expand_dims(mx, axis=0)) )
+                    err_b8 = np.vstack( (np.expand_dims(err_b8, axis=0),
+                                         np.expand_dims(sx, axis=0)) )
                 else:
-                    values.append(mx)
-                    errors.append(sx)
-                    
-        return (values, errors)
+                    val_b8 = np.vstack( (val_b8, np.expand_dims(mx, axis=0)) )
+                    err_b8 = np.vstack( (err_b8, np.expand_dims(sx, axis=0)) )
+
+        if val_b7 is None and val_b8 is None:
+            return res
+        elif val_b7 is None:
+            res['signal'] = [val_b8]
+            res['signal_error'] = [err_b8]
+            return res
+        elif val_b8 is None:
+            res['signal'] = [val_b7]
+            res['signal_error'] = [err_b7]
+            return res
+        else: 
+            res['signal'] = [val_b7, val_b8]
+            res['signal_error'] = [err_b7, err_b8]
+            return res
+
+#--------------------------------------------------
+def test2():
+    '''
+    Perform some simple test to check the OCM_io class
+    '''
+    import shutil
+    
+    if os.path.isdir('/Users/richardh'):
+        fl_path = '/Users/richardh/Data/'
+    elif os.path.isdir('/nfs/TROPOMI/ocal/proc_knmi'):
+        fl_path = '/nfs/TROPOMI/ocal/proc_knmi/2015_02_23T01_36_51_svn4709_CellEarth_CH4'
+    else:
+        fl_path = '/data/richardh/Tropomi/ISRF/2015_02_23T01_36_51_svn4709_CellEarth_CH4'
+    ocm_dir = 'after_strayl_l1b_val_SWIR_2'
+
+    fp = OCM_io( os.path.join(fl_path, ocm_dir), verbose=True )
+    print( fp )
+    if fp.select( 31524 ) > 0:
+        print( fp.num_msm )
+        print( fp.ref_time )
+        print( fp.delta_time.shape )
+        res = fp.get_data()
+        for key in res.keys():
+            print( key, len(res[key]), res[key][0].shape )
+    
+    del fp
 
 #--------------------------------------------------
 def test():
@@ -180,20 +254,21 @@ def test():
     
     if os.path.isdir('/Users/richardh'):
         fl_path = '/Users/richardh/Data/S5P_OCM_CA_SIR/001000/2012/09/19'
-    else:
+    elif os.path.isdir('/nfs/TROPOMI/ocal/proc_knmi'):
         fl_path = '/nfs/TROPOMI/ocal/proc_knmi/2015_05_02T10_28_44_SwirlsSunIsrf'
-    ocm_msm = 'after_et_l1bavg_004_block-004-004'
+    else:
+        fl_path = '/data/richardh/Tropomi/ISRF/2015_05_02T10_28_44_SwirlsSunIsrf'
+    ocm_dir = 'after_et_l1bavg_003_block-003-003'
 
-    print( ocm_msm )
-    fp = OCM_io( os.path.join(fl_path, ocm_msm), verbose=True )
+    fp = OCM_io( os.path.join(fl_path, ocm_dir), verbose=True )
     print( fp )
-    if fp.select( 31623 ) > 0:
-        print( fp )
+    if fp.select( 31624 ) > 0:
         print( fp.num_msm )
         print( fp.ref_time )
-        print( fp.delta_time )
-        (values, error) = fp.get_data()
-        print( 'dimensions of values: ', len(values), values[0].shape )
+        print( fp.delta_time.shape )
+        res = fp.get_data()
+        for key in res.keys():
+            print( key, len(res[key]), res[key][0].shape )
     
     del fp
 
