@@ -1,8 +1,8 @@
-# (c) SRON - Netherlands Institute for Space Research (2016).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
-
 '''
+This file is part of pynadc
+
+https://github.com/rmvanhees/pynadc
+
 Methods to simulate SWIR calibration data for patching of ICM_CA_SIR product
 
 Simulated products are derived as follows:
@@ -41,6 +41,11 @@ this is more complicated and not all exposure time/coadding factor combinations
 are like to be available, however, the may lead to more realistic data and 
 errors.
  - Data is not always correctly calibrated...
+
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
 
 '''
 import os.path

@@ -1,8 +1,8 @@
-# (c) SRON - Netherlands Institute for Space Research (2016).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
-
 '''
+This file is part of pynadc
+
+https://github.com/rmvanhees/pynadc
+
 The SRON monitor database consists of a SQLite database and a HDF5 database
 
 SQLite Database layout
@@ -201,8 +201,13 @@ Configuration management
   Major version updates of the monitor databases should indicate that a 
   reprocessing of the monitor results is necessary, otherwise no reprocessing
   is necessary
-'''
 
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
+
+'''
 import os
 import sqlite3
 

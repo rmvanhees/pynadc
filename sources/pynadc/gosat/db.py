@@ -1,11 +1,16 @@
-# (c) SRON - Netherlands Institute for Space Research (2014).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
+'''
+This file is part of pynadc
 
-"""
+https://github.com/rmvanhees/pynadc
+
 Methods to query the NADC GOSAT SQLite database
-"""
 
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
+
+'''
 from __future__ import print_function
 from __future__ import division
 

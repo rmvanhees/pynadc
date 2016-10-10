@@ -1,11 +1,16 @@
-# (c) SRON - Netherlands Institute for Space Research (2016).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
-
 '''
+This file is part of pynadc
+
+https://github.com/rmvanhees/pynadc
+
 Methods to query the NADC S5p-Tropomi ICM-database (sqlite)
-'''
 
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
+
+'''
 from __future__ import print_function
 from __future__ import division
 

@@ -1,18 +1,22 @@
-# (c) SRON - Netherlands Institute for Space Research (2014).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
+'''
+This file is part of pynadc
 
-"""
+https://github.com/rmvanhees/pynadc
+
 Methods to read Sciamachy level 0 data products
-"""
 
+Copyright (c) 2012-2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
+
+'''
 from __future__ import print_function
 from __future__ import division
 
 import os.path
 
 import traceback
-#import warnings
 
 import numpy as np
 import h5py

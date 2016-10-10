@@ -1,8 +1,8 @@
-# (c) SRON - Netherlands Institute for Space Research (2016).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
-
 '''
+This file is part of pynadc
+
+https://github.com/rmvanhees/pynadc
+
 Methods to create PDF plots from SRON monitoring data
 
 -- generate figures --
@@ -11,6 +11,12 @@ Methods to create PDF plots from SRON monitoring data
  * draw_errors
  * draw_hist
  * draw_quality
+
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
+
 '''
 import numpy as np
 import h5py

@@ -1,9 +1,14 @@
-# (c) SRON - Netherlands Institute for Space Research (2016).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
-
 '''
+This file is part of pynadc
+
+https://github.com/rmvanhees/pynadc
+
 Access to data-sets in a Tropomi ICM_CA_SIR product, including read and alter
+
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
 
 '''
 from __future__ import print_function

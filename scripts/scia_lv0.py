@@ -1,10 +1,17 @@
 #!/usr/bin/env python
+'''
+This file is part of pynadc
 
-# (c) SRON - Netherlands Institute for Space Research (2014).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
+https://github.com/rmvanhees/pynadc
 
-#
+.. ADD DESCRIPTION ..
+
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
+
+'''
 from __future__ import print_function
 from __future__ import division
 

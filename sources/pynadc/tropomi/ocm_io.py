@@ -1,9 +1,14 @@
-# (c) SRON - Netherlands Institute for Space Research (2016).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
-
 '''
+This file is part of pynadc
+
+https://github.com/rmvanhees/pynadc
+
 Methods to read Tropomi OCAL products
+
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
 
 '''
 from __future__ import print_function
@@ -134,12 +139,16 @@ class OCM_io( object ):
         return self.num_msm
 
     #-------------------------
-    def get_data( self, skip_first_frame=True ):
+    def get_data( self, msm_mode=None, skip_first_frame=True ):
         '''
         Pull averaged frame-data from dataset
 
+        When you read SLS data with msm_mode='sls' then you only read the 
+        illuminated region, otherwise you read the whole frames.
+
         Parameters
         ---------- 
+        msm_mode         :  {None, 'sls'}
         skip_first_frame :  boolean
            skip first frame because its memory effect is unkown. Default is True
 

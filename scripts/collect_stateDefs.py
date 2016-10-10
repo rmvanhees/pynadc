@@ -1,14 +1,10 @@
 #!/usr/bin/env python
+'''
+This file is part of pynadc
 
-# (c) SRON - Netherlands Institute for Space Research (2014).
-# All Rights Reserved.
-# This software is distributed under the BSD 2-clause license.
+https://github.com/rmvanhees/pynadc
 
-## @ingroup pynadc_scripts
-## @{
-
-"""@package pynadc.scripts.collect_stateDefs
-collect state definitions from Sciamachy level 1b products
+Collect state definitions from Sciamachy level 1b products
 
 Synopsis
 --------
@@ -61,13 +57,12 @@ Bug reporting
 Please report issues at the Sciamachy PYNADC Github page:
 https://github.com/rmvanhees/pynadc.git
 
-Copyright
----------
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
 
-Copyright (C) SRON - Netherlands Institute for Space Research (2013).
-All rights reserved. This software is released under the BSD 2-clause
-License.
-"""
+License:  Standard 3-clause BSD
+
+'''
 from __future__ import print_function
 from __future__ import division
 

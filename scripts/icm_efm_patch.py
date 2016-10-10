@@ -1,3 +1,17 @@
+'''
+This file is part of pynadc
+
+https://github.com/rmvanhees/pynadc
+
+.. ADD DESCRIPTION ..
+
+
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+   All Rights Reserved
+
+License:  Standard 3-clause BSD
+
+'''
 import os
 import shutil
 
