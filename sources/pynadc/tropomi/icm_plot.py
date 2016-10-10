@@ -26,21 +26,6 @@ import matplotlib as mpl
 from pynadc.tropomi.icm_mon_db import ICM_mon
 
 mpl.use('TkAgg')
-'''
-Alternative Scheme for Qualitative Data by Paul Tol (SRON)
-
-Palette of colour-blind safe, print-friendly colours for qualitative data
-
-Reference:  https://personal.sron.nl/~pault
-'''
-LINE_COLORS=('#4477AA',   # blue
-             '#66CCEE',   # cyan
-             '#228833',   # green
-             '#CCBB44',   # yellow
-             '#EE6677',   # red
-             '#AA3377',   # pink
-             '#BBBBBB',   # grey
-             '#000000')   # black
 
 class ICM_plot(object):
     '''
@@ -121,7 +106,10 @@ class ICM_plot(object):
         from matplotlib import pyplot as plt
         from matplotlib import gridspec
 
-        from pynadc import extendedrainbow_with_outliers
+        from pynadc import sron_colorschemes
+
+        sron_colormaps.register_cmap_rainbow()
+        LINE_COLORS = sron_colormaps.get_line_colors()
        
         signal = np.copy(signal_in)
         signal_col = np.copy(signal_col_in)
@@ -202,6 +190,10 @@ class ICM_plot(object):
         from matplotlib import pyplot as plt
         from matplotlib import gridspec
         
+        from pynadc import sron_colorschemes
+
+        LINE_COLORS = sron_colormaps.get_line_colors()
+
         buff = np.copy(signal_in).reshape(-1)
         buff = buff[np.isfinite(buff)] - self.__sign_median
         buff_std = np.copy(error_in).reshape(-1)

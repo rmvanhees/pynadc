@@ -22,5 +22,5 @@ Copyright (c) 2012-2016 SRON - Netherlands Institute for Space Research
 License:  Standard 3-clause BSD
 
 '''
-__all__ = ['version', 'stats', 'extendedrainbow_with_outliers',
+__all__ = ['version', 'stats', 'sron_colorschemes',
            'gosat', 'scia', 'tropomi']
