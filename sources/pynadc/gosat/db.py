@@ -132,7 +132,7 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
                 prod_version, toScreen, dump, debug
     dbname    : full path to GOSAT SQLite database [default: DB_NAME]
     prod_type : type of product, supported TFTS_1 and TCAI_2 [value required]
-    date      : select on acquisitionDate [default: None]
+    date      : select on dateTimeStart [default: None]
     rtime     : select on receiveTime [default: None]
     obs_mode  : (FTS only) select on observationMode: OB1D, OB1N, SPOD, SPON
                 [default: None]
@@ -206,7 +206,7 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
             minu = 0
         d1 = '%04d-%02d-%02d %02d:%02d:%02d' % (year,month,day,hour,minu,0)
 
-        mystr = ' acquisitionDate between \'%s\' and datetime(\'%s\',\'%s\')'
+        mystr = ' dateTimeStart between \'%s\' and datetime(\'%s\',\'%s\')'
         query_str.append(mystr % (d1, d1, dtime))
 
     if rtime:
