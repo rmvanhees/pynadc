@@ -84,17 +84,14 @@ def cre_sqlite_gosat_db( dbname ):
 def fill_sqlite_rootPaths( dbname ):
     list_paths = [
         { "host" : 'shogun', 
-          "path" : '/array/slot2A/GOSAT_FTS', 
+          "path" : '/array/slot1A/GOSAT_FTS', 
           "nfs" : '/GOSAT/LV1_01' },
         { "host" : 'shogun', 
-          "path" : '/array/slot2C/GOSAT_FTS', 
+          "path" : '/array/slot1C/GOSAT_FTS', 
           "nfs" : '/GOSAT/LV1_02' },
         { "host" : 'shogun', 
-          "path" : '/array/slot2A/GOSAT_CAI/CAI_L2', 
-          "nfs" : '/GOSAT/LV2_01/CAI_L2' },
-        { "host" : 'shikken', 
-          "path" : '/array/slot2A/GOSAT_CAI/CAI_L2', 
-          "nfs" : '/GOSAT/LV2_02/CAI_L2' }
+          "path" : '/array/slot1A/GOSAT_CAI/CAI_L2', 
+          "nfs" : '/GOSAT/LV2_01/CAI_L2' }
     ]
     str_sql = 'insert into rootPaths values' \
         '(NULL, \'%(host)s\',\'%(path)s\',\'%(nfs)s\')'
