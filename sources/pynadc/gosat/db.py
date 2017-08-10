@@ -80,7 +80,6 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
         cu.execute( query_str )
         row = cu.fetchone()
         if row is None: 
-            cu.close()
             conn.close()
             return []
 
@@ -96,7 +95,6 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
         else:
             cu.execute( query_str )
             root = cu.fetchone()[0]
-    cu.close()
     conn.close()
 
     if dump:
@@ -265,7 +263,5 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
 
         rowList.append( full_path )
                     
-    cu.close()
-    cuu.close()
     conn.close()
     return rowList

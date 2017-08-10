@@ -70,14 +70,12 @@ def get_product_by_name( args=None, dbname=DB_NAME, product=None,
     cu = conn.cursor()
     if debug:
         print( query_str )
-        cu.close()
         conn.close()
         return []
     else:
         cu.execute( query_str )
         row = cu.fetchone()
         if row is None:
-            cu.close()
             conn.close()
             return []
 
@@ -268,6 +266,5 @@ def get_product_by_type( args=None, dbname=DB_NAME, prod_type=None,
                 else:
                     rowList.append( row[0] + '/' +  row[1] + '.gz' )
                 
-    cu.close()
     conn.close()
     return rowList
