@@ -1,6 +1,5 @@
 pynadc
-======
-
+^^^^^^
 The pynadc package contains software to build SQLite databases to search you
 archives with products of several satellite instruments designed spectral
 atmospheric observations. The following products are supported:
@@ -13,4 +12,6 @@ instruments designed spectral atmospheric observations:
       Read access is restricted to product headers and (G)ADS within these
       products. Implementation to access to DSR's is not foreseen.
 
-The software is intended for SRON internal usage.
+ The software requires python3, numpy, h5py
+
+ The software is intended for SRON internal usage.
