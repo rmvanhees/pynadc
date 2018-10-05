@@ -11,4 +11,4 @@ Copyright (c) 2012-2016 SRON - Netherlands Institute for Space Research
 License:  Standard 3-clause BSD
 
 '''
-__all__ = ['lv0', 'lv1', 'db']
+__all__ = ['clus_def', 'lv0', 'lv1', 'db']

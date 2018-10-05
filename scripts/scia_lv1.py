@@ -1,96 +1,100 @@
-#!/usr/bin/env python
-'''
+"""
 This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
 .. ADD DESCRIPTION ..
 
-Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+Copyright (c) 2016-2018 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  Standard 3-clause BSD
+"""
+from pathlib import Path
 
-'''
-from __future__ import print_function
-from __future__ import division
+# - global parameters ------------------------------
 
-import sys
-import os.path
 
-import numpy as np
+# - local functions --------------------------------
 
-#-------------------------SECTION ARGPARSE----------------------------------
-def handleCmdParams():
+
+# - main code --------------------------------------
+def main():
+    """
+    main function of module 'scia_lv1'
+    """
     from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
-    parser = ArgumentParser( 
+    from pynadc.scia import db, lv1
+
+    parser = ArgumentParser(
         formatter_class=RawDescriptionHelpFormatter,
-        description= 'read Sciamachy level 1b product'
-        )
+        description='read Sciamachy level 1b product'
+    )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument( '--orbit', nargs=1, type=int, 
-                         help='select data from given orbit, preferably \'W\'' )
-    group.add_argument( '--file', type=str, help='read data from given file' )
-    return parser.parse_args()
-
-#-------------------------SECTION MAIN--------------------------------------
-if __name__ == '__main__':
-    from pynadc.scia import db,lv1
-
-    args = handleCmdParams()
+    group.add_argument('--orbit', nargs=1, type=int,
+                       help='select data from given orbit, preferably \'Y\'')
+    group.add_argument('--file', type=str, help='read data from given file')
+    args = parser.parse_args()
 
     scia_fl = ""
     if args.orbit is not None:
-        fileList = db.get_product_by_type( prod_type='1',
-                                           proc_best=True, 
-                                           orbits=args.orbit )
-        if len(fileList) > 0 and os.path.isfile( fileList[0] ):
-            scia_fl = fileList[0]
+        file_list = db.get_product_by_type(prod_type='1',
+                                           proc_best=True,
+                                           orbits=args.orbit)
+        if file_list and Path(file_list[0]).is_file():
+            scia_fl = file_list[0]
     elif args.file is not None:
-        if os.path.isfile( args.file ):
+        if Path(args.file).is_file():
             scia_fl = args.file
         else:
-            fileList = db.get_product_by_name( product=args.file )
-            if len(fileList) > 0 and os.path.isfile( fileList[0] ):
-                scia_fl = fileList[0]
+            file_list = db.get_product_by_name(product=args.file)
+            if file_list and Path(file_list[0]).is_file():
+                scia_fl = file_list[0]
 
     if not scia_fl:
-        print( "Failed: file not found on your system" )
-        sys.exit(1)
+        print('Failed: file not found on your system')
+        return
 
-    print( scia_fl )
+    print(scia_fl)
+
     # create object and open Sciamachy level 1b product
     try:
-        obj = lv1.File( scia_fl )
-    except lv1.fmtError as e:
-        print( e.msg )
-        sys.exit(1)
+        obj = lv1.File(scia_fl)
+    except:
+        print('exception occurred in module pynadc.scia.lv0')
+        raise
 
-    obj.getSQADS()
-    obj.getLADS()
+    print(obj.mph)
+    print(obj.sph)
+    print(obj.dsd)
 
-    obj.getSIP()
+    _ = obj.get_sqads()
+    _ = obj.get_lads()
 
-    obj.getCLCP()
-    obj.getVLCP()
+    _ = obj.get_sip()
 
-    obj.getBASE()
-    obj.getSCP()
+    _ = obj.get_clcp()
+    _ = obj.get_vlcp()
 
-    obj.getSRS()
+    _ = obj.get_base()
+    _ = obj.get_scp()
 
-    obj.getPSPN()
-    obj.getPSPL()
-    obj.getPSPO()
+    _ = obj.get_srs()
 
-    obj.getRSPL()
-    obj.getRSPO()
-    obj.getEKD()
+    _ = obj.get_pspn()
+    _ = obj.get_pspl()
+    _ = obj.get_pspo()
 
-    obj.getSFP()
-    obj.getASFP()
+    _ = obj.get_rspl()
+    _ = obj.get_rspo()
+    _ = obj.get_ekd()
 
-    obj.getSTATES()
+    _ = obj.get_sfp()
+    _ = obj.get_asfp()
 
-    obj.__del__()
+    _ = obj.get_states()
+
+
+if __name__ == '__main__':
+    main()

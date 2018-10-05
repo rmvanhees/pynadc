@@ -61,8 +61,7 @@ setup(
         'scripts/inquire_gosat.py',
         'scripts/inquire_scia.py',
         'scripts/scia_lv0.py',
-        'scripts/scia_lv1.py',
-        'scripts/sdmf_calibSMR.py'
+        'scripts/scia_lv1.py'
     ],
     install_requires=[
         'setuptools-scm>=2.1',

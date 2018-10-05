@@ -1,298 +1,207 @@
-'''
+"""
 This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
 Methods to read Sciamachy level 1b data products
 
-Copyright (c) 2012-2016 SRON - Netherlands Institute for Space Research 
+Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  Standard 3-clause BSD
-
-'''
-from __future__ import print_function
-from __future__ import division
-
-import os.path
-
-import traceback
-import warnings
+"""
+from pathlib import Path
 
 import numpy as np
 
-class fmtError(Exception):
-    def __init__(self, msg):
-        mytrace = traceback.extract_stack()[-2]
-        self.msg = 'Fatal: %s at line %-d in module %s - %s' % mytrace
+# - global parameters ------------------------------
 
-#-------------------------SECTION READ DATA---------------------------------
+
+# - local functions --------------------------------
+def lv0_consts(key=None):
+    """
+    defines consts used while reading Sciamachy level 0 data
+    """
+    consts = {}
+    consts['mds_size'] = 1247
+
+    if key is None:
+        return consts
+    if key in consts:
+        return consts[key]
+
+    raise KeyError('level 0 constant {} is not defined'.format(key))
+
+
+# - Classes --------------------------------------
 class File:
-    def __del__(self):
-        if hasattr(self, "fp"): self.fp.close()
-
+    """
+    Class to read Sciamachy level 0 products
+    """
     def __init__(self, flname):
-        import io
+        """
+        """
+        # initialize class attributes
+        self.filename = flname
+        self.mph = {}
+        self.sph = {}
+        self.dsd = None
 
-        if flname[-3:] == '.gz':
-            print( 'Fatal: can not read compressed file: ', flname )
-            raise fmtError('fileCompressed')
+        # check is file is compressed
+        magic_dict = {
+            "\x1f\x8b\x08": "gz",
+            "\x42\x5a\x68": "bz2",
+            "\xfd\x37\x7a\x58\x5a\x00": "xz"
+        }
+        for magic, _ in magic_dict.items():
+            with open(flname, 'rb') as fp:
+                file_magic = fp.read(len(magic))
 
-        # open file in text mode and read text-headers
-        try:
-            self.fp = io.open( flname, 'rt', encoding='latin-1' )
-        except IOError as e:
-            print( "I/O error({0}): {1}".format(e.errno, e.strerror) )
-            raise
+            if file_magic == magic:
+                raise SystemError("can not read compressed file")
 
         # read Main Product Header
-        self._getMPH()
+        self.__get_mph__()
         # read Specific Product Header
-        self._getSPH()
+        self.__get_sph__()
         # read Data Set Descriptors
-        self._getDSD()
+        self.__get_dsd__()
 
         # check file size
-        if self.mph['TOTAL_SIZE'] != os.path.getsize( flname ):
-            print( 'Fatal: file %s incomplete' % flname )
-            raise fmtError('fileSize')
+        if self.mph['TOT_SIZE'] != Path(flname).stat().st_size:
+            raise SystemError('file {} incomplete'.format(flname))
 
-        # re-open file in binary mode
-        self.fp.close()
-        self.fp = open( flname, 'rb' )
+    # ----- generic data structures -------------------------
 
-    def _getMPH(self):
-        self.mph = {}
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'PRODUCT': raise fmtError('PRODUCT')
-        self.mph['PRODUCT'] = words[1][1:-2]
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'PROC_STAGE': raise fmtError('PROC_STAGE')
-        self.mph['PROC_STAGE'] = words[1][0:-1]
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'REF_DOC': raise fmtError('REF_DOC')
-        self.mph['REF_DOC'] = words[1][1:-2]
-        self.fp.readline()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'ACQUISITION_STATION': 
-            raise fmtError('ACQUISITION_STATION')
-        self.mph['ACQUISITION_STATION'] = words[1][1:-2].rstrip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'PROC_CENTER': raise fmtError('PROC_CENTER')
-        self.mph['PROC_CENTER'] = words[1][1:-2].rstrip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'PROC_TIME': raise fmtError('PROC_TIME')
-        self.mph['PROC_TIME'] = words[1][1:-2]
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'SOFTWARE_VER': raise fmtError('SOFTWARE_VER')
-        self.mph['SOFT_VERSION'] = words[1][1:-2].rstrip()
-        self.fp.readline()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'SENSING_START': raise fmtError('SENSING_START')
-        self.mph['SENSING_START'] = words[1][1:-2]
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'SENSING_STOP': raise fmtError('SENSING_STOP')
-        self.mph['SENSING_STOP'] = words[1][1:-2]
-        self.fp.readline()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'PHASE': raise fmtError('PHASE')
-        self.mph['PHASE'] = int( words[1] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'CYCLE': raise fmtError('CYCLE')
-        self.mph['CYCLE'] = int( words[1] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'REL_ORBIT': raise fmtError('REL_ORBIT')
-        self.mph['REL_ORBIT'] = int( words[1] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'ABS_ORBIT': raise fmtError('ABS_ORBIT')
-        self.mph['ABS_ORBIT'] = int( words[1] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'STATE_VECTOR_TIME': raise fmtError('STATE_VECTOR_TIME')
-        self.mph['STATE_VECTOR_TIME'] = words[1][1:-2]
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'DELTA_UT1': raise fmtError('DELTA_UT1')
-        self.mph['DELTA_UT1'] = float( words[1][:-4] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'X_POSITION': raise fmtError('X_POSITION')
-        self.mph['X_POSITION'] = float( words[1][:-4] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'Y_POSITION': raise fmtError('Y_POSITION')
-        self.mph['Y_POSITION'] = float( words[1][:-4] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'Z_POSITION': raise fmtError('Z_POSITION')
-        self.mph['Z_POSITION'] = float( words[1][:-4] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'X_VELOCITY': raise fmtError('X_VELOCITY')
-        self.mph['X_VELOCITY'] = float( words[1][:-6] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'Y_VELOCITY': raise fmtError('Y_VELOCITY')
-        self.mph['Y_VELOCITY'] = float( words[1][:-6] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'Z_VELOCITY': raise fmtError('Z_VELOCITY')
-        self.mph['Z_VELOCITY'] = float( words[1][:-6] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'VECTOR_SOURCE': raise fmtError('VECTOR_SOURCE')
-        self.mph['VECTOR_SOURCE'] = words[1][1:-2]
-        self.fp.readline()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'UTC_SBT_TIME': raise fmtError('UTC_SBT_TIME')
-        self.mph['UTC_SBT_TIME'] = words[1][:-2]
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'SAT_BINARY_TIME': raise fmtError('SAT_BINARY_TIME')
-        self.mph['SAT_BINARY_TIME'] = int( words[1] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'CLOCK_STEP': raise fmtError('CLOCK_STEP')
-        self.mph['CLOCK_STEP'] = int( words[1][:-5] )
-        self.fp.readline()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'LEAP_UTC': raise fmtError('LEAP_UTC')
-        self.mph['LEAP_UTC'] = words[1][1:-2]
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'LEAP_SIGN': raise fmtError('LEAP_SIGN')
-        self.mph['LEAP_SIGN'] = int( words[1] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'LEAP_ERR': raise fmtError('LEAP_ERR')
-        self.mph['LEAP_ERR'] = int( words[1] )
-        self.fp.readline()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'PRODUCT_ERR': raise fmtError('PRODUCT_ERR')
-        self.mph['PRODUCT_ERR'] = int( words[1] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'TOT_SIZE': raise fmtError('TOT_SIZE')
-        self.mph['TOTAL_SIZE'] = int( words[1][0:21] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'SPH_SIZE': raise fmtError('SPH_SIZE')
-        self.mph['SPH_SIZE'] = int( words[1][:-8] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'NUM_DSD': raise fmtError('NUM_DSD')
-        self.mph['NUM_DSD'] = int( words[1] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'DSD_SIZE': raise fmtError('DSD_SIZE')
-        self.mph['SIZE_DSD'] = int( words[1][:-8] )
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'NUM_DATA_SETS': raise fmtError('NUM_DATA_SETS')
-        self.mph['NUM_DATA_SETS'] = int( words[1] )
-        self.fp.readline()
+    # ----- read routines -------------------------
+    def __get_mph__(self):
+        """
+        read Sciamachy level 0 MPH header
+        """
+        fp = open(self.filename, 'rt', encoding='latin-1')
 
-    def _getSPH(self):
-        self.sph = {}
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'SPH_DESCRIPTOR': raise fmtError('SPH_DESCRIPTOR')
-        self.sph['SPH_DESCRIPTOR'] = words[1][1:-2].rstrip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'STRIPLINE_CONTINUITY_INDICATOR': 
-            raise fmtError('STRIPLINE_CONTINUITY_INDICATOR')
-        self.sph['STRIPLINE_CONTINUITY_INDICATOR'] = int(words[1])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'SLICE_POSITION': raise fmtError('SLICE_POSITION')
-        self.sph['SLICE_POSITION'] = int(words[1])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'NUM_SLICES': raise fmtError('NUM_SLICES')
-        self.sph['NUM_SLICES'] = int(words[1])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'START_TIME': raise fmtError('START_TIME')
-        self.sph['START_TIME'] = words[1][1:-2]
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'STOP_TIME': raise fmtError('STOP_TIME')
-        self.sph['STOP_TIME'] = words[1][1:-2]
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'START_LAT': raise fmtError('START_LAT')
-        self.sph['START_LAT'] = int(words[1][1:-11])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'START_LONG': raise fmtError('START_LONG')
-        self.sph['START_LONG'] = int(words[1][1:-11])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'STOP_LAT': raise fmtError('STOP_LAT')
-        self.sph['STOP_LAT'] = int(words[1][1:-11])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'STOP_LONG': raise fmtError('STOP_LONG')
-        self.sph['STOP_LONG'] = int(words[1][1:-11])
-        words = self.fp.readline().split( '=' )
-        if words[0] == 'INIT_VERSION':
-            if words[1].find('DECONT'):
-                self.sph['INIT_VERSION'] = words[1][:-6].strip()
-                self.sph['DECONT'] = words[2].rstrip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'KEY_DATA_VERSION': raise fmtError('KEY_DATA_VERSION')
-        self.sph['KEY_DATA_VERSION'] = words[1][1:-2].strip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'M_FACTOR_VERSION': raise fmtError('M_FACTOR_VERSION')
-        self.sph['M_FACTOR_VERSION'] = words[1][1:-2].rstrip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'SPECTRAL_CAL_CHECK_SUM': 
-            raise fmtError('SPECTRAL_CAL_CHECK_SUM')
-        self.sph['SPECTRAL_CAL_CHECK_SUM'] = words[1][1:-2].rstrip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'SATURATED_PIXEL': raise fmtError('SATURATED_PIXEL')
-        self.sph['SATURATED_PIXEL'] = words[1][1:-2].rstrip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'DEAD_PIXEL': raise fmtError('DEAD_PIXEL')
-        self.sph['DEAD_PIXEL'] = words[1][1:-2].rstrip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'DARK_CHECK_SUM': raise fmtError('DARK_CHECK_SUM')
-        self.sph['DARK_CHECK_SUM'] = words[1][1:-2].rstrip()
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'NO_OF_NADIR_STATES': 
-            raise fmtError('NO_OF_NADIR_STATES')
-        self.sph['NO_OF_NADIR_STATES'] = int(words[1])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'NO_OF_LIMB_STATES': 
-            raise fmtError('NO_OF_LIMB_STATES')
-        self.sph['NO_OF_LIMB_STATES'] = int(words[1])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'NO_OF_OCCULTATION_STATES': 
-            raise fmtError('NO_OF_OCCULTATION_STATES')
-        self.sph['NO_OF_OCCULTATION_STATES'] = int(words[1])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'NO_OF_MONI_STATES': raise fmtError('NO_OF_MONI_STATES')
-        self.sph['NO_OF_MONI_STATES'] = int(words[1])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'NO_OF_NOPROC_STATES': 
-            raise fmtError('NO_OF_NOPROC_STATES')
-        self.sph['NO_OF_NOPROC_STATES'] = int(words[1])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'COMP_DARK_STATES': raise fmtError('COMP_DARK_STATES')
-        self.sph['COMP_DARK_STATES'] = int(words[1])
-        words = self.fp.readline().split( '=' )
-        if words[0] != 'INCOMP_DARK_STATES': 
-            raise fmtError('INCOMP_DARK_STATES')
-        self.sph['INCOMP_DARK_STATES'] = int(words[1])
-        self.fp.readline()
+        for line in fp:
+            words = line[:-1].split('=')
+            # only process (key,value)
+            if len(words) != 2:
+                continue
 
-    def _getDSD(self):
-        self.dsd = {'DS_SIZE': [], 'NUM_DSR': [], 'FILENAME': [], 
-                    'DS_NAME': [], 'DS_OFFSET': [], 'DS_TYPE': [], 
-                    'DSR_SIZE': []}
+            # end of MPH header
+            if words[0] == 'SPH_DESCRIPTOR':
+                break
 
-        for ni in range(self.mph['NUM_DSD']-1):
-            words = self.fp.readline().split( '=' )
-            if words[0] != 'DS_NAME': raise fmtError('DS_NAME')
-            self.dsd['DS_NAME'].append( words[1][1:-2].rstrip() )
-            words = self.fp.readline().split( '=' )
-            if words[0] != 'DS_TYPE': raise fmtError('DS_TYPE')
-            self.dsd['DS_TYPE'].append(  words[1].rstrip() )
-            words = self.fp.readline().split( '=' )
-            if words[0] != 'FILENAME': raise fmtError('FILENAME')
-            self.dsd['FILENAME'].append( words[1][1:-2].rstrip() )
-            words = self.fp.readline().split( '=' )
-            if words[0] != 'DS_OFFSET': raise fmtError('DS_OFFSET')
-            self.dsd['DS_OFFSET'].append( int(words[1][:-8]) )
-            words = self.fp.readline().split( '=' )
-            if words[0] != 'DS_SIZE': raise fmtError('DS_SIZE')
-            self.dsd['DS_SIZE'].append( int(words[1][:-8]) )
-            words = self.fp.readline().split( '=' )
-            if words[0] != 'NUM_DSR': raise fmtError('NUM_DSR')
-            self.dsd['NUM_DSR'].append( int(words[1]) )
-            words = self.fp.readline().split( '=' )
-            if words[0] != 'DSR_SIZE': raise fmtError('DSR_SIZE')
-            self.dsd['DSR_SIZE'].append( int(words[1][:-8]) )
-            self.fp.readline()
+            if words[1][0] == '\"':
+                self.mph[words[0]] = words[1].strip('\"').rstrip()
+            elif len(words[1]) == 1:
+                self.mph[words[0]] = words[1]
+            elif words[1].find('<s>') > 0:
+                self.mph[words[0]] = float(words[1][0:words[1].find('<s>')])
+            elif words[1].find('<m>') > 0:
+                self.mph[words[0]] = float(words[1][0:words[1].find('<m>')])
+            elif words[1].find('<m/s>') > 0:
+                self.mph[words[0]] = float(words[1][0:words[1].find('<m/s>')])
+            elif words[1].find('<ps>') > 0:
+                self.mph[words[0]] = int(words[1][0:words[1].find('<ps>')])
+            elif words[1].find('<bytes>') > 0:
+                self.mph[words[0]] = int(words[1][0:words[1].find('<bytes>')])
+            else:
+                self.mph[words[0]] = int(words[1])
 
-    # read Summary of Quality Flags per State (SQADS)
-    def getSQADS(self):
+        fp.close()
+
+    def __get_sph__(self):
+        """
+        read Sciamachy level 0 SPH header
+        """
+        fp = open(self.filename, 'rt', encoding='latin-1')
+        fp.seek(lv0_consts('mds_size'))     # skip MPH header
+
+        for line in fp:
+            words = line.split('=')
+            # only process (key,value)
+            if len(words) != 2:
+                continue
+            # end of SPH header
+            if words[0] == 'DS_NAME':
+                break
+
+            if words[1][0] == '\"':
+                self.sph[words[0]] = words[1].strip("\"").rstrip()
+            elif len(words[1]) == 1:
+                self.sph[words[0]] = words[1]
+            elif words[1].find('<10-6degN>') > 0:
+                self.sph[words[0]] = int(
+                    words[1][0:words[1].find('<10-6degN>')]) * 1e-6
+            elif words[1].find('<10-6degE>') > 0:
+                self.sph[words[0]] = int(
+                    words[1][0:words[1].find('<10-6degE>')]) * 1e-6
+            elif words[1].find('<deg>') > 0:
+                self.sph[words[0]] = float(words[1][0:words[1].find('<deg>')])
+            elif words[1].find('<%>') > 0:
+                self.sph[words[0]] = float(words[1][0:words[1].find('<%>')])
+            elif words[1].find('<>') > 0:
+                self.sph[words[0]] = float(words[1][0:words[1].find('<>')])
+            else:
+                self.sph[words[0]] = int(words[1])
+
+        fp.close()
+
+    def __get_dsd__(self):
+        """
+        read Sciamachy level 0 DSD records
+        """
+        num_dsd = 0
+        self.dsd = [{}]
+
+        fp = open(self.filename, 'rt', encoding='latin-1')
+        # skip headers MPH & SPH
+        fp.seek(lv0_consts('mds_size') + self.mph['SPH_SIZE']
+                - self.mph['NUM_DSD'] * self.mph['DSD_SIZE'])
+
+        for line in fp:
+            words = line[:-1].split('=')
+            # only process (key,value)
+            if len(words) != 2:
+                continue
+
+            if words[1][0] == '\"':
+                self.dsd[num_dsd][words[0]] = words[1].strip('\"').rstrip()
+            elif len(words[1]) == 1:
+                self.dsd[num_dsd][words[0]] = words[1]
+            elif words[1].find('<bytes>') > 0:
+                self.dsd[num_dsd][words[0]] = \
+                    int(words[1][0:words[1].find('<bytes>')])
+            else:
+                self.dsd[num_dsd][words[0]] = int(words[1])
+
+            # end of DSD header
+            if words[0] == 'DSR_SIZE':
+                num_dsd += 1
+                if num_dsd+1 == self.mph['NUM_DSD']:
+                    break
+                else:
+                    self.dsd.append({})
+
+        fp.close()
+
+    def dsd_by_name(self, ds_name):
+        """
+        Returns DSD record with dsd['DS_NAME'] equals ds_name
+        """
+        dsd = None
+        for dsd in self.dsd:
+            if dsd['DS_NAME'] == ds_name:
+                break
+
+        return dsd
+
+    def get_sqads(self):
+        """
+        read Summary of Quality Flags per State (SQADS)
+        """
         record_dtype = np.dtype([
-            ('mjd', {'names':['days', 'secnds', 'musec'], 
-                     'formats':['>i4','>u4', '>u4']}),
+            ('mjd', {'names': ['days', 'secnds', 'musec'],
+                     'formats': ['>i4', '>u4', '>u4']}),
             ('flag_attached', 'i1'),
             ('mean_wv_diff', '>f4', (8)),
             ('sdev_wv_diff', '>f4', (8)),
@@ -304,27 +213,33 @@ class File:
             ('num_hot', '>u2', (15)),
             ('spare', '>u1', (10))
         ])
-        indx = self.dsd['DS_NAME'].index('SUMMARY_QUALITY')
-        self.fp.seek( self.dsd['DS_OFFSET'][indx] )
-        self.sqads = np.fromfile( self.fp, dtype=record_dtype, 
-                                  count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('SUMMARY_QUALITY')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Geolocation of the States (LADS)
-    def getLADS(self):
+    def get_lads(self):
+        """
+        read Geolocation of the States (LADS)
+        """
         record_dtype = np.dtype([
-            ('mjd', {'names':['days', 'secnds', 'musec'], 
-                     'formats':['>i4','>u4', '>u4']}),
+            ('mjd', {'names': ['days', 'secnds', 'musec'],
+                     'formats': ['>i4', '>u4', '>u4']}),
             ('flag_attached', 'i1'),
             ('corners', {'names': ['lat', 'lon'],
-                         'formats': ['>i4', '>i4']}, (4))            
+                         'formats': ['>i4', '>i4']}, (4))
         ])
-        indx = self.dsd['DS_NAME'].index('GEOLOCATION')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.lads = np.fromfile( self.fp, dtype=record_dtype, 
-                                  count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('GEOLOCATION')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Static Instrument Parameters (SIP)
-    def getSIP(self):
+    def get_sip(self):
+        """
+        read Static Instrument Parameters (SIP)
+        """
         record_dtype = np.dtype([
             ('n_lc_min', 'u1'),
             ('ds_n_phase', 'u1'),
@@ -358,13 +273,16 @@ class File:
             ('do_IB_OC_ETN', 'c', (7)),
             ('level_2_SMR', 'u1', (8))
         ])
-        indx = self.dsd['DS_NAME'].index('INSTRUMENT_PARAMS')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.sip = np.fromfile( self.fp, dtype=record_dtype, 
-                                count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('INSTRUMENT_PARAMS')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Leakage Current Parameters (CLCP)
-    def getCLCP(self):
+    def get_clcp(self):
+        """
+        read Leakage Current Parameters (CLCP)
+        """
         record_dtype = np.dtype([
             ('fpn', '>f4', (8192)),
             ('fpn_error', '>f4', (8192)),
@@ -374,13 +292,16 @@ class File:
             ('pmd_dark_error', '>f4', (14)),
             ('mean_noise', '>f4', (8192))
         ])
-        indx = self.dsd['DS_NAME'].index('LEAKAGE_CONSTANT')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.clcp = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('LEAKAGE_CONSTANT')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Leakage Current Parameters (VLCP)
-    def getVLCP(self):
+    def get_vlcp(self):
+        """
+        read Leakage Current Parameters (VLCP)
+        """
         record_dtype = np.dtype([
             ('orbit_phase', '>f4'),
             ('temperatures', '>f4', (10)),
@@ -393,13 +314,16 @@ class File:
             ('pmd_var_lc', '>f4', (2)),
             ('pmd_var_lc_error', '>f4', (2))
         ])
-        indx = self.dsd['DS_NAME'].index('LEAKAGE_VARIABLE')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.vlcp = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('LEAKAGE_VARIABLE')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read PPG/Etalon Parameters (PPG)
-    def getPPG(self):
+    def get_ppg(self):
+        """
+        read PPG/Etalon Parameters (PPG)
+        """
         record_dtype = np.dtype([
             ('ppg_fact', '>f4', (8192)),
             ('etalon_fact', '>f4', (8192)),
@@ -407,36 +331,45 @@ class File:
             ('wls_deg_fact', '>f4', (8192)),
             ('bdpm', 'u1', (8192))
         ])
-        indx = self.dsd['DS_NAME'].index('PPG_ETALON')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.ppg = np.fromfile( self.fp, dtype=record_dtype, 
-                                count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('PPG_ETALON')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Precise Basis for Spectral Calibration Parameters (BASE)
-    def getBASE(self):
+    def get_base(self):
+        """
+        read Precise Basis for Spectral Calibration Parameters (BASE)
+        """
         record_dtype = np.dtype([
             ('wavelen_grid', '>f4', (8192))
         ])
-        indx = self.dsd['DS_NAME'].index('SPECTRAL_BASE')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.base = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('SPECTRAL_BASE')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Spectral Calibration Parameters (SCP)
-    def getSCP(self):
+    def get_scp(self):
+        """
+        read Spectral Calibration Parameters (SCP)
+        """
         record_dtype = np.dtype([
             ('orbit_phase', '>f4'),
-            ('coeffs', '>f8', (8,5)),
+            ('coeffs', '>f8', (8, 5)),
             ('num_lines', '>u2', (8)),
             ('wavelen_error', '>f4', (8)),
         ])
-        indx = self.dsd['DS_NAME'].index('SPECTRAL_CALIBRATION')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.scp = np.fromfile( self.fp, dtype=record_dtype, 
-                                count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('SPECTRAL_CALIBRATION')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Sun Reference Spectrum (SRS)
-    def getSRS(self):
+    def get_srs(self):
+        """
+        read Sun Reference Spectrum (SRS)
+        """
         record_dtype = np.dtype([
             ('spec_id', 'a2'),
             ('wavelength', '>f4', (8192)),
@@ -452,86 +385,107 @@ class File:
             ('pmd_nd_in', '>f4', (7)),
             ('doppler', '>f4')
         ])
-        indx = self.dsd['DS_NAME'].index('SUN_REFERENCE')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.srs = np.fromfile( self.fp, dtype=record_dtype, 
-                                count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('SUN_REFERENCE')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Polarisation Sensitivity Parameters Nadir (PSPN)
-    def getPSPN(self):
+    def get_pspn(self):
+        """
+        read Polarisation Sensitivity Parameters Nadir (PSPN)
+        """
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
             ('mu2', '>f4', (8192)),
             ('mu3', '>f4', (8192))
         ])
-        indx = self.dsd['DS_NAME'].index('POL_SENS_NADIR')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.pspn = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('POL_SENS_NADIR')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Polarisation Sensitivity Parameters Limb (PSPL)
-    def getPSPL(self):
-        record_dtype = np.dtype([
-            ('ang_esm', '>f4'),
-            ('ang_asm', '>f4'),
-            ('mu2', '>f4', (8192)),
-            ('mu3', '>f4', (8192))
-        ])
-        indx = self.dsd['DS_NAME'].index('POL_SENS_LIMB')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.pspl = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
-
-    # read Polarisation Sensitivity Parameters Occultation (PSPO)
-    def getPSPO(self):
+    def get_pspl(self):
+        """
+        read Polarisation Sensitivity Parameters Limb (PSPL)
+        """
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
             ('ang_asm', '>f4'),
             ('mu2', '>f4', (8192)),
             ('mu3', '>f4', (8192))
         ])
-        indx = self.dsd['DS_NAME'].index('POL_SENS_OCC')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.pspo = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('POL_SENS_LIMB')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Radiance Sensitivity Parameters Nadir (RSPN)
-    def getRSPN(self):
+    def get_pspo(self):
+        """
+        read Polarisation Sensitivity Parameters Occultation (PSPO)
+        """
+        record_dtype = np.dtype([
+            ('ang_esm', '>f4'),
+            ('ang_asm', '>f4'),
+            ('mu2', '>f4', (8192)),
+            ('mu3', '>f4', (8192))
+        ])
+        dsd = self.dsd_by_name('POL_SENS_OCC')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
+
+    def get_rspn(self):
+        """
+        read Radiance Sensitivity Parameters Nadir (RSPN)
+        """
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
             ('sensitivity', '>f4', (8192))
         ])
-        indx = self.dsd['DS_NAME'].index('RAD_SEND_NADIR')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.rspn = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('RAD_SEND_NADIR')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Radiance Sensitivity Parameters Limb (RSPL)
-    def getRSPL(self):
+    def get_rspl(self):
+        """
+        read Radiance Sensitivity Parameters Limb (RSPL)
+        """
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
             ('ang_asm', '>f4'),
             ('sensitivity', '>f4', (8192))
         ])
-        indx = self.dsd['DS_NAME'].index('RAD_SENS_LIMB')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.rspl = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('RAD_SENS_LIMB')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Radiance Sensitivity Parameters Occultation (RSPO)
-    def getRSPO(self):
+    def get_rspo(self):
+        """
+        read Radiance Sensitivity Parameters Occultation (RSPO)
+        """
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
             ('ang_asm', '>f4'),
             ('sensitivity', '>f4', (8192))
         ])
-        indx = self.dsd['DS_NAME'].index('RAD_SENS_OCC')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.rspo = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('RAD_SENS_OCC')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Errors on Key Data (EKD)
-    def getEKD(self):
+    def get_ekd(self):
+        """
+        read Errors on Key Data (EKD)
+        """
         record_dtype = np.dtype([
             ('mu2_nadir', '>f4', (8192)),
             ('mu3_nadir', '>f4', (8192)),
@@ -543,42 +497,51 @@ class File:
             ('sensitivity_sun', '>f4', (8192)),
             ('bsdf', '>f4', (8192))
         ])
-        indx = self.dsd['DS_NAME'].index('ERRORS_ON_KEY_DATA')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.ekd = np.fromfile( self.fp, dtype=record_dtype, 
-                                count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('ERRORS_ON_KEY_DATA')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Slit Function Parameters (SFP)
-    def getSFP(self):
+    def get_sfp(self):
+        """
+        read Slit Function Parameters (SFP)
+        """
         record_dtype = np.dtype([
             ('pixel_slit', '>u2'),
             ('type_slit', 'u1'),
             ('fwhm_slit', '>f4'),
             ('fwhm_lorenz', '>f4'),
         ])
-        indx = self.dsd['DS_NAME'].index('SLIT_FUNCTION')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.sfp = np.fromfile( self.fp, dtype=record_dtype, 
-                                count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('SLIT_FUNCTION')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read Small Aperture Function Parameters (ASFP)
-    def getASFP(self):
+    def get_asfp(self):
+        """
+        read Small Aperture Function Parameters (ASFP)
+        """
         record_dtype = np.dtype([
             ('pixel_slit', '>u2'),
             ('type_slit', 'u1'),
             ('fwhm_slit', '>f4'),
             ('fwhm_lorenz', '>f4'),
         ])
-        indx = self.dsd['DS_NAME'].index('SMALL_AP_SLIT_FUNCTION')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.asfp = np.fromfile( self.fp, dtype=record_dtype, 
-                                 count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('SMALL_AP_SLIT_FUNCTION')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff
 
-    # read States of the Product
-    def getSTATES(self):
+    def get_states(self):
+        """
+        read State definitions of the product
+        """
         record_dtype = np.dtype([
-            ('mjd', {'names':['days', 'secnds', 'musec'], 
-                     'formats':['>i4','>u4', '>u4']}),
+            ('mjd', {'names': ['days', 'secnds', 'musec'],
+                     'formats': ['>i4', '>u4', '>u4']}),
             ('flag_attached', 'i1'),
             ('flag_reason', 'i1'),
             ('orbit_phase', '>f4'),
@@ -587,10 +550,11 @@ class File:
             ('duration', '>u2'),
             ('intg_max', '>u2'),
             ('num_clus', '>u2'),
-            ('Clcon', {'names':['clus_id','chan_id','start','length','pet',
-                                'intg','coaddf','readouts','clus_type'], 
-                       'formats':['u1', 'u1', '>u2', '>u2', '>f4',
-                                  '>u2', '>u2', '>u2', 'u1']}, (64)),
+            ('Clcon', {'names': ['clus_id', 'chan_id', 'start', 'length',
+                                 'pet', 'intg', 'coaddf', 'readouts',
+                                 'clus_type'],
+                       'formats': ['u1', 'u1', '>u2', '>u2', '>f4',
+                                   '>u2', '>u2', '>u2', 'u1']}, (64)),
             ('mds_type', 'u1'),
             ('num_geo', '>u2'),
             ('num_pmd', '>u2'),
@@ -601,7 +565,8 @@ class File:
             ('number', '>u2'),
             ('length', '>u4')
         ])
-        indx = self.dsd['DS_NAME'].index('STATES')
-        self.fp.seek(self.dsd['DS_OFFSET'][indx])
-        self.states = np.fromfile( self.fp, dtype=record_dtype, 
-                                   count=self.dsd['NUM_DSR'][indx] )
+        dsd = self.dsd_by_name('STATES')
+        with open(self.filename, 'rb') as fp:
+            fp.seek(dsd['DS_OFFSET'])
+            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+        return buff

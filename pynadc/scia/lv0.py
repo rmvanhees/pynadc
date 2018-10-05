@@ -32,8 +32,9 @@ def lv0_consts(key=None):
         return consts
     if key in consts:
         return consts[key]
-    
+
     raise KeyError('level 0 constant {} is not defined'.format(key))
+
 
 # - Classes --------------------------------------
 class File():
@@ -55,12 +56,12 @@ class File():
             "\x42\x5a\x68": "bz2",
             "\xfd\x37\x7a\x58\x5a\x00": "xz"
         }
-        for magic, filetype in magic_dict.items():
+        for magic, _ in magic_dict.items():
             with open(flname, 'rb') as fp:
                 file_magic = fp.read(len(magic))
 
             if file_magic == magic:
-                raise SystemError('file is compressed with {}'.format(filetype))
+                raise SystemError("can not read compressed file")
 
         # read Main Product Header
         self.__get_mph__()
@@ -73,11 +74,11 @@ class File():
         if self.mph['TOT_SIZE'] != Path(flname).stat().st_size:
             raise SystemError('file {} incomplete'.format(flname))
 
-    # ----- generic data structures -------------------------    
+    # ----- generic data structures -------------------------
     @staticmethod
     def __mjd_envi():
         """
-        return numpy-dtype definition for a mjd record
+        Returns numpy-dtype definition for a mjd record
         """
         return np.dtype([
             ('days', '>i4'),
@@ -87,7 +88,7 @@ class File():
 
     def __fep_hdr(self):
         """
-        return numpy-dtype definition for a front-end processor header
+        Returns numpy-dtype definition for a front-end processor header
         """
         return np.dtype([
             ('mjd', self.__mjd_envi()),
@@ -100,7 +101,7 @@ class File():
     @staticmethod
     def __packet_hdr():
         """
-        return numpy-dtype definition for a packet header
+        Returns numpy-dtype definition for a packet header
         """
         return np.dtype([
             ('id', '>u2'),
@@ -111,7 +112,7 @@ class File():
     @staticmethod
     def __data_hdr():
         """
-        return numpy-dtype definition for a data-field header
+        Returns numpy-dtype definition for a data-field header
         """
         return np.dtype([
             ('length', '>u2'),
@@ -125,6 +126,7 @@ class File():
 
     def info_mds_dtype(self):
         """
+        Returns only the common part of (aux, det, pmd) MDS records
         """
         return np.dtype([
             ('isp', self.__mjd_envi()),
@@ -133,11 +135,11 @@ class File():
             ('data', self.__data_hdr())
         ])
 
-    # ----- detector data structures -------------------------    
+    # ----- detector data structures -------------------------
     @staticmethod
     def __det_pmtc_hdr():
         """
-        return numpy-dtype definition for a pmtc header
+        Returns numpy-dtype definition for a pmtc header
         """
         return np.dtype([
             ('bcps', '>u2'),
@@ -153,7 +155,7 @@ class File():
     @staticmethod
     def __chan_hdr():
         """
-        return numpy-dtype definition for a channel data header
+        Returns numpy-dtype definition for a channel data header
         """
         return np.dtype([
             ('sync', '>u2'),
@@ -170,7 +172,7 @@ class File():
     @staticmethod
     def __clus_data():
         """
-        return numpy-dtype definition for a pixel data block,
+        Returns numpy-dtype definition for a pixel data block,
            one per cluster read-out
         """
         return np.dtype([
@@ -185,16 +187,16 @@ class File():
 
     def __chan_data(self):
         """
-        return numpy-dtype definition for a channel data structure
+        Returns numpy-dtype definition for a channel data structure
         """
         return np.dtype([
             ('hdr', self.__chan_hdr()),
             ('data', self.__clus_data(), (12))  # theoretical maximum is 16
         ])
-    
+
     def det_mds_dtype(self, header=False):
         """
-        return numpy-dtype definition for a level 0 detector mds
+        Returns numpy-dtype definition for a level 0 detector mds
         """
         if header:
             return np.dtype([
@@ -212,13 +214,13 @@ class File():
             ('data_hdr', self.__data_hdr()),
             ('pmtc_hdr', self.__det_pmtc_hdr()),
             ('chan_data', self.__chan_data(), (8))
-       ])
+        ])
 
-    # ----- auxiliary data structures -------------------------    
+    # ----- auxiliary data structures -------------------------
     @staticmethod
     def __aux_pmtc_hdr():
         """
-        return numpy-dtype definition for a pmtc header
+        Returns numpy-dtype definition for a pmtc header
         """
         return np.dtype([
             ('pmtc_1', '>u2'),
@@ -231,7 +233,7 @@ class File():
     @staticmethod
     def __pmtc_frame():
         """
-        return numpy-dtype definition for a pmtc auxiliary frame
+        Returns numpy-dtype definition for a pmtc auxiliary frame
         """
         aux_bcp_dtype = np.dtype([
             ('sync', '>u2'),
@@ -253,8 +255,8 @@ class File():
 
     def aux_mds_dtype(self):
         """
-        return numpy-dtype definition for a level 0 auxiliary mds
-        """        
+        Returns numpy-dtype definition for a level 0 auxiliary mds
+        """
         return np.dtype([
             ('isp', self.__mjd_envi()),
             ('fep_hdr', self.__fep_hdr()),
@@ -263,13 +265,13 @@ class File():
             ('pmtc_hdr', self.__aux_pmtc_hdr()),
             ('pmtc_frame', self.__pmtc_frame(),
              lv0_consts('num_lv0_aux_pmtc_frame'))
-       ])    
+        ])
 
-    # ----- PMD data structures -------------------------    
+    # ----- PMD data structures -------------------------
     @staticmethod
     def __pmd_data():
         """
-        return numpy-dtype definition for a PMD data packet
+        Returns numpy-dtype definition for a PMD data packet
         """
         return np.dtype([
             ('sync', '>u2'),
@@ -280,8 +282,8 @@ class File():
 
     def pmd_mds_dtype(self):
         """
-        return numpy-dtype definition for a level 0 auxiliary mds
-        """        
+        Returns numpy-dtype definition for a level 0 auxiliary mds
+        """
         return np.dtype([
             ('isp', self.__mjd_envi()),
             ('fep_hdr', self.__fep_hdr()),
@@ -290,9 +292,9 @@ class File():
             ('temp', '>u2'),
             ('pmd_data', self.__pmd_data(),
              lv0_consts('num_lv0_pmd_packets'))
-       ])    
-    
-    # ----- read routines -------------------------    
+        ])
+
+    # ----- read routines -------------------------
     def __get_mph__(self):
         """
         read Sciamachy level 0 MPH header
@@ -333,7 +335,7 @@ class File():
         read Sciamachy level 0 SPH header
         """
         fp = open(self.filename, 'rt', encoding='latin-1')
-        fp.seek(lv0_consts('mds_size')) # skip MPH header
+        fp.seek(lv0_consts('mds_size'))     # skip MPH header
 
         for line in fp:
             words = line.split('=')
@@ -405,15 +407,16 @@ class File():
 
     def bytes_left(self, mds, read_sofar=0):
         """
+        Returns number to be read from a MDS record
         """
         size = (mds['fep']['length'] + self.__mjd_envi().itemsize
                 + self.__fep_hdr().itemsize + self.__packet_hdr().itemsize + 1)
         size -= read_sofar
 
         return size
-        
+
     # read SCIAMACHY_SOURCE_PACKETS
-    def get_mds(self, stateID=None, packetID=None, packetType=None):
+    def get_mds(self, state_id=None):
         """
         read Sciamachy level 0 MDS records
         """
@@ -440,7 +443,7 @@ class File():
                 if packet_type == 1:
                     num_det += 1
                 elif packet_type == 2:
-                    num_aux +=1
+                    num_aux += 1
                 elif packet_type == 3:
                     num_pmd += 1
                 else:
@@ -486,11 +489,11 @@ class File():
                         clus['coaddf'][ncl] = np.fromfile(
                             fp, dtype='u1', count=1)
                         clus['start'][ncl] = np.fromfile(
-                            fp, dtype='>u2',  count=1)
+                            fp, dtype='>u2', count=1)
                         clus['length'][ncl] = np.fromfile(
                             fp, dtype='>u2', count=1)
                         clus['offset'][ncl] = fp.tell()
-                        
+
                         if clus[ncl]['coaddf'] == 1:
                             nbytes = 2 * clus['length'][ncl]
                         else:
@@ -534,6 +537,5 @@ class File():
                                           count=1)[0]
                 ni += 1
         print('read {} PMD mds'.format(ni))
-                
-        return (det_mds, aux_mds, pmd_mds)
 
+        return (det_mds, aux_mds, pmd_mds)
