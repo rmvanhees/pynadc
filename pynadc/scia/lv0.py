@@ -124,15 +124,27 @@ class File():
             ('overflow', 'u1')
         ])
 
-    def info_mds_dtype(self):
+    def ds_info_dtype(self):
         """
         Returns only the common part of (aux, det, pmd) MDS records
         """
         return np.dtype([
             ('isp', self.__mjd_envi()),
-            ('fep', self.__fep_hdr()),
-            ('packet', self.__packet_hdr()),
-            ('data', self.__data_hdr())
+            ('fep_hdr', self.__fep_hdr()),
+            ('packet_hdr', self.__packet_hdr()),
+            ('data_hdr', self.__data_hdr())
+        ])
+
+    def ds_buff_dtype(self):
+        """
+        Returns ds_info + a python object
+        """
+        return np.dtype([
+            ('isp', self.__mjd_envi()),
+            ('fep_hdr', self.__fep_hdr()),
+            ('packet_hdr', self.__packet_hdr()),
+            ('data_hdr', self.__data_hdr()),
+            ('buff', 'O')
         ])
 
     # ----- detector data structures -------------------------
@@ -170,7 +182,7 @@ class File():
         ])
 
     @staticmethod
-    def __clus_data():
+    def __clus_hdr():
         """
         Returns numpy-dtype definition for a pixel data block,
            one per cluster read-out
@@ -181,8 +193,7 @@ class File():
             ('id', 'u1'),
             ('coaddf', 'u1'),
             ('start', '>u2'),
-            ('length', '>u2'),
-            ('offset', 'i4')
+            ('length', '>u2')
         ])
 
     def __chan_data(self):
@@ -191,22 +202,14 @@ class File():
         """
         return np.dtype([
             ('hdr', self.__chan_hdr()),
-            ('data', self.__clus_data(), (12))  # theoretical maximum is 16
+            ('clus_hdr', self.__clus_hdr(), (12)),  # theoretical maximum is 16
+            ('clus_data', 'O', (12))
         ])
 
-    def det_mds_dtype(self, header=False):
+    def det_mds_dtype(self):
         """
         Returns numpy-dtype definition for a level 0 detector mds
         """
-        if header:
-            return np.dtype([
-                ('isp', self.__mjd_envi()),
-                ('fep_hdr', self.__fep_hdr()),
-                ('packet_hdr', self.__packet_hdr()),
-                ('data_hdr', self.__data_hdr()),
-                ('pmtc_hdr', self.__det_pmtc_hdr())
-            ])
-
         return np.dtype([
             ('isp', self.__mjd_envi()),
             ('fep_hdr', self.__fep_hdr()),
@@ -409,7 +412,7 @@ class File():
         """
         Returns number to be read from a MDS record
         """
-        size = (mds['fep']['length'] + self.__mjd_envi().itemsize
+        size = (mds['fep_hdr']['length'] + self.__mjd_envi().itemsize
                 + self.__fep_hdr().itemsize + self.__packet_hdr().itemsize + 1)
         size -= read_sofar
 
@@ -430,16 +433,16 @@ class File():
             if dsd['DS_NAME'] == 'SCIAMACHY_SOURCE_PACKETS':
                 break
 
-        info_mds = np.empty(dsd['NUM_DSR'], dtype=self.info_mds_dtype())
+        # store all MDS data in these buffers
+        ds_buffer = np.empty(dsd['NUM_DSR'], dtype=self.ds_buff_dtype())
 
         # collect information about the level 0 measurement data in product
         with open(self.filename, 'rb') as fp:
-            info_mds_dtype = self.info_mds_dtype()
+            ds_info_dtype = self.ds_info_dtype()
             fp.seek(dsd['DS_OFFSET'])
             for ni in range(dsd['NUM_DSR']):
-                mds = np.fromfile(fp, dtype=info_mds_dtype, count=1)[0]
-                info_mds[ni] = mds
-                packet_type = mds['data']['packet_type'] >> 4
+                ds_info = np.fromfile(fp, dtype=ds_info_dtype, count=1)[0]
+                packet_type = ds_info['data_hdr']['packet_type'] >> 4
                 if packet_type == 1:
                     num_det += 1
                 elif packet_type == 2:
@@ -449,93 +452,127 @@ class File():
                 else:
                     raise ValueError(
                         'unknown packet type {}'.format(packet_type))
+                for key in ds_info_dtype.names:
+                    ds_buffer[key][ni] = ds_info[key]
 
-                fp.seek(self.bytes_left(mds, info_mds_dtype.itemsize), 1)
+                num_bytes = self.bytes_left(ds_info, ds_info_dtype.itemsize)
+                ds_buffer['buff'][ni] = fp.read(num_bytes)
 
         print(num_aux, num_det, num_pmd)
 
-        # read level 0 detector data packets
-        det_mds = np.empty(num_det, dtype=self.det_mds_dtype())
-        with open(self.filename, 'rb') as fp:
-            det_hdr_dtype = self.det_mds_dtype(header=True)
-            fp.seek(dsd['DS_OFFSET'])
-
-            ni = 0
-            for info_rec in info_mds:
-                packet_type = info_rec['data']['packet_type'] >> 4
-                if packet_type != 1:
-                    fp.seek(self.bytes_left(info_rec), 1)
-                    continue
-
-                # read fixed part of the detectror MDS
-                hdr = np.fromfile(fp, dtype=det_hdr_dtype, count=1)[0]
-                for key in hdr.dtype.names:
-                    det_mds[key][ni] = hdr[key]
-
-                # read channel data blocks
-                chan_data = det_mds['chan_data'][ni]
-                for nch in range(hdr['pmtc_hdr']['num_chan']):
-                    chan_data['hdr'][nch] = np.fromfile(
-                        fp, dtype=self.__chan_hdr(), count=1)[0]
-
-                    clus = chan_data['data'][nch]
-                    for ncl in range(chan_data['hdr']['clusters'][nch]):
-                        clus['sync'][ncl] = np.fromfile(
-                            fp, dtype='>u2', count=1)
-                        clus['block'][ncl] = np.fromfile(
-                            fp, dtype='>u2', count=1)
-                        clus['id'][ncl] = np.fromfile(
-                            fp, dtype='u1', count=1)
-                        clus['coaddf'][ncl] = np.fromfile(
-                            fp, dtype='u1', count=1)
-                        clus['start'][ncl] = np.fromfile(
-                            fp, dtype='>u2', count=1)
-                        clus['length'][ncl] = np.fromfile(
-                            fp, dtype='>u2', count=1)
-                        clus['offset'][ncl] = fp.tell()
-
-                        if clus[ncl]['coaddf'] == 1:
-                            nbytes = 2 * clus['length'][ncl]
-                        else:
-                            nbytes = 3 * clus['length'][ncl]
-                            if (clus['length'][ncl] % 2) == 1:
-                                nbytes += 1
-                        fp.seek(nbytes, 1)
-                ni += 1
-        print('read {} detector mds'.format(ni))
-
-        # read level 0 auxiliary data packets
+        # ----- read level 0 auxiliary data packets -----
         aux_mds = np.empty(num_aux, dtype=self.aux_mds_dtype())
-        with open(self.filename, 'rb') as fp:
-            fp.seek(dsd['DS_OFFSET'])
 
-            ni = 0
-            for info_rec in info_mds:
-                packet_type = info_rec['data']['packet_type'] >> 4
-                if packet_type != 2:
-                    fp.seek(self.bytes_left(info_rec), 1)
-                    continue
+        ni = 0
+        for ds_rec in ds_buffer:
+            offs = 0
+            packet_type = ds_rec['data_hdr']['packet_type'] >> 4
+            if packet_type != 2:
+                continue
 
-                aux_mds[ni] = np.fromfile(fp, dtype=self.aux_mds_dtype(),
-                                          count=1)[0]
-                ni += 1
+            # copy fixed part of the auxiliary MDS
+            aux = aux_mds[ni]
+            for key in ds_info_dtype.names:
+                aux[key] = ds_rec[key]
+
+            # read auxiliary specific part from buffer
+            aux['pmtc_hdr'] = np.frombuffer(ds_rec['buff'],
+                                            dtype=self.__aux_pmtc_hdr(),
+                                            count=1,
+                                            offset=offs)
+            offs += self.__aux_pmtc_hdr().itemsize
+
+            aux['pmtc_frame'] = np.frombuffer(
+                ds_rec['buff'],
+                dtype=self.__pmtc_frame(),
+                count=lv0_consts('num_lv0_aux_pmtc_frame'),
+                offset=offs)
+            ni += 1
         print('read {} auxiliary mds'.format(ni))
 
-        # read level 0 PMD data packets
+        # ----- read level 0 detector data packets -----
+        det_mds = np.empty(num_det, dtype=self.det_mds_dtype())
+
+        ni = 0
+        for ds_rec in ds_buffer:
+            offs = 0
+            packet_type = ds_rec['data_hdr']['packet_type'] >> 4
+            if packet_type != 1:
+                continue
+
+            # copy fixed part of the detector MDS
+            det = det_mds[ni]
+            for key in ds_info_dtype.names:
+                det[key] = ds_rec[key]
+
+            # read detector specific part from buffer
+            det['pmtc_hdr'] = np.frombuffer(ds_rec['buff'],
+                                            dtype=self.__det_pmtc_hdr(),
+                                            count=1,
+                                            offset=offs)
+            offs += self.__det_pmtc_hdr().itemsize
+            
+            # read channel data blocks
+            chan_data = det['chan_data']
+            for nch in range(det['pmtc_hdr']['num_chan']):
+                chan_data['hdr'][nch] = np.frombuffer(ds_rec['buff'],
+                                                      dtype=self.__chan_hdr(),
+                                                      count=1,
+                                                      offset=offs)[0]
+                offs += self.__chan_hdr().itemsize
+
+                # read cluster data
+                hdr = chan_data['clus_hdr'][nch]
+                buff = chan_data['clus_data'][nch]
+                for ncl in range(chan_data['hdr']['clusters'][nch]):
+                    hdr[ncl] = np.frombuffer(ds_rec['buff'],
+                                             dtype=self.__clus_hdr(),
+                                             count=1,
+                                             offset=offs)[0]
+                    offs += self.__clus_hdr().itemsize
+
+                    if hdr['coaddf'][ncl] == 1:
+                        nbytes = 2 * hdr['length'][ncl]
+                    else:
+                        nbytes = 3 * hdr['length'][ncl]
+                        if (hdr['length'][ncl] % 2) == 1:
+                            nbytes += 1
+                    buff[ncl] = np.frombuffer(ds_rec['buff'],
+                                              dtype='u1',
+                                              count=nbytes,
+                                              offset=offs)[0]
+                    offs += nbytes
+            ni += 1
+        print('read {} detector mds'.format(ni))
+
+        # ----- read level 0 PMD data packets -----
         pmd_mds = np.empty(num_pmd, dtype=self.pmd_mds_dtype())
-        with open(self.filename, 'rb') as fp:
-            fp.seek(dsd['DS_OFFSET'])
 
-            ni = 0
-            for info_rec in info_mds:
-                packet_type = info_rec['data']['packet_type'] >> 4
-                if packet_type != 3:
-                    fp.seek(self.bytes_left(info_rec), 1)
-                    continue
+        ni = 0
+        for ds_rec in ds_buffer:
+            offs = 0
+            packet_type = ds_rec['data_hdr']['packet_type'] >> 4
+            if packet_type != 3:
+                continue
 
-                pmd_mds[ni] = np.fromfile(fp, dtype=self.pmd_mds_dtype(),
-                                          count=1)[0]
-                ni += 1
+            # copy fixed part of the PMD MDS
+            pmd = pmd_mds[ni]
+            for key in ds_info_dtype.names:
+                pmd[key] = ds_rec[key]
+
+            # read PMD specific part from buffer
+            pmd['temp'] = np.frombuffer(ds_rec['buff'],
+                                        dtype='>u2',
+                                        count=1,
+                                        offset=offs)
+            offs += 2
+
+            pmd['pmd_data'] = np.frombuffer(
+                ds_rec['buff'],
+                dtype=self.__pmd_data(),
+                count=lv0_consts('num_lv0_pmd_packets'),
+                offset=offs)
+            ni += 1
         print('read {} PMD mds'.format(ni))
 
         return (det_mds, aux_mds, pmd_mds)
