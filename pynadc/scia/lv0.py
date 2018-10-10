@@ -540,7 +540,8 @@ class File():
             
                 # read channel data blocks
                 channel = det['chan_data']
-                for nch in range(det['pmtc_hdr']['num_chan']):
+                # mask bit-flips in parameter for the number of channels
+                for nch in range(det['pmtc_hdr']['num_chan'] & 0xF):
                     channel['hdr'][nch] = np.frombuffer(ds_rec['buff'],
                                                         dtype=self.__chan_hdr(),
                                                         count=1,
@@ -555,6 +556,10 @@ class File():
                     hdr = channel['clus_hdr'][nch]
                     buff = channel['clus_data'][nch]
                     for ncl in range(channel['hdr']['clusters'][nch]):
+                        if offs == len(ds_rec['buff']):
+                            channel['hdr']['clusters'][nch] = ncl
+                            break
+
                         hdr[ncl] = np.frombuffer(ds_rec['buff'],
                                                  dtype=self.__clus_hdr(),
                                                  count=1,
@@ -564,23 +569,24 @@ class File():
                             print('# cluster-data corruption', ni, nch, ncl)
                             errstat += 1
                             break
-                        # check cluster length
-                        if hdr['length'][ncl] > 1024:
-                            print('# cluster-header corruption', ni, nch, ncl)
-                            errstat += 1
-                            break
+
+                        # mask bit-flips in cluster parameters start and length
+                        hdr['start'][ncl] &= 0x1FFF
+                        hdr['length'][ncl] &= 0x7FF
+
                         # check coadding factor
                         bytes_left = len(ds_rec['buff']) - offs
                         if 2 * hdr['length'][ncl] == bytes_left:
                             if hdr['coaddf'][ncl] != 1:
                                 hdr['coaddf'][ncl] = 1
                                 
-                        # print(ni, nch, ncl, ds_rec['fep_hdr']['_quality'],
+                        #print(ni, nch, ncl, ds_rec['fep_hdr']['_quality'],
                         #      det['pmtc_hdr']['num_chan'],
                         #      channel['hdr']['sync'][nch],
                         #      channel['hdr']['clusters'][nch],
                         #      hdr['sync'][ncl], hdr['start'][ncl], 
-                        #      hdr['length'][ncl], hdr['coaddf'][ncl])
+                        #      hdr['length'][ncl], hdr['coaddf'][ncl],
+                        #      offs, len(ds_rec['buff']))
                         if hdr['coaddf'][ncl] == 1:
                             nbytes = 2 * hdr['length'][ncl]
                             if nbytes > bytes_left:
