@@ -478,6 +478,14 @@ class File():
             fp.seek(dsd['DS_OFFSET'])
             for ni, ds_rec in enumerate(ds_buffer):
                 ds_info = np.fromfile(fp, dtype=ds_info_dtype, count=1)[0]
+
+                # check for corrupted data
+                num_bytes = self.bytes_left(ds_info, ds_info_dtype.itemsize)
+                if num_bytes < 0:
+                    print('# read {} of {} DSRs'.format(ni , dsd['NUM_DSR']))
+                    break
+
+                # copy read buffer
                 for key in ds_info_dtype.names:
                     ds_rec[key] = ds_info[key]
 
@@ -502,7 +510,6 @@ class File():
                     #        ds_rec['data_hdr']['packet_type']))
 
                 # read remainder of DSR
-                num_bytes = self.bytes_left(ds_rec, ds_info_dtype.itemsize)
                 ds_rec['buff'] = fp.read(num_bytes)
 
                 # read BCPS
