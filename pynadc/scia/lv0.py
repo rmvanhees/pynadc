@@ -482,18 +482,24 @@ class File():
                     ds_rec[key] = ds_info[key]
 
                 ds_rec['data_hdr']['packet_type'] >>= 4
-                if ds_rec['data_hdr']['packet_type'] == 1:
-                    indx_det.append(ni)
-                    offs_bcps = 0
-                elif ds_rec['data_hdr']['packet_type'] == 2:
+                if ds_rec['data_hdr']['packet_type'] == 2 \
+                   or ds_rec['fep_hdr']['length'] == 1659:
                     indx_aux.append(ni)
                     offs_bcps = 20
-                elif ds_rec['data_hdr']['packet_type'] == 3:
+                elif ds_rec['data_hdr']['packet_type'] == 3 \
+                     or ds_rec['fep_hdr']['length'] == 6813:
                     indx_pmd.append(ni)
                     offs_bcps = 32
+                elif ds_rec['data_hdr']['packet_type'] == 1:
+                    indx_det.append(ni)
+                    offs_bcps = 0
                 else:
-                    raise ValueError(
-                        'unknown packet type {}'.format(packet_type))
+                    ds_rec['data_hdr']['packet_type'] = 1 
+                    indx_det.append(ni)
+                    offs_bcps = 0
+                    #raise ValueError(
+                    #    'unknown packet type {}'.format(
+                    #        ds_rec['data_hdr']['packet_type']))
 
                 # read remainder of DSR
                 num_bytes = self.bytes_left(ds_rec, ds_info_dtype.itemsize)
@@ -558,25 +564,41 @@ class File():
                             print('# cluster-data corruption', ni, nch, ncl)
                             errstat += 1
                             break
+                        # check cluster length
                         if hdr['length'][ncl] > 1024:
                             print('# cluster-header corruption', ni, nch, ncl)
                             errstat += 1
                             break
-
+                        # check coadding factor
+                        bytes_left = len(ds_rec['buff']) - offs
+                        if 2 * hdr['length'][ncl] == bytes_left:
+                            if hdr['coaddf'][ncl] != 1:
+                                hdr['coaddf'][ncl] = 1
+                                
                         # print(ni, nch, ncl, ds_rec['fep_hdr']['_quality'],
                         #      det['pmtc_hdr']['num_chan'],
                         #      channel['hdr']['sync'][nch],
                         #      channel['hdr']['clusters'][nch],
                         #      hdr['sync'][ncl], hdr['start'][ncl], 
-                        #      hdr['length'][ncl])
+                        #      hdr['length'][ncl], hdr['coaddf'][ncl])
                         if hdr['coaddf'][ncl] == 1:
                             nbytes = 2 * hdr['length'][ncl]
+                            if nbytes > bytes_left:
+                                print('# cluster-size corruption',
+                                      ni, nch, ncl)
+                                errstat += 1
+                                break
                             buff[ncl] = np.frombuffer(ds_rec['buff'],
                                                       dtype='>u2',
                                                       count=hdr['length'][ncl],
                                                       offset=offs)[0]
                         else:
                             nbytes = 3 * hdr['length'][ncl]
+                            if nbytes > bytes_left:
+                                print('# cluster-size corruption',
+                                      ni, nch, ncl)
+                                errstat += 1
+                                break
                             buff[ncl] = np.frombuffer(ds_rec['buff'],
                                                       dtype='u1',
                                                       count=nbytes,
