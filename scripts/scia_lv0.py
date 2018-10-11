@@ -29,12 +29,13 @@ def main():
 
     parser = ArgumentParser(
         formatter_class=RawDescriptionHelpFormatter,
-        description='read Sciamachy level 1b product'
+        description='read Sciamachy level 0 product'
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--orbit', nargs=1, type=int,
-                       help='select data from given orbit, preferably \'W\'')
-    group.add_argument('--file', type=str, help='read data from given file')
+                       help='select data from given orbit')
+    group.add_argument('file', nargs='?', type=str,
+                       help='read data from given file')
     args = parser.parse_args()
 
     scia_fl = ""

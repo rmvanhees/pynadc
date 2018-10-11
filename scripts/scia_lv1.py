@@ -34,7 +34,8 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--orbit', nargs=1, type=int,
                        help='select data from given orbit, preferably \'Y\'')
-    group.add_argument('--file', type=str, help='read data from given file')
+    group.add_argument('file', nargs='?', type=str,
+                       help='read data from given file')
     args = parser.parse_args()
 
     scia_fl = ""
