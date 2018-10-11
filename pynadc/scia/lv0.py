@@ -35,13 +35,17 @@ def lv0_consts(key=None):
 
     raise KeyError('level 0 constant {} is not defined'.format(key))
 
-def check_dsr_in_states(mds_in, indx_mds, verbose=False):
+def check_dsr_in_states(mds_in, indx_mds, verbose=False, check=False):
         """
+        This module combines L0 DSR per state ID based on parameter icu_time.
+        
         """
         # initialize quality of all DSRs to zero
         mds = mds_in[indx_mds]
         mds['fep_hdr']['_quality'] = 0
-        
+
+        # combine L0 DSR on parameter icu_time
+        # alternatively one could use parameter state_id
         _arr = mds['data_hdr']['icu_time']
         _arr = np.concatenate(([-1], _arr, [-1]))
         indx = np.where(np.diff(_arr) != 0)[0]
@@ -53,6 +57,13 @@ def check_dsr_in_states(mds_in, indx_mds, verbose=False):
                 print('# ', ni, indx[ni], num_dsr[ni],
                       state_id[ni], icu_time[ni])
 
+        if not check:
+            return mds
+
+        # Here we simply reject the shortest continuous set of measurements
+        # with the same icu_time
+        # Alternatively, one should reject duplicated DSR after reading the
+        # whole DSR. For example, based on presence of data corruption
         uniq, inverse, count = np.unique(icu_time,
                                          return_inverse=True,
                                          return_counts=True)
@@ -64,7 +75,7 @@ def check_dsr_in_states(mds_in, indx_mds, verbose=False):
                     start = indx[indx_dbl[reject]]
                     end = start + num_dsr[indx_dbl[reject]]
                     # print(ni, reject, start, end)
-                    mds['fep_hdr']['_quality'][start:end] = 1
+                    mds['fep_hdr']['_quality'][start:end] = 0xFFFF
 
         print('# rejected {} DSRs'.format(
             np.sum(mds['fep_hdr']['_quality'] != 0)))
@@ -502,12 +513,11 @@ class File():
                     indx_det.append(ni)
                     offs_bcps = 0
                 else:
+                    raise RuntimeWarning('unknown packet type {}'.format(
+                        ds_rec['data_hdr']['packet_type']))
                     ds_rec['data_hdr']['packet_type'] = 1 
                     indx_det.append(ni)
                     offs_bcps = 0
-                    #raise ValueError(
-                    #    'unknown packet type {}'.format(
-                    #        ds_rec['data_hdr']['packet_type']))
 
                 # read remainder of DSR
                 ds_rec['buff'] = fp.read(num_bytes)
@@ -528,7 +538,6 @@ class File():
 
             ni = 0
             for ds_rec in ds_info:
-                errstat = 0
                 if ds_rec['fep_hdr']['_quality'] != 0:
                     continue
                 
@@ -555,8 +564,8 @@ class File():
                                                         offset=offs)
                     offs += self.__chan_hdr().itemsize
                     if channel['hdr']['sync'][nch] != 0xAAAA:
-                        print('# channel-data corruption', ni, nch, ncl)
-                        errstat += 3
+                        print('# channel-sync corruption', ni, nch, ncl)
+                        det['fep_hdr']['_quality'] |= 0x1
                         break
 
                     # read cluster data
@@ -573,8 +582,8 @@ class File():
                                                  offset=offs)
                         offs += self.__clus_hdr().itemsize
                         if hdr['sync'][ncl] != 0xBBBB:
-                            print('# cluster-data corruption', ni, nch, ncl)
-                            errstat += 1
+                            print('# cluster-sync corruption', ni, nch, ncl)
+                            det['fep_hdr']['_quality'] |= 0x2
                             break
 
                         # mask bit-flips in cluster parameters start and length
@@ -583,9 +592,9 @@ class File():
 
                         # check coadding factor
                         bytes_left = len(ds_rec['buff']) - offs
-                        if 2 * hdr['length'][ncl] == bytes_left:
-                            if hdr['coaddf'][ncl] != 1:
-                                hdr['coaddf'][ncl] = 1
+                        if hdr['coaddf'][ncl] != 1 \
+                           and 2 * hdr['length'][ncl] == bytes_left:
+                            hdr['coaddf'][ncl] = 1
                                 
                         #print(ni, nch, ncl, ds_rec['fep_hdr']['_quality'],
                         #      det['pmtc_hdr']['num_chan'],
@@ -599,7 +608,7 @@ class File():
                             if nbytes > bytes_left:
                                 print('# cluster-size corruption',
                                       ni, nch, ncl)
-                                errstat += 1
+                                det['fep_hdr']['_quality'] |= 0x4
                                 break
                             buff[ncl] = np.frombuffer(ds_rec['buff'],
                                                       dtype='>u2',
@@ -610,7 +619,7 @@ class File():
                             if nbytes > bytes_left:
                                 print('# cluster-size corruption',
                                       ni, nch, ncl)
-                                errstat += 1
+                                det['fep_hdr']['_quality'] |= 0x4
                                 break
                             buff[ncl] = np.frombuffer(ds_rec['buff'],
                                                       dtype='u1',
@@ -620,12 +629,7 @@ class File():
                                 nbytes += 1
                         offs += nbytes
 
-                    # if errstat != 0:
-                    #    break
-
-                # overwrite corrupted DSRs
-                if errstat == 0:
-                    ni += 1
+                ni += 1
 
         print('# read {} detector mds'.format(ni))
 
@@ -639,7 +643,6 @@ class File():
 
             ni = 0
             for ds_rec in ds_info:
-                errstat = 0
                 if ds_rec['fep_hdr']['_quality'] != 0:
                     continue
 
@@ -675,7 +678,6 @@ class File():
 
             ni = 0
             for ds_rec in ds_info:
-                errstat = 0
                 if ds_rec['fep_hdr']['_quality'] != 0:
                     continue
 
