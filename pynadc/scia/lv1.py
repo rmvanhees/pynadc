@@ -18,12 +18,23 @@ import numpy as np
 
 
 # - local functions --------------------------------
-def lv0_consts(key=None):
+def lv1_consts(key=None):
     """
     defines consts used while reading Sciamachy level 0 data
     """
     consts = {}
     consts['mds_size'] = 1247
+
+    consts['max_cluster'] = 64
+    consts['uvn_channels'] = 5
+    consts['swir_channels'] = 3
+    consts['all_channels'] = consts['uvn_channels'] + consts['swir_channels']
+    consts['channel_pixels'] = 1024
+    consts['all_pixels'] = consts['all_channels'] * consts['channel_pixels']
+
+    consts['num_pmd'] = 7
+    consts['num_frac_polv'] = 12
+    consts['num_spec_coeffs'] = 5
 
     if key is None:
         return consts
@@ -72,7 +83,36 @@ class File:
             raise SystemError('file {} incomplete'.format(flname))
 
     # ----- generic data structures -------------------------
+    @staticmethod
+    def __mjd_envi():
+        """
+        Returns numpy-dtype definition for a mjd record
+        """
+        return np.dtype([
+            ('days', '>i4'),
+            ('secnds', '>u4'),
+            ('musec', '>u4')
+        ])
 
+    def mds_dtype(self, state):
+        """
+        Returns numpy-dtype definition for a level 1b mds record
+        """
+        return np.dtype([
+            ('mjd', self.__mjd_envi()),
+            ('dsr_length', '>u4'),
+            ('quality_flag', '>u4'),
+            ('scale_factor', 'u1', (lv1_consts('all_channels'))),
+            ('sat_flag', 'u1'),
+            ('red_grass', 'u1', (state['num_clus'] * state['num_geo'])),
+            ('sun_glint', 'u1', (state['num_geo'])),
+            ('geo', self.__geoloc(state['source'])),
+            ('lv0_hdr', self._lv0_hdr(), (state['num_geo'])),
+            ('pmd', '>f4', (200)),
+            ('polV', self.__frac_pol(), (200)),
+            ('clus', self.__lv1_clus(), (64))
+        ])
+    
     # ----- read routines -------------------------
     def __get_mph__(self):
         """
@@ -203,8 +243,8 @@ class File:
             ('mjd', {'names': ['days', 'secnds', 'musec'],
                      'formats': ['>i4', '>u4', '>u4']}),
             ('flag_attached', 'i1'),
-            ('mean_wv_diff', '>f4', (8)),
-            ('sdev_wv_diff', '>f4', (8)),
+            ('mean_wv_diff', '>f4', (lv1_consts('all_channels'))),
+            ('sdev_wv_diff', '>f4', (lv1_consts('all_channels'))),
             ('spare1', '>u2'),
             ('mean_lc_diff', '>f4', (15)),
             ('flag_sunglint', 'u1'),
@@ -247,11 +287,11 @@ class File:
             ('lc_stray_index', '>f4', (2)),
             ('lc_harm_order', 'u1'),
             ('ds_poly_order', 'u1'),
-            ('do_var_lc_cha', '4a', (3)),
-            ('do_stray_lc_cha', '4a', (8)),
+            ('do_var_lc_cha', '4a', (lv1_consts('swir_channels'))),
+            ('do_stray_lc_cha', '4a', (lv1_consts('all_channels'))),
             ('do_var_lc_pmd', '4a', (2)),
-            ('do_stray_lc_pmd', '4a', (7)),
-            ('electron_bu', '>f4', (8)),
+            ('do_stray_lc_pmd', '4a', (lv1_consts('num_pmd'))),
+            ('electron_bu', '>f4', (lv1_consts('all_channels'))),
             ('ppg_error', '>f4'),
             ('stray_error', '>f4'),
             ('sp_n_phases', 'u1'),
@@ -261,14 +301,14 @@ class File:
             ('h_toa', '>f4'),
             ('lambda_end_gdf', '>f4'),
             ('do_pol_point', 'c', (12)),
-            ('sat_level', '>u2', (8)),
+            ('sat_level', '>u2', (lv1_consts('all_channels'))),
             ('pmd_saturation_limit', '>u2'),
             ('do_use_limb_dark', 'c'),
-            ('do_pixelwise', 'c', (8)),
+            ('do_pixelwise', 'c', (lv1_consts('all_channels'))),
             ('alpha0_asm', '>f4'),
             ('alpha0_ems', '>f4'),
-            ('do_fraunhofer', '5a', (8)),
-            ('do_etalon', '3a', (8)),
+            ('do_fraunhofer', '5a', (lv1_consts('all_channels'))),
+            ('do_etalon', '3a', (lv1_consts('all_channels'))),
             ('do_IB_SD_ETN', 'c', (7)),
             ('do_IB_OC_ETN', 'c', (7)),
             ('level_2_SMR', 'u1', (8))
@@ -284,13 +324,13 @@ class File:
         read Leakage Current Parameters (CLCP)
         """
         record_dtype = np.dtype([
-            ('fpn', '>f4', (8192)),
-            ('fpn_error', '>f4', (8192)),
-            ('lc', '>f4', (8192)),
-            ('lc_error', '>f4', (8192)),
+            ('fpn', '>f4', (lv1_consts('all_pixels'))),
+            ('fpn_error', '>f4', (lv1_consts('all_pixels'))),
+            ('lc', '>f4', (lv1_consts('all_pixels'))),
+            ('lc_error', '>f4', (lv1_consts('all_pixels'))),
             ('pmd_dark', '>f4', (14)),
             ('pmd_dark_error', '>f4', (14)),
-            ('mean_noise', '>f4', (8192))
+            ('mean_noise', '>f4', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('LEAKAGE_CONSTANT')
         with open(self.filename, 'rb') as fp:
@@ -307,10 +347,10 @@ class File:
             ('temperatures', '>f4', (10)),
             ('var_lc', '>f4', (3072)),
             ('var_lc_error', '>f4', (3072)),
-            ('stray', '>f4', (8192)),
-            ('stray_error', '>f4', (8192)),
-            ('pmd_stray', '>f4', (7)),
-            ('pmd_stray_error', '>f4', (7)),
+            ('stray', '>f4', (lv1_consts('all_pixels'))),
+            ('stray_error', '>f4', (lv1_consts('all_pixels'))),
+            ('pmd_stray', '>f4', (lv1_consts('num_pmd'))),
+            ('pmd_stray_error', '>f4', (lv1_consts('num_pmd'))),
             ('pmd_var_lc', '>f4', (2)),
             ('pmd_var_lc_error', '>f4', (2))
         ])
@@ -325,11 +365,11 @@ class File:
         read PPG/Etalon Parameters (PPG)
         """
         record_dtype = np.dtype([
-            ('ppg_fact', '>f4', (8192)),
-            ('etalon_fact', '>f4', (8192)),
-            ('etalon_resid', '>f4', (8192)),
-            ('wls_deg_fact', '>f4', (8192)),
-            ('bdpm', 'u1', (8192))
+            ('ppg_fact', '>f4', (lv1_consts('all_pixels'))),
+            ('etalon_fact', '>f4', (lv1_consts('all_pixels'))),
+            ('etalon_resid', '>f4', (lv1_consts('all_pixels'))),
+            ('wls_deg_fact', '>f4', (lv1_consts('all_pixels'))),
+            ('bdpm', 'u1', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('PPG_ETALON')
         with open(self.filename, 'rb') as fp:
@@ -342,7 +382,7 @@ class File:
         read Precise Basis for Spectral Calibration Parameters (BASE)
         """
         record_dtype = np.dtype([
-            ('wavelen_grid', '>f4', (8192))
+            ('wavelen_grid', '>f4', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('SPECTRAL_BASE')
         with open(self.filename, 'rb') as fp:
@@ -356,9 +396,10 @@ class File:
         """
         record_dtype = np.dtype([
             ('orbit_phase', '>f4'),
-            ('coeffs', '>f8', (8, 5)),
-            ('num_lines', '>u2', (8)),
-            ('wavelen_error', '>f4', (8)),
+            ('coeffs', '>f8', (lv1_consts('all_channels'),
+                               lv1_consts('num_spec_coeffs'))),
+            ('num_lines', '>u2', (lv1_consts('all_channels'))),
+            ('wavelen_error', '>f4', (lv1_consts('all_channels'))),
         ])
         dsd = self.dsd_by_name('SPECTRAL_CALIBRATION')
         with open(self.filename, 'rb') as fp:
@@ -372,17 +413,17 @@ class File:
         """
         record_dtype = np.dtype([
             ('spec_id', 'a2'),
-            ('wavelength', '>f4', (8192)),
-            ('smr', '>f4', (8192)),
-            ('smr_precision', '>f4', (8192)),
-            ('smr_accuracy', '>f4', (8192)),
-            ('etalon', '>f4', (8192)),
+            ('wavelength', '>f4', (lv1_consts('all_pixels'))),
+            ('smr', '>f4', (lv1_consts('all_pixels'))),
+            ('smr_precision', '>f4', (lv1_consts('all_pixels'))),
+            ('smr_accuracy', '>f4', (lv1_consts('all_pixels'))),
+            ('etalon', '>f4', (lv1_consts('all_pixels'))),
             ('avg_azi', '>f4'),
             ('avg_ele', '>f4'),
             ('avg_sun_ele', '>f4'),
-            ('mean_pmd', '>f4', (7)),
-            ('pmd_nd_out', '>f4', (7)),
-            ('pmd_nd_in', '>f4', (7)),
+            ('mean_pmd', '>f4', (lv1_consts('num_pmd'))),
+            ('pmd_nd_out', '>f4', (lv1_consts('num_pmd'))),
+            ('pmd_nd_in', '>f4', (lv1_consts('num_pmd'))),
             ('doppler', '>f4')
         ])
         dsd = self.dsd_by_name('SUN_REFERENCE')
@@ -397,8 +438,8 @@ class File:
         """
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
-            ('mu2', '>f4', (8192)),
-            ('mu3', '>f4', (8192))
+            ('mu2', '>f4', (lv1_consts('all_pixels'))),
+            ('mu3', '>f4', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('POL_SENS_NADIR')
         with open(self.filename, 'rb') as fp:
@@ -413,8 +454,8 @@ class File:
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
             ('ang_asm', '>f4'),
-            ('mu2', '>f4', (8192)),
-            ('mu3', '>f4', (8192))
+            ('mu2', '>f4', (lv1_consts('all_pixels'))),
+            ('mu3', '>f4', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('POL_SENS_LIMB')
         with open(self.filename, 'rb') as fp:
@@ -429,8 +470,8 @@ class File:
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
             ('ang_asm', '>f4'),
-            ('mu2', '>f4', (8192)),
-            ('mu3', '>f4', (8192))
+            ('mu2', '>f4', (lv1_consts('all_pixels'))),
+            ('mu3', '>f4', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('POL_SENS_OCC')
         with open(self.filename, 'rb') as fp:
@@ -444,7 +485,7 @@ class File:
         """
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
-            ('sensitivity', '>f4', (8192))
+            ('sensitivity', '>f4', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('RAD_SEND_NADIR')
         with open(self.filename, 'rb') as fp:
@@ -459,7 +500,7 @@ class File:
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
             ('ang_asm', '>f4'),
-            ('sensitivity', '>f4', (8192))
+            ('sensitivity', '>f4', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('RAD_SENS_LIMB')
         with open(self.filename, 'rb') as fp:
@@ -474,7 +515,7 @@ class File:
         record_dtype = np.dtype([
             ('ang_esm', '>f4'),
             ('ang_asm', '>f4'),
-            ('sensitivity', '>f4', (8192))
+            ('sensitivity', '>f4', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('RAD_SENS_OCC')
         with open(self.filename, 'rb') as fp:
@@ -487,15 +528,15 @@ class File:
         read Errors on Key Data (EKD)
         """
         record_dtype = np.dtype([
-            ('mu2_nadir', '>f4', (8192)),
-            ('mu3_nadir', '>f4', (8192)),
-            ('mu2_limb', '>f4', (8192)),
-            ('mu3_limb', '>f4', (8192)),
-            ('sensitivity_obm', '>f4', (8192)),
-            ('sensitivity_nadir', '>f4', (8192)),
-            ('sensitivity_limb', '>f4', (8192)),
-            ('sensitivity_sun', '>f4', (8192)),
-            ('bsdf', '>f4', (8192))
+            ('mu2_nadir', '>f4', (lv1_consts('all_pixels'))),
+            ('mu3_nadir', '>f4', (lv1_consts('all_pixels'))),
+            ('mu2_limb', '>f4', (lv1_consts('all_pixels'))),
+            ('mu3_limb', '>f4', (lv1_consts('all_pixels'))),
+            ('sensitivity_obm', '>f4', (lv1_consts('all_pixels'))),
+            ('sensitivity_nadir', '>f4', (lv1_consts('all_pixels'))),
+            ('sensitivity_limb', '>f4', (lv1_consts('all_pixels'))),
+            ('sensitivity_sun', '>f4', (lv1_consts('all_pixels'))),
+            ('bsdf', '>f4', (lv1_consts('all_pixels')))
         ])
         dsd = self.dsd_by_name('ERRORS_ON_KEY_DATA')
         with open(self.filename, 'rb') as fp:
@@ -550,23 +591,30 @@ class File:
             ('duration', '>u2'),
             ('intg_max', '>u2'),
             ('num_clus', '>u2'),
-            ('Clcon', {'names': ['clus_id', 'chan_id', 'start', 'length',
-                                 'pet', 'intg', 'coaddf', 'readouts',
-                                 'clus_type'],
+            ('Clcon', {'names': ['id', 'channel', 'start', 'length', 'pet',
+                                 'intg', 'coaddf', 'readouts', 'type'],
                        'formats': ['u1', 'u1', '>u2', '>u2', '>f4',
-                                   '>u2', '>u2', '>u2', 'u1']}, (64)),
+                                   '>u2', '>u2', '>u2', 'u1']},
+             (lv1_consts('max_clusters'))),
             ('mds_type', 'u1'),
             ('num_geo', '>u2'),
             ('num_pmd', '>u2'),
             ('num_intg', '>u2'),
-            ('intg', '>u2', (64)),
-            ('polv', '>u2', (64)),
+            ('intg', '>u2', (lv1_consts('max_clusters'))),
+            ('polv', '>u2', (lv1_consts('max_clusters'))),
             ('num_polv', '>u2'),
-            ('number', '>u2'),
-            ('length', '>u4')
+            ('num_dsr', '>u2'),
+            ('length_dsr', '>u4')
         ])
         dsd = self.dsd_by_name('STATES')
         with open(self.filename, 'rb') as fp:
             fp.seek(dsd['DS_OFFSET'])
             buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
         return buff
+
+    # read SCIAMACHY_SOURCE_PACKETS
+    def get_mds(self, state_id=None):
+        """
+        read Sciamachy level 0 MDS records
+        """
+        return None

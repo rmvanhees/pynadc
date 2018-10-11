@@ -513,7 +513,7 @@ class File():
                     indx_det.append(ni)
                     offs_bcps = 0
                 else:
-                    raise RuntimeWarning('unknown packet type {}'.format(
+                    print('# warning: unknown packet type {}'.format(
                         ds_rec['data_hdr']['packet_type']))
                     ds_rec['data_hdr']['packet_type'] = 1 
                     indx_det.append(ni)
@@ -530,17 +530,10 @@ class File():
 
         # ----- read level 0 detector data packets -----
         if indx_det:
-            # remove corrupted states
-            ds_info = check_dsr_in_states(ds_buffer, indx_det)
-            num_det = np.sum(ds_info['fep_hdr']['_quality'] == 0)
-
-            det_mds = np.empty(num_det, dtype=self.det_mds_dtype())
+            det_mds = np.empty(len(indx_det), dtype=self.det_mds_dtype())
 
             ni = 0
-            for ds_rec in ds_info:
-                if ds_rec['fep_hdr']['_quality'] != 0:
-                    continue
-                
+            for ds_rec in ds_buffer[indx_det]:
                 # copy fixed part of the detector MDS
                 offs = 0
                 det = det_mds[ni]
@@ -556,16 +549,20 @@ class File():
             
                 # read channel data blocks
                 channel = det['chan_data']
-                # mask bit-flips in parameter for the number of channels
                 for nch in range(det['pmtc_hdr']['num_chan'] & 0xF):
+                    if offs == len(ds_rec['buff']):
+                        det['pmtc_hdr']['num_chan'] = nch
+                        break
+
                     channel['hdr'][nch] = np.frombuffer(ds_rec['buff'],
                                                         dtype=self.__chan_hdr(),
                                                         count=1,
                                                         offset=offs)
                     offs += self.__chan_hdr().itemsize
                     if channel['hdr']['sync'][nch] != 0xAAAA:
-                        print('# channel-sync corruption', ni, nch, ncl)
+                        print('# channel-sync corruption', ni, nch)
                         det['fep_hdr']['_quality'] |= 0x1
+                        det['pmtc_hdr']['num_chan'] = nch
                         break
 
                     # read cluster data
@@ -573,7 +570,6 @@ class File():
                     buff = channel['clus_data'][nch]
                     for ncl in range(channel['hdr']['clusters'][nch]):
                         if offs == len(ds_rec['buff']):
-                            channel['hdr']['clusters'][nch] = ncl
                             break
 
                         hdr[ncl] = np.frombuffer(ds_rec['buff'],
@@ -596,7 +592,7 @@ class File():
                            and 2 * hdr['length'][ncl] == bytes_left:
                             hdr['coaddf'][ncl] = 1
                                 
-                        #print(ni, nch, ncl, ds_rec['fep_hdr']['_quality'],
+                        # print(ni, nch, ncl, ds_rec['fep_hdr']['_quality'],
                         #      det['pmtc_hdr']['num_chan'],
                         #      channel['hdr']['sync'][nch],
                         #      channel['hdr']['clusters'][nch],
@@ -609,6 +605,7 @@ class File():
                                 print('# cluster-size corruption',
                                       ni, nch, ncl)
                                 det['fep_hdr']['_quality'] |= 0x4
+                                buff[ncl] = None
                                 break
                             buff[ncl] = np.frombuffer(ds_rec['buff'],
                                                       dtype='>u2',
@@ -620,6 +617,7 @@ class File():
                                 print('# cluster-size corruption',
                                       ni, nch, ncl)
                                 det['fep_hdr']['_quality'] |= 0x4
+                                buff[ncl] = None
                                 break
                             buff[ncl] = np.frombuffer(ds_rec['buff'],
                                                       dtype='u1',
@@ -628,77 +626,67 @@ class File():
                             if (nbytes % 2) == 1:
                                 nbytes += 1
                         offs += nbytes
-
+                    else:
+                        continue
+                    # only excecuted if a break occurred during read of
+                    # cluster data
+                    channel['hdr']['clusters'][nch] = ncl
+                    det['pmtc_hdr']['num_chan'] = nch
+                    break
                 ni += 1
 
         print('# read {} detector mds'.format(ni))
 
         # ----- read level 0 auxiliary data packets -----
         if indx_aux:
-            # remove corrupted states
-            ds_info = check_dsr_in_states(ds_buffer, indx_aux)
-            num_aux = np.sum(ds_info['fep_hdr']['_quality'] == 0)
-
-            aux_mds = np.empty(num_aux, dtype=self.aux_mds_dtype())
+            aux_mds = np.empty(len(indx_aux), dtype=self.aux_mds_dtype())
 
             ni = 0
-            for ds_rec in ds_info:
-                if ds_rec['fep_hdr']['_quality'] != 0:
-                    continue
-
+            for ds_rec in ds_buffer[indx_aux]:
                 # copy fixed part of the auxiliary MDS
-                offs = 0
                 aux = aux_mds[ni]
                 for key in ds_info_dtype.names:
                     aux[key] = ds_rec[key]
 
                 # read auxiliary specific part from buffer
-                aux['pmtc_hdr'] = np.frombuffer(ds_rec['buff'],
-                                                dtype=self.__aux_pmtc_hdr(),
-                                                count=1,
-                                                offset=offs)
-                offs += self.__aux_pmtc_hdr().itemsize
+                aux['pmtc_hdr'] = np.frombuffer(
+                    ds_rec['buff'],
+                    dtype=self.__aux_pmtc_hdr(),
+                    count=1,
+                    offset=0)
 
                 aux['pmtc_frame'] = np.frombuffer(
                     ds_rec['buff'],
                     dtype=self.__pmtc_frame(),
                     count=lv0_consts('num_lv0_aux_pmtc_frame'),
-                    offset=offs)
+                    offset=self.__aux_pmtc_hdr().itemsize)
                 ni += 1
 
         print('# read {} auxiliary mds'.format(ni))
 
         # ----- read level 0 PMD data packets -----
         if indx_pmd:
-            # remove corrupted states
-            ds_info = check_dsr_in_states(ds_buffer, indx_pmd)
-            num_pmd = np.sum(ds_info['fep_hdr']['_quality'] == 0)
-            
-            pmd_mds = np.empty(num_pmd, dtype=self.pmd_mds_dtype())
+            pmd_mds = np.empty(len(indx_pmd), dtype=self.pmd_mds_dtype())
 
             ni = 0
-            for ds_rec in ds_info:
-                if ds_rec['fep_hdr']['_quality'] != 0:
-                    continue
-
+            for ds_rec in ds_buffer[indx_pmd]:
                 # copy fixed part of the PMD MDS
-                offs = 0
                 pmd = pmd_mds[ni]
                 for key in ds_info_dtype.names:
                     pmd[key] = ds_rec[key]
 
                 # read PMD specific part from buffer
-                pmd['temp'] = np.frombuffer(ds_rec['buff'],
-                                            dtype='>u2',
-                                            count=1,
-                                            offset=offs)
-                offs += 2
+                pmd['temp'] = np.frombuffer(
+                    ds_rec['buff'],
+                    dtype='>u2',
+                    count=1,
+                    offset=0)
 
                 pmd['pmd_data'] = np.frombuffer(
                     ds_rec['buff'],
                     dtype=self.__pmd_data(),
                     count=lv0_consts('num_lv0_pmd_packets'),
-                    offset=offs)
+                    offset=2)
                 ni += 1
 
         print('# read {} PMD mds'.format(ni))
