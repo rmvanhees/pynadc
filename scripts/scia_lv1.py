@@ -36,6 +36,8 @@ def main():
                        help='select data from given orbit, preferably \'Y\'')
     group.add_argument('file', nargs='?', type=str,
                        help='read data from given file')
+    parser.add_argument('--state', nargs='+', type=int,
+                        help='must be the last argument on the command-line')
     args = parser.parse_args()
 
     scia_fl = ""
@@ -92,7 +94,10 @@ def main():
 
     _ = obj.get_states()
 
-    _ = obj.get_mds()
+    mds_list = obj.get_mds(state_id=args.state)
+    if mds_list:
+        for key in mds_list[0][0].dtype.names:
+            print(key, ' : ', mds_list[0][0][key])
 
 
 if __name__ == '__main__':

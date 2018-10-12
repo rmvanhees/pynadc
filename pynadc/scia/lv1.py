@@ -225,7 +225,10 @@ class File:
                 ('sign', '>u2'),
                 ('stray', 'u1')
             ])
-
+        # struct is hard to read!
+        # sign contains
+        #     coadded detector signal (unsigned 24bit: sign & 0xffffff)
+        #     correction (signed 8 bit) (sign >> 24) > 127: val - 256
         return np.dtype([
             ('sign', '>u4'),
             ('stray', 'u1')
@@ -235,12 +238,12 @@ class File:
         """
         Returns numpy-dtype definition for a level 1b mds record
         """
-        n_aux = state['num_geo'] / state['num_dsr']
-        n_pmd = lv1_consts('num_pmd') * state['num_pmd'] / state['num_dsr']
-        n_polv = state['num_polV'] / state['num_dsr']
+        n_aux = state['num_geo'] // state['num_dsr']
+        n_pmd = lv1_consts('num_pmd') * state['num_pmd'] // state['num_dsr']
+        n_polv = state['num_polv'] // state['num_dsr']
 
         if state['mds_type'] == 1:   # Nadir
-            return np.dtype([
+            dtype_list = [
                 ('mjd', self.__mjd_envi()),
                 ('dsr_length', '>u4'),
                 ('quality_flag', 'u1'),
@@ -251,11 +254,10 @@ class File:
                 ('geo', self.__geo_nadir(), (n_aux)),
                 ('lv0_hdr', self.__lv0_hdr(), (n_aux)),
                 ('pmd', '>f4', (n_pmd)),
-                ('polV', self.__frac_pol(), (n_polv))
-            ])
-
-        if state['mds_type'] in [2, 3]:   # Limb & Occultation
-            return np.dtype([
+                ('frac_pol', self.__frac_pol(), (n_polv))
+            ]
+        elif state['mds_type'] in [2, 3]:   # Limb & Occultation
+            dtype_list = [
                 ('mjd', self.__mjd_envi()),
                 ('dsr_length', '>u4'),
                 ('quality_flag', 'u1'),
@@ -266,20 +268,30 @@ class File:
                 ('geo', self.__geo_limb(), (n_aux)),
                 ('lv0_hdr', self.__lv0_hdr(), (n_aux)),
                 ('pmd', '>f4', (n_pmd)),
-                ('polV', self.__frac_pol(), (n_polv))
-            ])
+                ('frac_pol', self.__frac_pol(), (n_polv))
+            ]
+        else:
+            dtype_list = [
+                ('mjd', self.__mjd_envi()),
+                ('dsr_length', '>u4'),
+                ('quality_flag', 'u1'),
+                ('scale_factor', 'u1', (lv1_consts('all_channels'))),
+                ('sat_flag', 'u1', (n_aux)),
+                ('red_grass', 'u1', (n_aux, state['num_clus'])),
+                ('sun_glint', 'u1', (n_aux)),
+                ('geo', self.__geo_mon(), (n_aux)),
+                ('lv0_hdr', self.__lv0_hdr(), (n_aux))
+            ]
 
-        return np.dtype([
-            ('mjd', self.__mjd_envi()),
-            ('dsr_length', '>u4'),
-            ('quality_flag', 'u1'),
-            ('scale_factor', 'u1', (lv1_consts('all_channels'))),
-            ('sat_flag', 'u1', (n_aux)),
-            ('red_grass', 'u1', (n_aux, state['num_clus'])),
-            ('sun_glint', 'u1', (n_aux)),
-            ('geo', self.__geo_mon(), (n_aux)),
-            ('lv0_hdr', self.__lv0_hdr(), (n_aux))
-        ])
+        for ncl in range(state['num_clus']):
+            count = (state['Clcon']['n_read'][ncl]
+                     * state['Clcon']['length'][ncl])
+            dtype_list.append(
+                ('clus_{:02d}'.format(ncl),
+                 self.__lv1_clus(state['Clcon']['coaddf'][ncl]),
+                 (count)))
+
+        return np.dtype(dtype_list)
 
     # ----- read routines -------------------------
     def __get_mph__(self):
@@ -760,7 +772,7 @@ class File:
             ('intg_max', '>u2'),
             ('num_clus', '>u2'),
             ('Clcon', {'names': ['id', 'channel', 'start', 'length', 'pet',
-                                 'intg', 'coaddf', 'readouts', 'type'],
+                                 'intg', 'coaddf', 'n_read', 'type'],
                        'formats': ['u1', 'u1', '>u2', '>u2', '>f4',
                                    '>u2', '>u2', '>u2', 'u1']},
              (lv1_consts('max_clusters'))),
@@ -796,27 +808,51 @@ class File:
 
         states = self.get_states()
 
+        all_mds = ()
         with open(self.filename, 'rb') as fp:
             for state in states:
-                if state['mds_type'] == 1:
-                    fp.seek(nadir_offs)
-                    for n_dsr in range(state['num_dsr']):
-                        cbuff = fp.read(state['length_dsr'])
-                    nadir_offs += state['num_dsr'] * state['length_dsr']
-                elif state['mds_type'] == 2:
-                    fp.seek(limb_offs)
-                    for n_dsr in range(state['num_dsr']):
-                        cbuff = fp.read(state['length_dsr'])
-                    limb_offs += state['num_dsr'] * state['length_dsr']
-                elif state['mds_type'] == 3:
-                    fp.seek(occul_offs)
-                    for n_dsr in range(state['num_dsr']):
-                        cbuff = fp.read(state['length_dsr'])
-                    occul_offs += state['num_dsr'] * state['length_dsr']
-                else:
-                    fp.seek(moni_offs)
-                    for n_dsr in range(state['num_dsr']):
-                        cbuff = fp.read(state['length_dsr'])
-                    moni_offs += state['num_dsr'] * state['length_dsr']
+                read_flag = False
+                mds_dtype = None
+                if state['flag_attached'] != 0:
+                    continue
 
-        return []
+                if state_id is None or state['state_id'] in state_id:
+                    read_flag = True
+                    mds_dtype = self.mds_dtype(state)
+
+                    print(state['mds_type'], state['state_id'],
+                          state['orbit_phase'],
+                          state['num_clus'], state['num_geo'],
+                          state['num_dsr'], state['length_dsr'])
+
+                mds_list = []
+                for n_dsr in range(state['num_dsr']):
+                    if state['mds_type'] == 1:
+                        fp.seek(nadir_offs)
+                        nadir_offs += state['length_dsr']
+                    elif state['mds_type'] == 2:
+                        fp.seek(limb_offs)
+                        limb_offs += state['length_dsr']
+                    elif state['mds_type'] == 3:
+                        fp.seek(occul_offs)
+                        occul_offs += state['length_dsr']
+                    else:
+                        fp.seek(moni_offs)
+                        moni_offs += state['length_dsr']
+
+                    if read_flag:
+                        mds = np.fromfile(fp, mds_dtype, count=1)[0]
+
+                        # check if we read all bytes
+                        if mds_dtype.itemsize != state['length_dsr']:
+                            print('# warning: incomplete read', n_dsr,
+                                  mds_dtype.itemsize, state['length_dsr'])
+
+                        # combine data of current state
+                        mds_list.append(mds)
+
+                # add all MDS of a state to output tuple
+                if mds_list:
+                    all_mds += (mds_list,)
+
+        return all_mds

@@ -36,6 +36,8 @@ def main():
                        help='select data from given orbit')
     group.add_argument('file', nargs='?', type=str,
                        help='read data from given file')
+    parser.add_argument('--state', nargs='+', type=int,
+                        help='must be the last argument on the command-line')
     args = parser.parse_args()
 
     scia_fl = ""
@@ -65,7 +67,7 @@ def main():
         print('exception occurred in module pynadc.scia.lv0')
         raise
 
-    obj.get_mds()
+    obj.get_mds(state_id=args.state)
 
 
 if __name__ == '__main__':

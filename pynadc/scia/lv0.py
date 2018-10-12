@@ -536,6 +536,10 @@ class File():
 
             ni = 0
             for ds_rec in ds_buffer[indx_det]:
+                if state_id is not None:
+                    if ds_rec['data_hdr']['state_id'] not in state_id:
+                        continue
+                
                 # copy fixed part of the detector MDS
                 offs = 0
                 det = det_mds[ni]
@@ -651,6 +655,10 @@ class File():
 
             ni = 0
             for ds_rec in ds_buffer[indx_aux]:
+                if state_id is not None:
+                    if ds_rec['data_hdr']['state_id'] not in state_id:
+                        continue
+
                 # copy fixed part of the auxiliary MDS
                 aux = aux_mds[ni]
                 for key in ds_info_dtype.names:
@@ -678,6 +686,10 @@ class File():
 
             ni = 0
             for ds_rec in ds_buffer[indx_pmd]:
+                if state_id is not None:
+                    if ds_rec['data_hdr']['state_id'] not in state_id:
+                        continue
+
                 # copy fixed part of the PMD MDS
                 pmd = pmd_mds[ni]
                 for key in ds_info_dtype.names:

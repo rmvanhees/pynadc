@@ -9,9 +9,5 @@ atmospheric observations. The following products are supported:
 In addition, the pynadc package provides read access to several satellite
 instruments designed spectral atmospheric observations:
  * Sciamachy (ENVISAT) :  limited to Sciamachy level 0 and 1b products
-      Read access is restricted to product headers and (G)ADS within these
-      products. Implementation to access to DSR's is not foreseen.
 
  The software requires python3, numpy, h5py
-
- The software is intended for SRON internal usage.
