@@ -3,7 +3,7 @@ This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
-Methods to read Sciamachy level 1b data products
+Methods to read Sciamachy level 1b data products (ESA/PDS format)
 
 Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
    All Rights Reserved
@@ -25,7 +25,7 @@ def lv1_consts(key=None):
     consts = {}
     consts['mds_size'] = 1247
 
-    consts['max_cluster'] = 64
+    consts['max_clusters'] = 64
     consts['uvn_channels'] = 5
     consts['swir_channels'] = 3
     consts['all_channels'] = consts['uvn_channels'] + consts['swir_channels']
@@ -41,13 +41,13 @@ def lv1_consts(key=None):
     if key in consts:
         return consts[key]
 
-    raise KeyError('level 0 constant {} is not defined'.format(key))
+    raise KeyError('level 1b constant {} is not defined'.format(key))
 
 
 # - Classes --------------------------------------
 class File:
     """
-    Class to read Sciamachy level 0 products
+    Class to read Sciamachy level 1b products (ESA/PDS format)
     """
     def __init__(self, flname):
         """
@@ -94,29 +94,197 @@ class File:
             ('musec', '>u4')
         ])
 
+    @staticmethod
+    def __packet_hdr():
+        """
+        Returns numpy-dtype definition for a packet header
+        """
+        return np.dtype([
+            ('id', '>u2'),
+            ('control', '>u2'),
+            ('length', '>u2')
+        ])
+
+    @staticmethod
+    def __data_hdr():
+        """
+        Returns numpy-dtype definition for a data-field header
+        """
+        return np.dtype([
+            ('length', '>u2'),
+            ('category', 'u1'),
+            ('state_id', 'u1'),
+            ('icu_time', '>u4'),
+            ('rdv', '>u2'),
+            ('packet_type', 'u1'),
+            ('overflow', 'u1')
+        ])
+
+    @staticmethod
+    def __pmtc_hdr():
+        """
+        Returns numpy-dtype definition for a pmtc header
+        """
+        return np.dtype([
+            ('pmtc_1', '>u2'),
+            ('scanner_mode', '>u2'),
+            ('az_param', '>u4'),
+            ('elev_param', '>u4'),
+            ('factors', 'u1', (6))
+        ])
+
+    def __lv0_hdr(self):
+        """
+        Returns numpy-dtype definition for a generic level 0 DSR header
+        """
+        return np.dtype([
+            ('bcps', '>u2'),
+            ('num_chan', '>u2'),
+            ('orbit_vector', '>i4', (8)),
+            ('packet_hdr', self.__packet_hdr()),
+            ('data_hdr', self.__data_hdr()),
+            ('pmtc_hdr', self.__pmtc_hdr())
+        ])
+
+    @staticmethod
+    def __coord():
+        return np.dtype([
+            ('lat', '>i4'),
+            ('lon', '>i4')
+        ])
+
+    def __geo_limb(self):
+        """
+        Returns numpy-dtype definition for geolocation limb measurement
+        """
+        return np.dtype([
+            ('esm_pos', '>f4'),
+            ('asm_pos', '>f4'),
+            ('solar_zenith', '>f4', (3)),
+            ('solar_azimuth', '>f4', (3)),
+            ('los_zenith', '>f4', (3)),
+            ('los_azimuth', '>f4', (3)),
+            ('altitude', '>f4'),
+            ('earth_radius', '>f4'),
+            ('sub_sat_point', self.__coord()),
+            ('tangent_point', self.__coord(), (3)),
+            ('tangent_height', '>f4', (3)),
+            ('doppler_shift', '>f4')
+        ])
+
+    def __geo_nadir(self):
+        """
+        Returns numpy-dtype definition for geolocation nadir measurement
+        """
+        return np.dtype([
+            ('esm_pos', '>f4'),
+            ('solar_zenith', '>f4', (3)),
+            ('solar_azimuth', '>f4', (3)),
+            ('los_zenith', '>f4', (3)),
+            ('los_azimuth', '>f4', (3)),
+            ('altitude', '>f4'),
+            ('earth_radius', '>f4'),
+            ('sub_sat_point', self.__coord()),
+            ('corners', self.__coord(), (4)),
+            ('center', self.__coord())
+        ])
+
+    def __geo_mon(self):
+        """
+        Returns numpy-dtype definition for geolocation monitor measurement
+        """
+        return np.dtype([
+            ('esm_pos', '>f4'),
+            ('asm_pos', '>f4'),
+            ('solar_zenith', '>f4', (3)),
+            ('sub_sat_point', self.__coord())
+        ])
+
+    @staticmethod
+    def __frac_pol():
+        """
+        Returns numpy-dtype definition for fractional polarisation values
+        """
+        return np.dtype([
+            ('q_val', '>f4', (12)),
+            ('q_err', '>f4', (12)),
+            ('u_val', '>f4', (12)),
+            ('u_err', '>f4', (12)),
+            ('wv', '>f4', (13)),
+            ('gdf', '>f4', (3))
+        ])
+
+    @staticmethod
+    def __lv1_clus(coaddf):
+        """
+        Returns numpy-dtype definition for level 1b cluster data
+        """
+        if coaddf == 1:
+            return np.dtype([
+                ('mem', 'i1'),
+                ('sign', '>u2'),
+                ('stray', 'u1')
+            ])
+
+        return np.dtype([
+            ('sign', '>u4'),
+            ('stray', 'u1')
+        ])
+
     def mds_dtype(self, state):
         """
         Returns numpy-dtype definition for a level 1b mds record
         """
+        n_aux = state['num_geo'] / state['num_dsr']
+        n_pmd = lv1_consts('num_pmd') * state['num_pmd'] / state['num_dsr']
+        n_polv = state['num_polV'] / state['num_dsr']
+
+        if state['mds_type'] == 1:   # Nadir
+            return np.dtype([
+                ('mjd', self.__mjd_envi()),
+                ('dsr_length', '>u4'),
+                ('quality_flag', 'u1'),
+                ('scale_factor', 'u1', (lv1_consts('all_channels'))),
+                ('sat_flag', 'u1', (n_aux)),
+                ('red_grass', 'u1', (n_aux, state['num_clus'])),
+                ('sun_glint', 'u1', (n_aux)),
+                ('geo', self.__geo_nadir(), (n_aux)),
+                ('lv0_hdr', self.__lv0_hdr(), (n_aux)),
+                ('pmd', '>f4', (n_pmd)),
+                ('polV', self.__frac_pol(), (n_polv))
+            ])
+
+        if state['mds_type'] in [2, 3]:   # Limb & Occultation
+            return np.dtype([
+                ('mjd', self.__mjd_envi()),
+                ('dsr_length', '>u4'),
+                ('quality_flag', 'u1'),
+                ('scale_factor', 'u1', (lv1_consts('all_channels'))),
+                ('sat_flag', 'u1', (n_aux)),
+                ('red_grass', 'u1', (n_aux, state['num_clus'])),
+                ('sun_glint', 'u1', (n_aux)),
+                ('geo', self.__geo_limb(), (n_aux)),
+                ('lv0_hdr', self.__lv0_hdr(), (n_aux)),
+                ('pmd', '>f4', (n_pmd)),
+                ('polV', self.__frac_pol(), (n_polv))
+            ])
+
         return np.dtype([
             ('mjd', self.__mjd_envi()),
             ('dsr_length', '>u4'),
-            ('quality_flag', '>u4'),
+            ('quality_flag', 'u1'),
             ('scale_factor', 'u1', (lv1_consts('all_channels'))),
-            ('sat_flag', 'u1'),
-            ('red_grass', 'u1', (state['num_clus'] * state['num_geo'])),
-            ('sun_glint', 'u1', (state['num_geo'])),
-            ('geo', self.__geoloc(state['source'])),
-            ('lv0_hdr', self._lv0_hdr(), (state['num_geo'])),
-            ('pmd', '>f4', (200)),
-            ('polV', self.__frac_pol(), (200)),
-            ('clus', self.__lv1_clus(), (64))
+            ('sat_flag', 'u1', (n_aux)),
+            ('red_grass', 'u1', (n_aux, state['num_clus'])),
+            ('sun_glint', 'u1', (n_aux)),
+            ('geo', self.__geo_mon(), (n_aux)),
+            ('lv0_hdr', self.__lv0_hdr(), (n_aux))
         ])
-    
+
     # ----- read routines -------------------------
     def __get_mph__(self):
         """
-        read Sciamachy level 0 MPH header
+        read Sciamachy level 1b MPH header
         """
         fp = open(self.filename, 'rt', encoding='latin-1')
 
@@ -151,10 +319,10 @@ class File:
 
     def __get_sph__(self):
         """
-        read Sciamachy level 0 SPH header
+        read Sciamachy level 1b SPH header
         """
         fp = open(self.filename, 'rt', encoding='latin-1')
-        fp.seek(lv0_consts('mds_size'))     # skip MPH header
+        fp.seek(lv1_consts('mds_size'))     # skip MPH header
 
         for line in fp:
             words = line.split('=')
@@ -188,14 +356,14 @@ class File:
 
     def __get_dsd__(self):
         """
-        read Sciamachy level 0 DSD records
+        read Sciamachy level 1b DSD records
         """
         num_dsd = 0
         self.dsd = [{}]
 
         fp = open(self.filename, 'rt', encoding='latin-1')
         # skip headers MPH & SPH
-        fp.seek(lv0_consts('mds_size') + self.mph['SPH_SIZE']
+        fp.seek(lv1_consts('mds_size') + self.mph['SPH_SIZE']
                 - self.mph['NUM_DSD'] * self.mph['DSD_SIZE'])
 
         for line in fp:
@@ -615,6 +783,40 @@ class File:
     # read SCIAMACHY_SOURCE_PACKETS
     def get_mds(self, state_id=None):
         """
-        read Sciamachy level 0 MDS records
+        read Sciamachy level 1b MDS records
         """
-        return None
+        dsd = self.dsd_by_name('NADIR')
+        nadir_offs = dsd['DS_OFFSET']
+        dsd = self.dsd_by_name('LIMB')
+        limb_offs = dsd['DS_OFFSET']
+        dsd = self.dsd_by_name('OCCULTATION')
+        occul_offs = dsd['DS_OFFSET']
+        dsd = self.dsd_by_name('MONITORING')
+        moni_offs = dsd['DS_OFFSET']
+
+        states = self.get_states()
+
+        with open(self.filename, 'rb') as fp:
+            for state in states:
+                if state['mds_type'] == 1:
+                    fp.seek(nadir_offs)
+                    for n_dsr in range(state['num_dsr']):
+                        cbuff = fp.read(state['length_dsr'])
+                    nadir_offs += state['num_dsr'] * state['length_dsr']
+                elif state['mds_type'] == 2:
+                    fp.seek(limb_offs)
+                    for n_dsr in range(state['num_dsr']):
+                        cbuff = fp.read(state['length_dsr'])
+                    limb_offs += state['num_dsr'] * state['length_dsr']
+                elif state['mds_type'] == 3:
+                    fp.seek(occul_offs)
+                    for n_dsr in range(state['num_dsr']):
+                        cbuff = fp.read(state['length_dsr'])
+                    occul_offs += state['num_dsr'] * state['length_dsr']
+                else:
+                    fp.seek(moni_offs)
+                    for n_dsr in range(state['num_dsr']):
+                        cbuff = fp.read(state['length_dsr'])
+                    moni_offs += state['num_dsr'] * state['length_dsr']
+
+        return []

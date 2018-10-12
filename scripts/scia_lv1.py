@@ -63,12 +63,8 @@ def main():
     try:
         obj = lv1.File(scia_fl)
     except:
-        print('exception occurred in module pynadc.scia.lv0')
+        print('exception occurred in module pynadc.scia.lv1')
         raise
-
-    print(obj.mph)
-    print(obj.sph)
-    print(obj.dsd)
 
     _ = obj.get_sqads()
     _ = obj.get_lads()
@@ -95,6 +91,8 @@ def main():
     _ = obj.get_asfp()
 
     _ = obj.get_states()
+
+    _ = obj.get_mds()
 
 
 if __name__ == '__main__':
