@@ -35,52 +35,53 @@ def lv0_consts(key=None):
 
     raise KeyError('level 0 constant {} is not defined'.format(key))
 
+
 def check_dsr_in_states(mds_in, indx_mds, verbose=False, check=False):
-        """
-        This module combines L0 DSR per state ID based on parameter icu_time.
-        
-        """
-        # initialize quality of all DSRs to zero
-        mds = mds_in[indx_mds]
-        mds['fep_hdr']['_quality'] = 0
+    """
+    This module combines L0 DSR per state ID based on parameter icu_time.
+    """
+    # initialize quality of all DSRs to zero
+    mds = mds_in[indx_mds]
+    mds['fep_hdr']['_quality'] = 0
 
-        # combine L0 DSR on parameter icu_time
-        # alternatively one could use parameter state_id
-        _arr = mds['data_hdr']['icu_time']
-        _arr = np.concatenate(([-1], _arr, [-1]))
-        indx = np.where(np.diff(_arr) != 0)[0]
-        num_dsr = np.diff(indx)
-        icu_time = mds['data_hdr']['icu_time'][indx[:-1]]
-        state_id = mds['data_hdr']['state_id'][indx[:-1]]
-        if verbose:
-            for ni in range(num_dsr.size):
-                print('# ', ni, indx[ni], num_dsr[ni],
-                      state_id[ni], icu_time[ni])
+    # combine L0 DSR on parameter icu_time
+    # alternatively one could use parameter state_id
+    _arr = mds['data_hdr']['icu_time']
+    _arr = np.concatenate(([-1], _arr, [-1]))
+    indx = np.where(np.diff(_arr) != 0)[0]
+    num_dsr = np.diff(indx)
+    icu_time = mds['data_hdr']['icu_time'][indx[:-1]]
+    state_id = mds['data_hdr']['state_id'][indx[:-1]]
+    if verbose:
+        for ni in range(num_dsr.size):
+            print('# ', ni, indx[ni], num_dsr[ni],
+                  state_id[ni], icu_time[ni])
 
-        if not check:
-            return mds
+    if not check:
+        return mds
 
-        # Here we simply reject the shortest continuous set of measurements
-        # with the same icu_time
-        # Alternatively, one should reject duplicated DSR after reading the
-        # whole DSR. For example, based on presence of data corruption
-        uniq, inverse, count = np.unique(icu_time,
-                                         return_inverse=True,
-                                         return_counts=True)
-        if np.any(count > 1):
-            for ni in np.where(count > 1)[0]:
-                indx_dbl = np.where(inverse == ni)[0]
-                # print(ni, indx_dbl, icu_time[indx_dbl], num_dsr[indx_dbl])
-                for reject in np.argsort(num_dsr[indx_dbl])[:-1]:
-                    start = indx[indx_dbl[reject]]
-                    end = start + num_dsr[indx_dbl[reject]]
-                    # print(ni, reject, start, end)
-                    mds['fep_hdr']['_quality'][start:end] = 0xFFFF
+    # Here we simply reject the shortest continuous set of measurements
+    # with the same icu_time
+    # Alternatively, one should reject duplicated DSR after reading the
+    # whole DSR. For example, based on presence of data corruption
+    _, inverse, count = np.unique(icu_time,
+                                  return_inverse=True,
+                                  return_counts=True)
+    if np.any(count > 1):
+        for ni in np.where(count > 1)[0]:
+            indx_dbl = np.where(inverse == ni)[0]
+            # print(ni, indx_dbl, icu_time[indx_dbl], num_dsr[indx_dbl])
+            for reject in np.argsort(num_dsr[indx_dbl])[:-1]:
+                start = indx[indx_dbl[reject]]
+                end = start + num_dsr[indx_dbl[reject]]
+                # print(ni, reject, start, end)
+                mds['fep_hdr']['_quality'][start:end] = 0xFFFF
 
         print('# rejected {} DSRs'.format(
             np.sum(mds['fep_hdr']['_quality'] != 0)))
 
-        return mds
+    return mds
+
 
 # - Classes --------------------------------------
 class File():
@@ -493,7 +494,7 @@ class File():
                 # check for corrupted data
                 num_bytes = self.bytes_left(ds_info, ds_info_dtype.itemsize)
                 if num_bytes < 0:
-                    print('# read {} of {} DSRs'.format(ni , dsd['NUM_DSR']))
+                    print('# read {} of {} DSRs'.format(ni, dsd['NUM_DSR']))
                     break
 
                 # copy read buffer
@@ -501,21 +502,21 @@ class File():
                     ds_rec[key] = ds_info[key]
 
                 ds_rec['data_hdr']['packet_type'] >>= 4
-                if ds_rec['data_hdr']['packet_type'] == 2 \
-                   or ds_rec['fep_hdr']['length'] == 1659:
-                    indx_aux.append(ni)
-                    offs_bcps = 20
-                elif ds_rec['data_hdr']['packet_type'] == 3 \
-                     or ds_rec['fep_hdr']['length'] == 6813:
-                    indx_pmd.append(ni)
-                    offs_bcps = 32
-                elif ds_rec['data_hdr']['packet_type'] == 1:
+                if ds_rec['data_hdr']['packet_type'] == 1:
                     indx_det.append(ni)
                     offs_bcps = 0
+                elif (ds_rec['data_hdr']['packet_type'] == 2
+                      or ds_rec['fep_hdr']['length'] == 1659):
+                    indx_aux.append(ni)
+                    offs_bcps = 20
+                elif (ds_rec['data_hdr']['packet_type'] == 3
+                      or ds_rec['fep_hdr']['length'] == 6813):
+                    indx_pmd.append(ni)
+                    offs_bcps = 32
                 else:
                     print('# warning: unknown packet type {}'.format(
                         ds_rec['data_hdr']['packet_type']))
-                    ds_rec['data_hdr']['packet_type'] = 1 
+                    ds_rec['data_hdr']['packet_type'] = 1
                     indx_det.append(ni)
                     offs_bcps = 0
 
@@ -526,7 +527,8 @@ class File():
                 ds_rec['bcps'] = np.frombuffer(
                     ds_rec['buff'], '>i2', count=1, offset=offs_bcps)
 
-        print('# number of DSRs: ', len(indx_det), len(indx_aux), len(indx_pmd))
+        print('# number of DSRs: ',
+              len(indx_det), len(indx_aux), len(indx_pmd))
 
         # ----- read level 0 detector data packets -----
         if indx_det:
@@ -546,23 +548,26 @@ class File():
                                                 count=1,
                                                 offset=offs)
                 offs += self.__det_pmtc_hdr().itemsize
-            
+                det['pmtc_hdr']['num_chan'] &= 0xF
+
                 # read channel data blocks
                 channel = det['chan_data']
-                for nch in range(det['pmtc_hdr']['num_chan'] & 0xF):
+                for nch in range(det['pmtc_hdr']['num_chan']):
                     if offs == len(ds_rec['buff']):
                         det['pmtc_hdr']['num_chan'] = nch
                         break
 
-                    channel['hdr'][nch] = np.frombuffer(ds_rec['buff'],
-                                                        dtype=self.__chan_hdr(),
-                                                        count=1,
-                                                        offset=offs)
+                    channel['hdr'][nch] = np.frombuffer(
+                        ds_rec['buff'],
+                        dtype=self.__chan_hdr(),
+                        count=1,
+                        offset=offs)
                     offs += self.__chan_hdr().itemsize
+                    channel['hdr']['clusters'][nch] &= 0xF
                     if channel['hdr']['sync'][nch] != 0xAAAA:
                         print('# channel-sync corruption', ni, nch)
-                        det['fep_hdr']['_quality'] |= 0x1
                         det['pmtc_hdr']['num_chan'] = nch
+                        det['fep_hdr']['_quality'] |= 0x1
                         break
 
                     # read cluster data
@@ -570,6 +575,7 @@ class File():
                     buff = channel['clus_data'][nch]
                     for ncl in range(channel['hdr']['clusters'][nch]):
                         if offs == len(ds_rec['buff']):
+                            channel['hdr']['clusters'][nch] = ncl
                             break
 
                         hdr[ncl] = np.frombuffer(ds_rec['buff'],
@@ -579,6 +585,7 @@ class File():
                         offs += self.__clus_hdr().itemsize
                         if hdr['sync'][ncl] != 0xBBBB:
                             print('# cluster-sync corruption', ni, nch, ncl)
+                            channel['hdr']['clusters'][nch] = ncl
                             det['fep_hdr']['_quality'] |= 0x2
                             break
 
@@ -591,12 +598,12 @@ class File():
                         if hdr['coaddf'][ncl] != 1 \
                            and 2 * hdr['length'][ncl] == bytes_left:
                             hdr['coaddf'][ncl] = 1
-                                
+
                         # print(ni, nch, ncl, ds_rec['fep_hdr']['_quality'],
                         #      det['pmtc_hdr']['num_chan'],
                         #      channel['hdr']['sync'][nch],
                         #      channel['hdr']['clusters'][nch],
-                        #      hdr['sync'][ncl], hdr['start'][ncl], 
+                        #      hdr['sync'][ncl], hdr['start'][ncl],
                         #      hdr['length'][ncl], hdr['coaddf'][ncl],
                         #      offs, len(ds_rec['buff']))
                         if hdr['coaddf'][ncl] == 1:
@@ -604,8 +611,9 @@ class File():
                             if nbytes > bytes_left:
                                 print('# cluster-size corruption',
                                       ni, nch, ncl)
-                                det['fep_hdr']['_quality'] |= 0x4
+                                channel['hdr']['clusters'][nch] = ncl
                                 buff[ncl] = None
+                                det['fep_hdr']['_quality'] |= 0x4
                                 break
                             buff[ncl] = np.frombuffer(ds_rec['buff'],
                                                       dtype='>u2',
@@ -616,8 +624,9 @@ class File():
                             if nbytes > bytes_left:
                                 print('# cluster-size corruption',
                                       ni, nch, ncl)
-                                det['fep_hdr']['_quality'] |= 0x4
+                                channel['hdr']['clusters'][nch] = ncl
                                 buff[ncl] = None
+                                det['fep_hdr']['_quality'] |= 0x4
                                 break
                             buff[ncl] = np.frombuffer(ds_rec['buff'],
                                                       dtype='u1',
@@ -630,7 +639,6 @@ class File():
                         continue
                     # only excecuted if a break occurred during read of
                     # cluster data
-                    channel['hdr']['clusters'][nch] = ncl
                     det['pmtc_hdr']['num_chan'] = nch
                     break
                 ni += 1
