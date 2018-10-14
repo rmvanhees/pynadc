@@ -466,6 +466,179 @@ class File():
 
         return size
 
+    def __read_det_raw(self, ds_rec, ni, det_mds):
+        """
+        read detector DSR without any checks
+        """
+        det = det_mds[ni]
+
+        # copy fixed part of the detector MDS
+        offs = 0
+        for key in self.ds_info_dtype().names:
+            det[key] = ds_rec[key]
+
+        # read detector specific part from buffer
+        det['pmtc_hdr'] = np.frombuffer(ds_rec['buff'],
+                                        dtype=self.__det_pmtc_hdr(),
+                                        count=1,
+                                        offset=offs)
+        offs += self.__det_pmtc_hdr().itemsize
+        det['pmtc_hdr']['num_chan'] &= 0xF
+
+        # read channel data blocks
+        channel = det['chan_data']
+        for nch in range(det['pmtc_hdr']['num_chan']):
+            channel['hdr'][nch] = np.frombuffer(
+                ds_rec['buff'],
+                dtype=self.__chan_hdr(),
+                count=1,
+                offset=offs)
+            offs += self.__chan_hdr().itemsize
+
+            # read cluster data
+            hdr = channel['clus_hdr'][nch]
+            buff = channel['clus_data'][nch]
+            for ncl in range(channel['hdr']['clusters'][nch]):
+                hdr[ncl] = np.frombuffer(ds_rec['buff'],
+                                         dtype=self.__clus_hdr(),
+                                         count=1,
+                                         offset=offs)
+                offs += self.__clus_hdr().itemsize
+
+                if hdr['coaddf'][ncl] == 1:
+                    nbytes = 2 * hdr['length'][ncl]
+                    buff[ncl] = np.frombuffer(ds_rec['buff'],
+                                              dtype='>u2',
+                                              count=hdr['length'][ncl],
+                                              offset=offs)[0]
+                else:
+                    nbytes = 3 * hdr['length'][ncl]
+                    buff[ncl] = np.frombuffer(ds_rec['buff'],
+                                              dtype='u1',
+                                              count=nbytes,
+                                              offset=offs)[0]
+                    if (nbytes % 2) == 1:
+                        nbytes += 1
+                offs += nbytes
+
+        return det
+
+    def __read_det_safe(self, ds_rec, ni, det_mds):
+        """
+        read detector DSR with sanity checks
+        """
+        det = det_mds[ni]
+
+        # copy fixed part of the detector MDS
+        offs = 0
+        for key in self.ds_info_dtype().names:
+            det[key] = ds_rec[key]
+
+        # read detector specific part from buffer
+        det['pmtc_hdr'] = np.frombuffer(ds_rec['buff'],
+                                        dtype=self.__det_pmtc_hdr(),
+                                        count=1,
+                                        offset=offs)
+        offs += self.__det_pmtc_hdr().itemsize
+        det['pmtc_hdr']['num_chan'] &= 0xF
+
+        # read channel data blocks
+        channel = det['chan_data']
+        for nch in range(det['pmtc_hdr']['num_chan']):
+            if offs == len(ds_rec['buff']):
+                det['pmtc_hdr']['num_chan'] = nch
+                break
+
+            channel['hdr'][nch] = np.frombuffer(
+                ds_rec['buff'],
+                dtype=self.__chan_hdr(),
+                count=1,
+                offset=offs)
+            offs += self.__chan_hdr().itemsize
+            # print(ni, nch, ds_rec['fep_hdr']['crc_errs'],
+            #      det['pmtc_hdr']['num_chan'],
+            #      channel['hdr']['sync'][nch],
+            #      channel['hdr']['clusters'][nch],
+            #      offs, len(ds_rec['buff']))
+            channel['hdr']['clusters'][nch] &= 0xF
+            if channel['hdr']['sync'][nch] != 0xAAAA:
+                print('# channel-sync corruption', ni, nch)
+                det['pmtc_hdr']['num_chan'] = nch
+                det['fep_hdr']['_quality'] |= 0x1
+                break
+
+            # read cluster data
+            hdr = channel['clus_hdr'][nch]
+            buff = channel['clus_data'][nch]
+            for ncl in range(channel['hdr']['clusters'][nch]):
+                if offs == len(ds_rec['buff']):
+                    channel['hdr']['clusters'][nch] = ncl
+                    break
+
+                hdr[ncl] = np.frombuffer(ds_rec['buff'],
+                                         dtype=self.__clus_hdr(),
+                                         count=1,
+                                         offset=offs)
+                offs += self.__clus_hdr().itemsize
+                # print(ni, nch, ncl, ds_rec['fep_hdr']['crc_errs'],
+                #      det['pmtc_hdr']['num_chan'],
+                #      channel['hdr']['sync'][nch],
+                #      channel['hdr']['clusters'][nch],
+                #      hdr['sync'][ncl], hdr['start'][ncl],
+                #      hdr['length'][ncl], hdr['coaddf'][ncl],
+                #      offs, len(ds_rec['buff']))
+                if hdr['sync'][ncl] != 0xBBBB:
+                    print('# cluster-sync corruption', ni, nch, ncl)
+                    channel['hdr']['clusters'][nch] = ncl
+                    det['fep_hdr']['_quality'] |= 0x2
+                    break
+
+                # mask bit-flips in cluster parameters start and length
+                hdr['start'][ncl] &= 0x1FFF
+                hdr['length'][ncl] &= 0x7FF
+
+                # check coadding factor
+                bytes_left = len(ds_rec['buff']) - offs
+                if hdr['coaddf'][ncl] != 1 \
+                   and 2 * hdr['length'][ncl] == bytes_left:
+                    hdr['coaddf'][ncl] = 1
+
+                if hdr['coaddf'][ncl] == 1:
+                    nbytes = 2 * hdr['length'][ncl]
+                    if nbytes > bytes_left:
+                        print('# cluster-size corruption', ni, nch, ncl)
+                        channel['hdr']['clusters'][nch] = ncl
+                        buff[ncl] = None
+                        det['fep_hdr']['_quality'] |= 0x4
+                        break
+                    buff[ncl] = np.frombuffer(ds_rec['buff'],
+                                              dtype='>u2',
+                                              count=hdr['length'][ncl],
+                                              offset=offs)[0]
+                else:
+                    nbytes = 3 * hdr['length'][ncl]
+                    if nbytes > bytes_left:
+                        print('# cluster-size corruption', ni, nch, ncl)
+                        channel['hdr']['clusters'][nch] = ncl
+                        buff[ncl] = None
+                        det['fep_hdr']['_quality'] |= 0x4
+                        break
+                    buff[ncl] = np.frombuffer(ds_rec['buff'],
+                                              dtype='u1',
+                                              count=nbytes,
+                                              offset=offs)[0]
+                    if (nbytes % 2) == 1:
+                        nbytes += 1
+                offs += nbytes
+            else:
+                continue
+            # only excecuted if a break occurred during read of
+            # cluster data
+            det['pmtc_hdr']['num_chan'] = nch
+            break
+
+        return det
+
     # read SCIAMACHY_SOURCE_PACKETS
     def get_mds(self, state_id=None):
         """
@@ -531,6 +704,7 @@ class File():
               len(indx_det), len(indx_aux), len(indx_pmd))
 
         # ----- read level 0 detector data packets -----
+        # possible variants: raw, safe, clus_def 
         if indx_det:
             det_mds = np.empty(len(indx_det), dtype=self.det_mds_dtype())
 
@@ -539,112 +713,11 @@ class File():
                 if state_id is not None:
                     if ds_rec['data_hdr']['state_id'] not in state_id:
                         continue
-                
-                # copy fixed part of the detector MDS
-                offs = 0
-                det = det_mds[ni]
-                for key in ds_info_dtype.names:
-                    det[key] = ds_rec[key]
 
-                # read detector specific part from buffer
-                det['pmtc_hdr'] = np.frombuffer(ds_rec['buff'],
-                                                dtype=self.__det_pmtc_hdr(),
-                                                count=1,
-                                                offset=offs)
-                offs += self.__det_pmtc_hdr().itemsize
-                det['pmtc_hdr']['num_chan'] &= 0xF
-
-                # read channel data blocks
-                channel = det['chan_data']
-                for nch in range(det['pmtc_hdr']['num_chan']):
-                    if offs == len(ds_rec['buff']):
-                        det['pmtc_hdr']['num_chan'] = nch
-                        break
-
-                    channel['hdr'][nch] = np.frombuffer(
-                        ds_rec['buff'],
-                        dtype=self.__chan_hdr(),
-                        count=1,
-                        offset=offs)
-                    offs += self.__chan_hdr().itemsize
-                    channel['hdr']['clusters'][nch] &= 0xF
-                    if channel['hdr']['sync'][nch] != 0xAAAA:
-                        print('# channel-sync corruption', ni, nch)
-                        det['pmtc_hdr']['num_chan'] = nch
-                        det['fep_hdr']['_quality'] |= 0x1
-                        break
-
-                    # read cluster data
-                    hdr = channel['clus_hdr'][nch]
-                    buff = channel['clus_data'][nch]
-                    for ncl in range(channel['hdr']['clusters'][nch]):
-                        if offs == len(ds_rec['buff']):
-                            channel['hdr']['clusters'][nch] = ncl
-                            break
-
-                        hdr[ncl] = np.frombuffer(ds_rec['buff'],
-                                                 dtype=self.__clus_hdr(),
-                                                 count=1,
-                                                 offset=offs)
-                        offs += self.__clus_hdr().itemsize
-                        if hdr['sync'][ncl] != 0xBBBB:
-                            print('# cluster-sync corruption', ni, nch, ncl)
-                            channel['hdr']['clusters'][nch] = ncl
-                            det['fep_hdr']['_quality'] |= 0x2
-                            break
-
-                        # mask bit-flips in cluster parameters start and length
-                        hdr['start'][ncl] &= 0x1FFF
-                        hdr['length'][ncl] &= 0x7FF
-
-                        # check coadding factor
-                        bytes_left = len(ds_rec['buff']) - offs
-                        if hdr['coaddf'][ncl] != 1 \
-                           and 2 * hdr['length'][ncl] == bytes_left:
-                            hdr['coaddf'][ncl] = 1
-
-                        # print(ni, nch, ncl, ds_rec['fep_hdr']['_quality'],
-                        #      det['pmtc_hdr']['num_chan'],
-                        #      channel['hdr']['sync'][nch],
-                        #      channel['hdr']['clusters'][nch],
-                        #      hdr['sync'][ncl], hdr['start'][ncl],
-                        #      hdr['length'][ncl], hdr['coaddf'][ncl],
-                        #      offs, len(ds_rec['buff']))
-                        if hdr['coaddf'][ncl] == 1:
-                            nbytes = 2 * hdr['length'][ncl]
-                            if nbytes > bytes_left:
-                                print('# cluster-size corruption',
-                                      ni, nch, ncl)
-                                channel['hdr']['clusters'][nch] = ncl
-                                buff[ncl] = None
-                                det['fep_hdr']['_quality'] |= 0x4
-                                break
-                            buff[ncl] = np.frombuffer(ds_rec['buff'],
-                                                      dtype='>u2',
-                                                      count=hdr['length'][ncl],
-                                                      offset=offs)[0]
-                        else:
-                            nbytes = 3 * hdr['length'][ncl]
-                            if nbytes > bytes_left:
-                                print('# cluster-size corruption',
-                                      ni, nch, ncl)
-                                channel['hdr']['clusters'][nch] = ncl
-                                buff[ncl] = None
-                                det['fep_hdr']['_quality'] |= 0x4
-                                break
-                            buff[ncl] = np.frombuffer(ds_rec['buff'],
-                                                      dtype='u1',
-                                                      count=nbytes,
-                                                      offset=offs)[0]
-                            if (nbytes % 2) == 1:
-                                nbytes += 1
-                        offs += nbytes
-                    else:
-                        continue
-                    # only excecuted if a break occurred during read of
-                    # cluster data
-                    det['pmtc_hdr']['num_chan'] = nch
-                    break
+                if ds_rec['fep_hdr']['crc_errs'] == 0:
+                    det_mds[ni] = self.__read_det_raw(ds_rec, ni, det_mds)
+                else:
+                    det_mds[ni] = self.__read_det_safe(ds_rec, ni, det_mds)
                 ni += 1
 
         print('# read {} detector mds'.format(ni))
