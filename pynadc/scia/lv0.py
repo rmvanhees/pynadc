@@ -714,9 +714,9 @@ class File():
                     if ds_rec['data_hdr']['state_id'] not in state_id:
                         continue
 
-                if ds_rec['fep_hdr']['crc_errs'] == 0:
+                try:
                     det_mds[ni] = self.__read_det_raw(ds_rec, ni, det_mds)
-                else:
+                except (ValueError, RuntimeError):
                     det_mds[ni] = self.__read_det_safe(ds_rec, ni, det_mds)
                 ni += 1
 
