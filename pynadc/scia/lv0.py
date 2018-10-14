@@ -687,8 +687,9 @@ class File():
                     indx_pmd.append(ni)
                     offs_bcps = 32
                 else:
-                    print('# warning: unknown packet type {}'.format(
-                        ds_rec['data_hdr']['packet_type']))
+                    print('# warning: unknown packet type {} & size {}'.format(
+                        ds_rec['data_hdr']['packet_type'],
+                        ds_rec['fep_hdr']['length']))
                     ds_rec['data_hdr']['packet_type'] = 1
                     indx_det.append(ni)
                     offs_bcps = 0
@@ -704,7 +705,7 @@ class File():
               len(indx_det), len(indx_aux), len(indx_pmd))
 
         # ----- read level 0 detector data packets -----
-        # possible variants: raw, safe, clus_def 
+        # possible variants: raw, safe, clus_def
         if indx_det:
             det_mds = np.empty(len(indx_det), dtype=self.det_mds_dtype())
 
@@ -716,7 +717,7 @@ class File():
 
                 try:
                     det_mds[ni] = self.__read_det_raw(ds_rec, ni, det_mds)
-                except (ValueError, RuntimeError):
+                except (IndexError, ValueError, RuntimeError):
                     det_mds[ni] = self.__read_det_safe(ds_rec, ni, det_mds)
                 ni += 1
 
