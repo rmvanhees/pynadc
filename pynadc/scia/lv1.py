@@ -5,6 +5,15 @@ https://github.com/rmvanhees/pynadc
 
 Methods to read Sciamachy level 1b data products (ESA/PDS format)
 
+The SRON Sciamachy level 0 data set contains 48442 products from the period:
+ 18 June 2002 until 08 April 2012
+
+Statistics on proc-stage
+    166 P
+     22 R
+    428 W
+  47826 Y
+
 Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
@@ -795,7 +804,10 @@ class File:
     # read SCIAMACHY_SOURCE_PACKETS
     def get_mds(self, state_id=None):
         """
-        read Sciamachy level 1b MDS records
+        read Sciamachy level 1b MDS records into numpy compound-arrays
+
+        state_id : list
+         read only DSRs of selected states
         """
         dsd = self.dsd_by_name('NADIR')
         nadir_offs = dsd['DS_OFFSET']

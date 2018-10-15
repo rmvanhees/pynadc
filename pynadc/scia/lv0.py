@@ -3,7 +3,20 @@ This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
-Methods to read Sciamachy level 0 data products
+Methods to read (every byte of) Sciamachy level 0 data products
+
+The SRON Sciamachy level 0 data set contains 48474 products from the period:
+ 18 June 2002 until 08 April 2012
+
+The Sciamachy level 0 contains only 10 products of the same orbit: 19071,
+ 19624, 19667, 20831, 23990, 34010, 48428, 51208, 51209, 51210. 
+
+Nearly 400 products contain data corruption, which require safe-read.
+
+Statistics on proc-stage
+   1757 O
+  46665 P
+     52 S
 
 Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
    All Rights Reserved
@@ -24,9 +37,9 @@ def lv0_consts(key=None):
     """
     consts = {}
     consts['mds_size'] = 1247
-    consts['num_lv0_aux_bcp'] = 16
-    consts['num_lv0_aux_pmtc_frame'] = 5
-    consts['num_lv0_pmd_packets'] = 200
+    consts['num_aux_bcp'] = 16
+    consts['num_aux_pmtc_frame'] = 5
+    consts['num_pmd_packets'] = 200
 
     if key is None:
         return consts
@@ -298,7 +311,7 @@ class File():
         ])
 
         return np.dtype([
-            ('bcp', aux_bcp_dtype, (lv0_consts('num_lv0_aux_bcp'))),
+            ('bcp', aux_bcp_dtype, (lv0_consts('num_aux_bcp'))),
             ('bench_rad', '>u2'),
             ('bench_elv', '>u2'),
             ('bench_az', '>u2')
@@ -315,7 +328,7 @@ class File():
             ('data_hdr', self.__data_hdr()),
             ('pmtc_hdr', self.__aux_pmtc_hdr()),
             ('pmtc_frame', self.__pmtc_frame(),
-             lv0_consts('num_lv0_aux_pmtc_frame'))
+             lv0_consts('num_aux_pmtc_frame'))
         ])
 
     # ----- PMD data structures -------------------------
@@ -342,7 +355,7 @@ class File():
             ('data_hdr', self.__data_hdr()),
             ('temp', '>u2'),
             ('pmd_data', self.__pmd_data(),
-             lv0_consts('num_lv0_pmd_packets'))
+             lv0_consts('num_pmd_packets'))
         ])
 
     # ----- read routines -------------------------
@@ -642,7 +655,40 @@ class File():
     # read SCIAMACHY_SOURCE_PACKETS
     def get_mds(self, state_id=None):
         """
-        read Sciamachy level 0 MDS records
+        read Sciamachy level 0 MDS records into numpy compound-arrays
+
+        Parameters
+        ----------
+        state_id : list
+         read only DSRs of selected states
+
+        Returns
+        -------
+        numpy array
+
+        Description
+        -----------
+        First all DSRs are read from disk, only the common data-headers of the
+        level 0 detector, auxiliary and PMD packets are stored in structured
+        numpy arrays. The remainder of the data packets are read as byte arrays
+        from disk according to the DSR size specified in the FEP header.
+
+        In a second run, all information stored in the DSRs are stored in 
+        structured numpy arrays. The auxiliary and PMD DSRs have a fixed size,
+        and can be copied using the function numpy.frombuffer(). The detector
+        DSRs have to be read dynamically, as their size can vary based on the
+        instrument settings (defined by the state ID). The shape and size of 
+        the detector DSR is defined by the number of channels, the number of
+        clusters per channel, the number of pixels per cluster and the
+        co-adding factor of the read-outs. All these parameters are stored in
+        the data headers of each DSR. Any of these parameters can be
+        corrupted, which result in a incorrect interpretation of the DSR.
+        Only a very small faction of the data is affected by data corruption,
+        reported in the FEP header parameters CRC errors and RS errors. When,
+        the interpretation of the data streams fails, we re-read the DSR with
+        a much slower fail-safe interpretation, this routine performes various
+        sanity checks and will ingnore data of a DSR after a data coruption,
+        but will interpret any remaining DSRs.
         """
         indx_aux = []
         indx_det = []
@@ -748,7 +794,7 @@ class File():
                 aux['pmtc_frame'] = np.frombuffer(
                     ds_rec['buff'],
                     dtype=self.__pmtc_frame(),
-                    count=lv0_consts('num_lv0_aux_pmtc_frame'),
+                    count=lv0_consts('num_aux_pmtc_frame'),
                     offset=self.__aux_pmtc_hdr().itemsize)
                 ni += 1
 
@@ -779,7 +825,7 @@ class File():
                 pmd['pmd_data'] = np.frombuffer(
                     ds_rec['buff'],
                     dtype=self.__pmd_data(),
-                    count=lv0_consts('num_lv0_pmd_packets'),
+                    count=lv0_consts('num_pmd_packets'),
                     offset=2)
                 ni += 1
 
