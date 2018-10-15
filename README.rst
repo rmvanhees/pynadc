@@ -8,5 +8,5 @@ archives with products from the following satellite missions:
 In addition, the pynadc package provides read access to several operational
 products from satellite missions:
  * Sciamachy (ENVISAT) :  PDS/ESA level 0 and 1b
-   
- The software requires python3, numpy, h5py
+
+The software requires: python3, numpy, h5py
