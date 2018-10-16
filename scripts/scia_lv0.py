@@ -67,8 +67,10 @@ def main():
         print('exception occurred in module pynadc.scia.lv0')
         raise
 
-    obj.get_mds(state_id=args.state)
+    (det_mds, aux_mds, pmd_mds) = obj.get_mds(state_id=args.state)
+    lv0.check_dsr_in_states(det_mds, verbose=True)
 
 
+#--------------------------------------------------
 if __name__ == '__main__':
     main()

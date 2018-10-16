@@ -49,14 +49,10 @@ def lv0_consts(key=None):
     raise KeyError('level 0 constant {} is not defined'.format(key))
 
 
-def check_dsr_in_states(mds_in, indx_mds, verbose=False, check=False):
+def check_dsr_in_states(mds, verbose=False, check=False):
     """
     This module combines L0 DSR per state ID based on parameter icu_time.
     """
-    # initialize quality of all DSRs to zero
-    mds = mds_in[indx_mds]
-    mds['fep_hdr']['_quality'] = 0
-
     # combine L0 DSR on parameter icu_time
     # alternatively one could use parameter state_id
     _arr = mds['data_hdr']['icu_time']
@@ -67,8 +63,13 @@ def check_dsr_in_states(mds_in, indx_mds, verbose=False, check=False):
     state_id = mds['data_hdr']['state_id'][indx[:-1]]
     if verbose:
         for ni in range(num_dsr.size):
-            print('# ', ni, indx[ni], num_dsr[ni],
-                  state_id[ni], icu_time[ni])
+            if ni+1 < num_dsr.size:
+                diff_bcps = np.diff(mds['pmtc_hdr']['bcps'][indx[ni]:indx[ni+1]])
+            print('# {:3d} state_{:03d}'.format(ni, state_id[ni]),
+                  indx[ni], num_dsr[ni], icu_time[ni],
+                  np.all(diff_bcps == diff_bcps[0]))
+            if not np.all(diff_bcps == diff_bcps[0]):
+                print(diff_bcps)
 
     if not check:
         return mds
@@ -719,6 +720,9 @@ class File():
                 # copy read buffer
                 for key in ds_info_dtype.names:
                     ds_rec[key] = ds_info[key]
+
+                # set quality flag to zero
+                ds_rec['fep_hdr']['_quality'] = 0
 
                 ds_rec['data_hdr']['packet_type'] >>= 4
                 if ds_rec['data_hdr']['packet_type'] == 1:
