@@ -56,7 +56,7 @@ setup(
     scripts=[
         'scripts/add_entry_gosat.py',
         'scripts/add_entry_scia.py',
-        'scripts/collect_stateDefs.py',
+        'scripts/collect_scia_states.py',
         'scripts/inquire_db.py',
         'scripts/inquire_gosat.py',
         'scripts/inquire_scia.py',

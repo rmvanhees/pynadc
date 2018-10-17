@@ -77,8 +77,11 @@ MAX_ORBIT = 53000
 
 
 # - local functions --------------------------------
-def __clus_dtype():
-    return np.dtype([
+def define_clus_conf(nclus, pet, coaddf, readouts):
+    """
+    define cluster configuration for a given state
+    """
+    clus_dtype = np.dtype([
         ('clus_id', 'u1'),
         ('chan_id', 'u1'),
         ('coaddf', 'u1'),
@@ -89,23 +92,7 @@ def __clus_dtype():
         ('readouts', 'u2'),
         ('pet', 'f8')
     ])
-
-
-def __mtbl_dtype():
-    return np.dtype([
-        ('orbit', 'u2'),
-        ('num_clus', 'u1'),
-        ('type_clus', 'u1'),
-        ('duration', 'u2'),
-        ('num_info', 'u2'),
-    ])
-
-
-def define_clus_conf(nclus, pet, coaddf, readouts):
-    """
-    define cluster configuration for a given state
-    """
-    clus_conf = np.zeros(56, dtype=__clus_dtype())
+    clus_conf = np.zeros(64, dtype=clus_dtype)
 
     if nclus == 10:
         clus_conf[0:10]['chan_id'] = [
@@ -195,19 +182,28 @@ class ClusDB:
         """
         from time import gmtime, strftime
 
+        mtbl_dtype = np.dtype([
+            ('orbit', 'u2'),
+            ('num_clus', 'u1'),
+            ('type_clus', 'u1'),
+            ('duration', 'u2'),
+            ('num_info', 'u2'),
+        ])
+
         with h5py.File(self.db_name, 'w', libver='latest') as fid:
             #
             # add global attributes
             #
             fid.attrs['title'] = 'Sciamachy state-cluster definition database'
-            fid.attrs['institution'] = 'SRON (EPS)'
-            fid.attrs['source'] = 'Sciamachy Level 1b (v7.x)'
+            fid.attrs['institution'] = \
+                'SRON Netherlands Institute for Space Research (Earth)'
+            fid.attrs['source'] = 'Sciamachy Level 1b (SCIA/8.01)'
             fid.attrs['program_version'] = VERSION
             fid.attrs['creation_date'] = strftime('%Y-%m-%d %T %Z', gmtime())
             #
             # initialize metaTable dataset
             #
-            mtbl = np.zeros(MAX_ORBIT, dtype=__mtbl_dtype())
+            mtbl = np.zeros(MAX_ORBIT, dtype=mtbl_dtype)
             mtbl[:]['orbit'] = np.arange(MAX_ORBIT, dtype='u2')
             mtbl[:]['type_clus'] = 0xFF
             #
@@ -237,8 +233,8 @@ class ClusDB:
             # check if dataset 'clusDef' exists, if not create
             if 'clusDef' not in grp:
                 ds_clus = grp.create_dataset('clusDef',
-                                             data=clus_conf.reshape(1, 56),
-                                             maxshape=(None, 56))
+                                             data=clus_conf.reshape(1, 64),
+                                             maxshape=(None, 64))
             else:
                 ds_clus = grp['clusDef']
                 clus_conf_db = ds_clus[:]
@@ -1547,8 +1543,8 @@ class ClusDB:
                     ds_46 = grp_46['clusDef']
                     clus_conf = ds_46[0, :]
                     _ = grp.create_dataset('clusDef',
-                                           data=clus_conf.reshape(1, 56),
-                                           maxshape=(None, 56))
+                                           data=clus_conf.reshape(1, 64),
+                                           maxshape=(None, 64))
                 else:
                     print("Info: skipping state %d" % (ni))
 
@@ -1567,15 +1563,16 @@ def main():
         description='combine Sciamachy state cluster definitions into database')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='be verbose')
-    parser.add_argument('db_name', nargs='?', type=str,
+    parser.add_argument('--db_name', type=str,
                         default='./scia_state_settings.h5',
                         help='write to hdf5 database')
+    parser.add_argument('--mtbl_fill', action='store_true',
+                        help='update missing data to metaTable')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--orbit', nargs=1, type=int,
-                       help='select data from given orbit, preferably \'W\'')
-    group.add_argument('--file', type=str, help='read data from given file')
-    group.add_argument('--mtbl_fill', action='store_true',
-                       help='update missing data to metaTable')
+                       help='select data from given orbit, preferably \'Y\'')
+    group.add_argument('file', nargs='?', type=str,
+                       help='read data from given file')
     args = parser.parse_args()
 
     scia_fl = ""
@@ -1646,7 +1643,7 @@ def main():
     # loop over all ID of states
     for state_id in np.unique(states['state_id']):
         indx = np.where(states['state_id'] == state_id)[0]
-        mtbl = (scia.mph['abs_orbit'], states['num_clus'][indx[0]],
+        mtbl = (scia.mph['ABS_ORBIT'], states['num_clus'][indx[0]],
                 0, states['duration'][indx[0]], states['num_geo'][indx[0]])
         clus_conf = states['Clcon'][indx[0], :]
         if args.verbose:
