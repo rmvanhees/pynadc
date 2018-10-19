@@ -40,6 +40,7 @@ def lv0_consts(key=None):
     consts['num_aux_bcp'] = 16
     consts['num_aux_pmtc_frame'] = 5
     consts['num_pmd_packets'] = 200
+    consts['channel_pixels'] = 1024
 
     if key is None:
         return consts
@@ -97,6 +98,54 @@ def check_dsr_in_states(mds, verbose=False, check=False):
     return mds
 
 
+def get_det_temp(channel, raw_tm):
+    """
+    convert raw temperature count to Kelvin
+    """
+    tab_tm = [
+        (0, 17876, 18312, 18741, 19161, 19574, 19980, 20379, 
+         20771, 21157, 21908, 22636, 24684, 26550, 28259, 65535),
+        (0, 18018, 18456, 18886, 19309, 19724, 20131, 20532,
+         20926, 21313, 22068, 22798, 24852, 26724, 28436, 65535),
+        (0, 20601, 20996, 21384, 21765, 22140, 22509, 22872,
+         23229, 23581, 23927, 24932, 26201, 27396, 28523, 65535),
+        (0, 20333, 20725, 21110, 21490, 21863, 22230, 22591,
+         22946, 23295, 23640, 24640, 25905, 27097, 28222, 65535),
+        (0, 20548, 20942, 21330, 21711, 22086, 22454, 22817,
+         23174, 23525, 23871, 24875, 26144, 27339, 28466, 65535),
+        (0, 17893, 18329, 18758, 19179, 19593, 20000, 20399,
+         20792, 21178, 21931, 22659, 24709, 26578, 28289, 65535),
+        (0, 12994, 13526, 14046, 14555, 15054, 15543, 16022,
+         16492, 17850, 20352, 22609, 24656, 26523, 28232, 65535),
+        (0, 13129, 13664, 14188, 14702, 15204, 15697, 16180,
+         16653, 18019, 20536, 22804, 24860, 26733, 28447, 65535)
+    ]
+
+    tab_temp = [
+        (179., 180., 185., 190., 195., 200., 205., 210., 
+         215., 220., 230., 240., 270., 300., 330., 331.),
+        (179., 180., 185., 190., 195., 200., 205., 210.,
+         215., 220., 230., 240., 270., 300., 330., 331.),
+        (209., 210., 215., 220., 225., 230., 235., 240.,
+         245., 250., 255., 270., 290., 310., 330., 331.),
+        (209., 210., 215., 220., 225., 230., 235., 240.,
+         245., 250., 255., 270., 290., 310., 330., 331.),
+        (209., 210., 215., 220., 225., 230., 235., 240.,
+         245., 250., 255., 270., 290., 310., 330., 331.),
+        (179., 180., 185., 190., 195., 200., 205., 210.,
+         215., 220., 230., 240., 270., 300., 330., 331.),
+        (129., 130., 135., 140., 145., 150., 155., 160.,
+         165., 180., 210., 240., 270., 300., 330., 331.),
+        (129., 130., 135., 140., 145., 150., 155., 160.,
+         165., 180., 210., 240., 270., 300., 330., 331.)
+    ]
+
+    nch = channel - 1
+    if nch < 0 or nch > 7:
+        raise ValueError('channel must be between 1 and 8')
+    
+    return np.interp(raw_tm, tab_tm[nch], tab_temp[nch])
+
 # - Classes --------------------------------------
 class File():
     """
@@ -126,8 +175,14 @@ class File():
 
         # read Main Product Header
         self.__get_mph__()
+
         # read Specific Product Header
         self.__get_sph__()
+        if 'SPH_DESCRIPTOR' not in self.sph:
+            raise ValueError('SPH_DESCRIPTOR not found in product header')
+        if not self.sph['SPH_DESCRIPTOR'].startswith("SCI_NL__0P SPECIFIC"):
+            raise ValueError('not a Sciamachy level 0 product')
+
         # read Data Set Descriptors
         self.__get_dsd__()
 
@@ -279,6 +334,19 @@ class File():
             ('data_hdr', self.__data_hdr()),
             ('pmtc_hdr', self.__det_pmtc_hdr()),
             ('chan_data', self.__chan_data(), (8))
+        ])
+
+    def chan_dtype(self):
+        """
+        Returns numpy-dtype definition for science channel data
+        """
+        return np.dtype([
+            ('isp', self.__mjd_envi()),
+            ('icu_time', 'u4'),
+            ('bcps', 'u2'),
+            ('temp', 'f8'),
+            ('coaddf', 'u1', (lv0_consts('channel_pixels'))),
+            ('data', 'f8', (lv0_consts('channel_pixels')))
         ])
 
     # ----- auxiliary data structures -------------------------
@@ -524,13 +592,13 @@ class File():
                     buff[ncl] = np.frombuffer(ds_rec['buff'],
                                               dtype='>u2',
                                               count=hdr['length'][ncl],
-                                              offset=offs)[0]
+                                              offset=offs)
                 else:
                     nbytes = 3 * hdr['length'][ncl]
                     buff[ncl] = np.frombuffer(ds_rec['buff'],
                                               dtype='u1',
                                               count=nbytes,
-                                              offset=offs)[0]
+                                              offset=offs)
                     if (nbytes % 2) == 1:
                         nbytes += 1
                 offs += nbytes
@@ -771,7 +839,8 @@ class File():
                     det_mds[ni] = self.__read_det_safe(ds_rec, ni, det_mds)
                 ni += 1
 
-        print('# read {} detector mds'.format(ni))
+            det_mds = det_mds[0:ni]
+            print('# read {} detector mds'.format(ni))
 
         # ----- read level 0 auxiliary data packets -----
         if indx_aux:
@@ -802,7 +871,8 @@ class File():
                     offset=self.__aux_pmtc_hdr().itemsize)
                 ni += 1
 
-        print('# read {} auxiliary mds'.format(ni))
+            aux_mds = aux_mds[0:ni]
+            print('# read {} auxiliary mds'.format(ni))
 
         # ----- read level 0 PMD data packets -----
         if indx_pmd:
@@ -833,6 +903,48 @@ class File():
                     offset=2)
                 ni += 1
 
-        print('# read {} PMD mds'.format(ni))
+            pmd_mds = pmd_mds[0:ni]
+            print('# read {} PMD mds'.format(ni))
 
         return (det_mds, aux_mds, pmd_mds)
+
+    def get_channel(self, state_id, chan_id):
+        """
+        combines readouts of one science channel for a given state ID
+        """
+        (det_mds, _, _) = self.get_mds(state_id)
+        if det_mds.size == 0:
+            return None
+        chan = np.empty(det_mds.size, dtype=self.chan_dtype())
+        chan['data'][...] = np.nan
+
+        for ni, dsr in enumerate(det_mds):
+            chan['isp'][ni] = dsr['isp']
+            chan['icu_time'][ni] = dsr['data_hdr']['icu_time']
+            chan['bcps'][ni] = dsr['pmtc_hdr']['bcps']
+            for nch in range(dsr['pmtc_hdr']['num_chan']):
+                chan_data = dsr['chan_data'][nch]
+                if chan_data['hdr']['id_is_lu'] >> 4 != chan_id:
+                    continue
+                
+                # convert raw temperature count to Kelvin
+                chan['temp'][ni] = get_det_temp(chan_id,
+                                                chan_data['hdr']['temp'])
+                for ncl in range(chan_data['hdr']['clusters']):
+                    ii = chan_data['clus_hdr']['start'][ncl] % 1024
+                    jj = ii + chan_data['clus_hdr']['length'][ncl]
+                    chan['coaddf'][ni][ii:jj] = \
+                        chan_data['clus_hdr']['coaddf'][ncl]
+                    if chan_data['clus_hdr']['coaddf'][ncl] == 1:
+                        chan['data'][ni][ii:jj] = chan_data['clus_data'][ncl]
+                    else:
+                        dim = chan_data['clus_hdr']['length'][ncl]
+                        buffer = np.zeros(dim * 4, dtype='u1').reshape(dim, 4)
+                        buffer[:, 1:] = np.array(
+                            chan_data['clus_data'][ncl]).reshape(dim, 3)
+                        chan['data'][ni][ii:jj] = np.frombuffer(
+                            buffer.tobytes(), dtype='>u4')
+
+        # remove empty entries
+        indx = np.where(~np.all(np.isnan(chan['data']), axis=1))[0]
+        return chan[indx]

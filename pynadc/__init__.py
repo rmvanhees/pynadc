@@ -1,4 +1,4 @@
-'''
+"""
 This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
@@ -19,6 +19,11 @@ Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  Standard 3-clause BSD
+"""
+__all__ = ['gosat', 'scia']
 
-'''
-__all__ = ['version', 'gosat', 'scia']
+from . import version
+
+from .gosat import db
+
+from .scia import clus_def, lv0, lv1, db

@@ -82,8 +82,14 @@ class File:
 
         # read Main Product Header
         self.__get_mph__()
+
         # read Specific Product Header
         self.__get_sph__()
+        if 'SPH_DESCRIPTOR' not in self.sph:
+            raise ValueError('SPH_DESCRIPTOR not found in product header')
+        if not self.sph['SPH_DESCRIPTOR'].startswith("SCI_NL__1P SPECIFIC"):
+            raise ValueError('not a Sciamachy level 1B product')
+
         # read Data Set Descriptors
         self.__get_dsd__()
 
