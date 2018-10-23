@@ -9,7 +9,7 @@ The SRON Sciamachy level 0 data set contains 48474 products from the period:
  18 June 2002 until 08 April 2012
 
 The Sciamachy level 0 contains only 10 products of the same orbit: 19071,
- 19624, 19667, 20831, 23990, 34010, 48428, 51208, 51209, 51210. 
+ 19624, 19667, 20831, 23990, 34010, 48428, 51208, 51209, 51210.
 
 Nearly 400 products contain data corruption, which require safe-read.
 
@@ -103,7 +103,7 @@ def get_det_temp(channel, raw_tm):
     convert raw temperature count to Kelvin
     """
     tab_tm = [
-        (0, 17876, 18312, 18741, 19161, 19574, 19980, 20379, 
+        (0, 17876, 18312, 18741, 19161, 19574, 19980, 20379,
          20771, 21157, 21908, 22636, 24684, 26550, 28259, 65535),
         (0, 18018, 18456, 18886, 19309, 19724, 20131, 20532,
          20926, 21313, 22068, 22798, 24852, 26724, 28436, 65535),
@@ -122,7 +122,7 @@ def get_det_temp(channel, raw_tm):
     ]
 
     tab_temp = [
-        (179., 180., 185., 190., 195., 200., 205., 210., 
+        (179., 180., 185., 190., 195., 200., 205., 210.,
          215., 220., 230., 240., 270., 300., 330., 331.),
         (179., 180., 185., 190., 195., 200., 205., 210.,
          215., 220., 230., 240., 270., 300., 330., 331.),
@@ -143,7 +143,7 @@ def get_det_temp(channel, raw_tm):
     nch = channel - 1
     if nch < 0 or nch > 7:
         raise ValueError('channel must be between 1 and 8')
-    
+
     return np.interp(raw_tm, tab_tm[nch], tab_temp[nch])
 
 # - Classes --------------------------------------
@@ -153,12 +153,14 @@ class File():
     """
     def __init__(self, flname):
         """
+        read whole product into memory: ascii headers and all DSRs
         """
         # initialize class attributes
         self.filename = flname
         self.mph = {}
         self.sph = {}
         self.dsd = None
+        self.info = None
 
         # check is file is compressed
         magic_dict = {
@@ -189,6 +191,9 @@ class File():
         # check file size
         if self.mph['TOT_SIZE'] != Path(flname).stat().st_size:
             raise SystemError('file {} incomplete'.format(flname))
+
+        # read remainder of the file as info-records
+        self.__get_info__()
 
     # ----- generic data structures -------------------------
     @staticmethod
@@ -240,28 +245,15 @@ class File():
             ('overflow', 'u1')
         ])
 
-    def ds_info_dtype(self):
+    def ds_hdr_dtype(self):
         """
-        Returns only the common part of (aux, det, pmd) MDS records
+        Returns only the common part of DSR: auxiliary, detector or PMD
         """
         return np.dtype([
             ('isp', self.__mjd_envi()),
             ('fep_hdr', self.__fep_hdr()),
             ('packet_hdr', self.__packet_hdr()),
             ('data_hdr', self.__data_hdr())
-        ])
-
-    def ds_buff_dtype(self):
-        """
-        Returns ds_info + a python object
-        """
-        return np.dtype([
-            ('isp', self.__mjd_envi()),
-            ('fep_hdr', self.__fep_hdr()),
-            ('packet_hdr', self.__packet_hdr()),
-            ('data_hdr', self.__data_hdr()),
-            ('bcps', '>u2'),
-            ('buff', 'O')
         ])
 
     # ----- detector data structures -------------------------
@@ -538,6 +530,80 @@ class File():
 
         fp.close()
 
+    def __get_info__(self):
+        """
+        read Sciamachy level 0 DSD records
+        """
+        # select DSD with name 'SCIAMACHY_SOURCE_PACKETS'
+        dsd = None
+        for dsd in self.dsd:
+            if dsd['DS_NAME'] == 'SCIAMACHY_SOURCE_PACKETS':
+                break
+
+        # define info record which hold the generic headers, bcps
+        # and a copy of the remaining bytes of a DSR
+        info_dtype = np.dtype([
+            ('isp', self.__mjd_envi()),
+            ('fep_hdr', self.__fep_hdr()),
+            ('packet_hdr', self.__packet_hdr()),
+            ('data_hdr', self.__data_hdr()),
+            ('bcps', '>u2'),
+            ('buff', 'O')
+        ])
+
+        # store all MDS data in these buffers
+        self.info = np.empty(dsd['NUM_DSR'], dtype=info_dtype)
+
+        # collect information about the level 0 measurement data in product
+        num_det = num_aux = num_pmd = 0
+        with open(self.filename, 'rb') as fp:
+            ds_hdr_dtype = self.ds_hdr_dtype()
+            fp.seek(dsd['DS_OFFSET'])
+            for ni, ds_rec in enumerate(self.info):
+                ds_hdr = np.fromfile(fp, dtype=ds_hdr_dtype, count=1)[0]
+
+                # check for corrupted data
+                num_bytes = self.bytes_left(ds_hdr, ds_hdr_dtype.itemsize)
+                if num_bytes < 0:
+                    print('# read {} of {} DSRs'.format(ni, dsd['NUM_DSR']))
+                    break
+
+                # copy read buffer
+                for key in ds_hdr_dtype.names:
+                    ds_rec[key] = ds_hdr[key]
+
+                # set quality flag to zero
+                ds_rec['fep_hdr']['_quality'] = 0
+
+                ds_rec['data_hdr']['packet_type'] >>= 4
+                if ds_rec['data_hdr']['packet_type'] == 1:
+                    num_det += 1
+                    offs_bcps = 0
+                elif (ds_rec['data_hdr']['packet_type'] == 2
+                      or ds_rec['fep_hdr']['length'] == 1659):
+                    num_aux += 1
+                    offs_bcps = 20
+                elif (ds_rec['data_hdr']['packet_type'] == 3
+                      or ds_rec['fep_hdr']['length'] == 6813):
+                    num_pmd += 1
+                    offs_bcps = 32
+                else:
+                    print('# warning: unknown packet type {} & size {}'.format(
+                        ds_rec['data_hdr']['packet_type'],
+                        ds_rec['fep_hdr']['length']))
+                    ds_rec['data_hdr']['packet_type'] = 1
+                    num_det += 1
+                    offs_bcps = 0
+
+                # read remainder of DSR
+                ds_rec['buff'] = fp.read(num_bytes)
+
+                # read BCPS
+                ds_rec['bcps'] = np.frombuffer(
+                    ds_rec['buff'], '>i2', count=1, offset=offs_bcps)
+
+        print('# number of DSRs: ', num_det, num_aux, num_pmd)
+
     def bytes_left(self, mds, read_sofar=0):
         """
         Returns number to be read from a MDS record
@@ -556,7 +622,7 @@ class File():
 
         # copy fixed part of the detector MDS
         offs = 0
-        for key in self.ds_info_dtype().names:
+        for key in self.ds_hdr_dtype().names:
             det[key] = ds_rec[key]
 
         # read detector specific part from buffer
@@ -613,7 +679,7 @@ class File():
 
         # copy fixed part of the detector MDS
         offs = 0
-        for key in self.ds_info_dtype().names:
+        for key in self.ds_hdr_dtype().names:
             det[key] = ds_rec[key]
 
         # read detector specific part from buffer
@@ -742,11 +808,11 @@ class File():
         numpy arrays. The remainder of the data packets are read as byte arrays
         from disk according to the DSR size specified in the FEP header.
 
-        In a second run, all information stored in the DSRs are stored in 
+        In a second run, all information stored in the DSRs are stored in
         structured numpy arrays. The auxiliary and PMD DSRs have a fixed size,
         and can be copied using the function numpy.frombuffer(). The detector
         DSRs have to be read dynamically, as their size can vary based on the
-        instrument settings (defined by the state ID). The shape and size of 
+        instrument settings (defined by the state ID). The shape and size of
         the detector DSR is defined by the number of channels, the number of
         clusters per channel, the number of pixels per cluster and the
         co-adding factor of the read-outs. All these parameters are stored in
@@ -759,76 +825,14 @@ class File():
         sanity checks and will ingnore data of a DSR after a data coruption,
         but will interpret any remaining DSRs.
         """
-        indx_aux = []
-        indx_det = []
-        indx_pmd = []
-
-        # select DSD with name 'SCIAMACHY_SOURCE_PACKETS'
-        dsd = None
-        for dsd in self.dsd:
-            if dsd['DS_NAME'] == 'SCIAMACHY_SOURCE_PACKETS':
-                break
-
-        # store all MDS data in these buffers
-        ds_buffer = np.empty(dsd['NUM_DSR'], dtype=self.ds_buff_dtype())
-
-        # collect information about the level 0 measurement data in product
-        with open(self.filename, 'rb') as fp:
-            ds_info_dtype = self.ds_info_dtype()
-            fp.seek(dsd['DS_OFFSET'])
-            for ni, ds_rec in enumerate(ds_buffer):
-                ds_info = np.fromfile(fp, dtype=ds_info_dtype, count=1)[0]
-
-                # check for corrupted data
-                num_bytes = self.bytes_left(ds_info, ds_info_dtype.itemsize)
-                if num_bytes < 0:
-                    print('# read {} of {} DSRs'.format(ni, dsd['NUM_DSR']))
-                    break
-
-                # copy read buffer
-                for key in ds_info_dtype.names:
-                    ds_rec[key] = ds_info[key]
-
-                # set quality flag to zero
-                ds_rec['fep_hdr']['_quality'] = 0
-
-                ds_rec['data_hdr']['packet_type'] >>= 4
-                if ds_rec['data_hdr']['packet_type'] == 1:
-                    indx_det.append(ni)
-                    offs_bcps = 0
-                elif (ds_rec['data_hdr']['packet_type'] == 2
-                      or ds_rec['fep_hdr']['length'] == 1659):
-                    indx_aux.append(ni)
-                    offs_bcps = 20
-                elif (ds_rec['data_hdr']['packet_type'] == 3
-                      or ds_rec['fep_hdr']['length'] == 6813):
-                    indx_pmd.append(ni)
-                    offs_bcps = 32
-                else:
-                    print('# warning: unknown packet type {} & size {}'.format(
-                        ds_rec['data_hdr']['packet_type'],
-                        ds_rec['fep_hdr']['length']))
-                    ds_rec['data_hdr']['packet_type'] = 1
-                    indx_det.append(ni)
-                    offs_bcps = 0
-
-                # read remainder of DSR
-                ds_rec['buff'] = fp.read(num_bytes)
-
-                # read BCPS
-                ds_rec['bcps'] = np.frombuffer(
-                    ds_rec['buff'], '>i2', count=1, offset=offs_bcps)
-
-        print('# number of DSRs: ',
-              len(indx_det), len(indx_aux), len(indx_pmd))
-
         # ----- read level 0 detector data packets -----
         # possible variants: raw, safe, clus_def
-        if indx_det:
+        indx_det = np.where(self.info['data_hdr']['packet_type'] == 1)[0]
+        if indx_det.size > 0:
             det_mds = np.empty(len(indx_det), dtype=self.det_mds_dtype())
 
             ni = 0
-            for ds_rec in ds_buffer[indx_det]:
+            for ds_rec in self.info[indx_det]:
                 if state_id is not None:
                     if ds_rec['data_hdr']['state_id'] not in state_id:
                         continue
@@ -843,18 +847,19 @@ class File():
             print('# read {} detector mds'.format(ni))
 
         # ----- read level 0 auxiliary data packets -----
-        if indx_aux:
+        indx_aux = np.where(self.info['data_hdr']['packet_type'] == 2)[0]
+        if indx_aux.size > 0:
             aux_mds = np.empty(len(indx_aux), dtype=self.aux_mds_dtype())
 
             ni = 0
-            for ds_rec in ds_buffer[indx_aux]:
+            for ds_rec in self.info[indx_aux]:
                 if state_id is not None:
                     if ds_rec['data_hdr']['state_id'] not in state_id:
                         continue
 
                 # copy fixed part of the auxiliary MDS
                 aux = aux_mds[ni]
-                for key in ds_info_dtype.names:
+                for key in self.ds_hdr_dtype().names:
                     aux[key] = ds_rec[key]
 
                 # read auxiliary specific part from buffer
@@ -875,18 +880,19 @@ class File():
             print('# read {} auxiliary mds'.format(ni))
 
         # ----- read level 0 PMD data packets -----
-        if indx_pmd:
+        indx_pmd = np.where(self.info['data_hdr']['packet_type'] == 3)[0]
+        if indx_pmd.size > 0:
             pmd_mds = np.empty(len(indx_pmd), dtype=self.pmd_mds_dtype())
 
             ni = 0
-            for ds_rec in ds_buffer[indx_pmd]:
+            for ds_rec in self.info[indx_pmd]:
                 if state_id is not None:
                     if ds_rec['data_hdr']['state_id'] not in state_id:
                         continue
 
                 # copy fixed part of the PMD MDS
                 pmd = pmd_mds[ni]
-                for key in ds_info_dtype.names:
+                for key in self.ds_hdr_dtype().names:
                     pmd[key] = ds_rec[key]
 
                 # read PMD specific part from buffer
@@ -926,7 +932,7 @@ class File():
                 chan_data = dsr['chan_data'][nch]
                 if chan_data['hdr']['id_is_lu'] >> 4 != chan_id:
                     continue
-                
+
                 # convert raw temperature count to Kelvin
                 chan['temp'][ni] = get_det_temp(chan_id,
                                                 chan_data['hdr']['temp'])
