@@ -69,6 +69,8 @@ def main():
 
     (det_mds, aux_mds, pmd_mds) = obj.get_mds(state_id=args.state)
     lv0.check_dsr_in_states(det_mds, verbose=True)
+    # lv0.check_dsr_in_states(aux_mds, verbose=True)
+    # lv0.check_dsr_in_states(pmd_mds, verbose=True)
 
 
 #--------------------------------------------------

@@ -26,4 +26,4 @@ from . import version
 
 from .gosat import db
 
-from .scia import clus_def, lv0, lv1, db
+from .scia import clus_def, db, hk, lv0, lv1

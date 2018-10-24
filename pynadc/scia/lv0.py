@@ -62,15 +62,24 @@ def check_dsr_in_states(mds, verbose=False, check=False):
     num_dsr = np.diff(indx)
     icu_time = mds['data_hdr']['icu_time'][indx[:-1]]
     state_id = mds['data_hdr']['state_id'][indx[:-1]]
+    if 'pmtc_frame' in mds.dtype.names:
+        print('# aux_mds : ', mds['pmtc_frame']['bcp']['bcps'].shape)
+        bcps = mds['pmtc_frame']['bcp']['bcps'][:, 0, 0]
+    elif 'pmd_data' in mds.dtype.names:
+        print('# pmd_mds : ', mds['pmd_data']['bcps'].shape)
+        bcps = mds['pmd_data']['bcps'][:, 0]
+    else:
+        print('# det_mds : ', mds['pmtc_hdr']['bcps'].shape)
+        bcps = mds['pmtc_hdr']['bcps']
     if verbose:
         for ni in range(num_dsr.size):
             if ni+1 < num_dsr.size:
-                diff_bcps = np.diff(mds['pmtc_hdr']['bcps'][indx[ni]:indx[ni+1]])
-            print('# {:3d} state_{:03d}'.format(ni, state_id[ni]),
-                  indx[ni], num_dsr[ni], icu_time[ni],
+                diff_bcps = np.diff(bcps[indx[ni]:indx[ni+1]])
+            print('# {:3d} state_{:02d} {:5d} {:4d} '.format(
+                ni, state_id[ni], indx[ni], num_dsr[ni]),
+                  icu_time[ni],
+                  np.all(diff_bcps > 0),
                   np.all(diff_bcps == diff_bcps[0]))
-            if not np.all(diff_bcps == diff_bcps[0]):
-                print(diff_bcps)
 
     if not check:
         return mds
@@ -97,54 +106,6 @@ def check_dsr_in_states(mds, verbose=False, check=False):
 
     return mds
 
-
-def get_det_temp(channel, raw_tm):
-    """
-    convert raw temperature count to Kelvin
-    """
-    tab_tm = [
-        (0, 17876, 18312, 18741, 19161, 19574, 19980, 20379,
-         20771, 21157, 21908, 22636, 24684, 26550, 28259, 65535),
-        (0, 18018, 18456, 18886, 19309, 19724, 20131, 20532,
-         20926, 21313, 22068, 22798, 24852, 26724, 28436, 65535),
-        (0, 20601, 20996, 21384, 21765, 22140, 22509, 22872,
-         23229, 23581, 23927, 24932, 26201, 27396, 28523, 65535),
-        (0, 20333, 20725, 21110, 21490, 21863, 22230, 22591,
-         22946, 23295, 23640, 24640, 25905, 27097, 28222, 65535),
-        (0, 20548, 20942, 21330, 21711, 22086, 22454, 22817,
-         23174, 23525, 23871, 24875, 26144, 27339, 28466, 65535),
-        (0, 17893, 18329, 18758, 19179, 19593, 20000, 20399,
-         20792, 21178, 21931, 22659, 24709, 26578, 28289, 65535),
-        (0, 12994, 13526, 14046, 14555, 15054, 15543, 16022,
-         16492, 17850, 20352, 22609, 24656, 26523, 28232, 65535),
-        (0, 13129, 13664, 14188, 14702, 15204, 15697, 16180,
-         16653, 18019, 20536, 22804, 24860, 26733, 28447, 65535)
-    ]
-
-    tab_temp = [
-        (179., 180., 185., 190., 195., 200., 205., 210.,
-         215., 220., 230., 240., 270., 300., 330., 331.),
-        (179., 180., 185., 190., 195., 200., 205., 210.,
-         215., 220., 230., 240., 270., 300., 330., 331.),
-        (209., 210., 215., 220., 225., 230., 235., 240.,
-         245., 250., 255., 270., 290., 310., 330., 331.),
-        (209., 210., 215., 220., 225., 230., 235., 240.,
-         245., 250., 255., 270., 290., 310., 330., 331.),
-        (209., 210., 215., 220., 225., 230., 235., 240.,
-         245., 250., 255., 270., 290., 310., 330., 331.),
-        (179., 180., 185., 190., 195., 200., 205., 210.,
-         215., 220., 230., 240., 270., 300., 330., 331.),
-        (129., 130., 135., 140., 145., 150., 155., 160.,
-         165., 180., 210., 240., 270., 300., 330., 331.),
-        (129., 130., 135., 140., 145., 150., 155., 160.,
-         165., 180., 210., 240., 270., 300., 330., 331.)
-    ]
-
-    nch = channel - 1
-    if nch < 0 or nch > 7:
-        raise ValueError('channel must be between 1 and 8')
-
-    return np.interp(raw_tm, tab_tm[nch], tab_temp[nch])
 
 # - Classes --------------------------------------
 class File():
@@ -918,6 +879,8 @@ class File():
         """
         combines readouts of one science channel for a given state ID
         """
+        from .hk import get_det_temp
+
         (det_mds, _, _) = self.get_mds(state_id)
         if det_mds.size == 0:
             return None

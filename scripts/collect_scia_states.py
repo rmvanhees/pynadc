@@ -68,7 +68,7 @@ import h5py
 import numpy as np
 
 # - global parameters ------------------------------
-VERSION = '1.1.1'
+VERSION = '2.0.0'
 
 MAX_ORBIT = 53000
 
@@ -146,11 +146,12 @@ class ClusDB:
     """
     define class to collect Sciamachy instrument settings per state
     """
-    def __init__(self, args=None, db_name='./scia_state_settings.h5',
+    def __init__(self, args=None, db_name='./scia_state_db.h5',
                  verbose=False):
         """
         Initialize the class ClusDB.
         """
+        self.fid = None
         if args:
             self.db_name = args.db_name
             self.verbose = args.verbose
@@ -158,20 +159,31 @@ class ClusDB:
             self.db_name = db_name
             self.verbose = verbose
 
-    def create(self):
+    def close(self):
         """
-        Create and initialize the state definition database.
+        Close resources
         """
-        from time import gmtime, strftime
+        if self.fid is not None:
+            self.fid.close()
 
-        mtbl_dtype = np.dtype([
+    @staticmethod
+    def mtbl_dtype():
+        """
+        Returns numpy-dtype definition for a metaTable record
+        """
+        return np.dtype([
             ('type_clus', 'u1'),
             ('num_clus', 'u1'),
             ('duration', 'u2'),
             ('num_info', 'u2'),
         ])
 
-        clus_dtype = np.dtype([
+    @staticmethod
+    def clus_dtype():
+        """
+        Returns numpy-dtype definition for a clusDef record
+        """
+        return np.dtype([
             ('id', 'u1'),
             ('channel', 'u1'),
             ('coaddf', 'u1'),
@@ -183,64 +195,41 @@ class ClusDB:
             ('pet', 'f4')
         ])
 
-        with h5py.File(self.db_name, 'w', libver='latest') as fid:
-            #
-            # add global attributes
-            #
-            fid.attrs['title'] = 'Sciamachy state-cluster definition database'
-            fid.attrs['institution'] = \
-                'SRON Netherlands Institute for Space Research (Earth)'
-            fid.attrs['source'] = 'Sciamachy Level 1b (SCIA/8.01)'
-            fid.attrs['program_version'] = VERSION
-            fid.attrs['creation_date'] = strftime('%Y-%m-%d %T %Z', gmtime())
-            #
-            # initialize metaTable dataset
-            #
-            mtbl = np.zeros(MAX_ORBIT, dtype=mtbl_dtype)
-            mtbl['type_clus'][:] = 0xFF
-            #
-            # initialize state-cluster definition dataset
-            #
-            for ni in range(1, 71):
-                grp = fid.create_group('State_{:02d}'.format(ni))
-                _ = grp.create_dataset('metaTable', data=mtbl,
-                                       chunks=(12288 // mtbl.dtype.itemsize,),
-                                       shuffle=True)
-                _ = grp.create_dataset('clusDef', (0, 64), dtype=clus_dtype,
-                                       chunks=(1, 64), maxshape=(None, 64),
-                                       shuffle=True)
-
-    def update(self, orbit, state_id, mtbl, clus_conf):
+    def create(self):
         """
-        update database entry
-
-        @param self    : Reference to state definition module object.
-        @param orbit   : revolution counter
-        @param state_id : state ID - integer range [1, 70].
-        @param mtbl    : metaTable entry.
-        @param clus_conf : state cluster definition entry from L1B product
+        Create and initialize the state definition database.
         """
-        with h5py.File(self.db_name, 'r+') as fid:
-            grp = fid['State_{:02d}'.format(state_id)]
-            ds_mtbl = grp['metaTable']
-            ds_mtbl[orbit] = mtbl
-            ds_clus = grp['clusDef']
-            clus_conf_db = ds_clus[:]
+        from time import gmtime, strftime
 
-            clus_conf_new = np.zeros(64, dtype=ds_clus.dtype)
-            for key in clus_conf_new.dtype.names:
-                clus_conf_new[key][:] = clus_conf[key][:]
-
-            clus_dim = ds_clus.shape[0]
-            for ni in range(clus_dim):
-                if (clus_conf_db[ni, :] == clus_conf_new[:]).all():
-                    ds_mtbl[orbit]['type_clus'] = ni
-                    break
-            else:
-                # new cluster definition: extent dataset
-                ds_clus.resize(clus_dim+1, axis=0)
-                ds_clus[clus_dim, :] = clus_conf
-                ds_mtbl[orbit]['type_clus'] = clus_dim
+        self.fid = h5py.File(self.db_name, 'w',
+                             driver='core', backing_store=True,
+                             libver='latest')
+        #
+        # add global attributes
+        #
+        self.fid.attrs['title'] = 'Sciamachy state-cluster definition database'
+        self.fid.attrs['institution'] = \
+                        'SRON Netherlands Institute for Space Research (Earth)'
+        self.fid.attrs['source'] = 'Sciamachy Level 1b (SCIA/8.01)'
+        self.fid.attrs['program_version'] = VERSION
+        self.fid.attrs['creation_date'] = strftime('%Y-%m-%d %T %Z', gmtime())
+        #
+        # initialize metaTable dataset
+        #
+        mtbl = np.zeros(MAX_ORBIT, dtype=self.mtbl_dtype())
+        mtbl['type_clus'][:] = 0xFF
+        #
+        # initialize state-cluster definition dataset
+        #
+        for ni in range(1, 71):
+            grp = self.fid.create_group('State_{:02d}'.format(ni))
+            _ = grp.create_dataset('metaTable', data=mtbl,
+                                   chunks=(12288 // mtbl.dtype.itemsize,),
+                                   shuffle=True)
+            _ = grp.create_dataset('clusDef', (0, 64),
+                                   dtype=self.clus_dtype(),
+                                   chunks=(1, 64), maxshape=(None, 64),
+                                   shuffle=True)
 
     def add_missing_state_3033(self):
         """
@@ -1457,15 +1446,14 @@ class ClusDB:
             for state_id in range(1, 71):
                 grp = fid['State_{:02d}'.format(state_id)]
                 if state_id == 65:
-                    ds_mtbl = grp['metaTable']
-                    ds_mtbl[2204:52867]['num_clus'] = 40
-                    ds_mtbl[2204:52867]['type_clus'] = 0
-                    ds_mtbl[2204:52867]['duration'] = 320
-                    ds_mtbl[2204:52867]['num_info'] = 40
+                    mtbl = grp['metaTable'][2204:52867]
+                    mtbl[:] = (0, 40, 320, 40)
+                    grp['metaTable'][2204:52867] = mtbl
 
                     ds_clus = grp['clusDef']
                     ds_clus.resize(1, axis=0)
                     ds_clus[0, :] = fid['State_46/clusDef'][0, :]
+                    print("updated group State 65")
                     continue
 
                 if grp['clusDef'].size == 0:
@@ -1546,8 +1534,11 @@ class ClusDB:
                     ds_mtbl[7193] = ds_mtbl[7194]
 
                 if state_id == 49 and ds_mtbl[4381]['duration'] == 2078:
-                    ds_mtbl[4381]['duration'] = 2080
-                    ds_mtbl[4381]['num_info'] = 2080
+                    mtbl = grp['metaTable'][4381]
+                    mtbl['duration'] = 2080
+                    mtbl['num_info'] = 2080
+                    grp['metaTable'][4381] = mtbl
+                    print("updated group State 49")
 
                 if state_id == 54 and ds_mtbl[5034]['type_clus'] == 0xFF:
                     ds_mtbl[5034] = ds_mtbl[5019]
@@ -1557,6 +1548,40 @@ class ClusDB:
 
                 if state_id == 62 and ds_mtbl[4055]['type_clus'] == 0xFF:
                     ds_mtbl[4055] = ds_mtbl[4056]
+
+    def update(self, orbit, state_id, mtbl, clus_conf_l1b):
+        """
+        update database entry
+
+        Parameters
+        ----------
+         orbit     : revolution counter
+         state_id  : state ID - integer range [1, 70].
+         mtbl      : metaTable entry
+         clus_conf : state cluster definition entry from L1B product
+        """
+        grp = self.fid['State_{:02d}'.format(state_id)]
+        ds_mtbl = grp['metaTable']
+        ds_clus = grp['clusDef']
+        clus_dim = ds_clus.shape[0]
+        clus_conf = ds_clus[:]
+
+        # convert L1b struct to database struct
+        clus_conf_new = np.zeros(64, dtype=ds_clus.dtype)
+        for key in clus_conf_new.dtype.names:
+            clus_conf_new[key][:] = clus_conf_l1b[key][:]
+
+        # update database
+        indx = np.where((clus_conf == clus_conf_new).all(axis=1))[0]
+        if indx.size == 0:
+            # new cluster definition: extent dataset
+            ds_clus.resize(clus_dim+1, axis=0)
+            ds_clus[clus_dim, :] = clus_conf_new
+            mtbl['type_clus'] = clus_dim
+        else:
+            # cluster definition exists
+            mtbl['type_clus'] = indx[0]
+        ds_mtbl[orbit] = mtbl
 
 
 # - main code --------------------------------------
@@ -1573,8 +1598,7 @@ def main():
         description='combine Sciamachy state cluster definitions into database')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help="be verbose")
-    parser.add_argument('--db_name', type=str,
-                        default='./scia_state_settings.h5',
+    parser.add_argument('--db_name', type=str, default='./scia_state_db.h5',
                         help="write to hdf5 database")
     parser.add_argument('--proc', default='Y', type=str,
                         help="select entries on ESA processor baseline")
@@ -1603,6 +1627,7 @@ def main():
         clusdb.create()
 
         # all cluster-configurations of all L1B products
+        # for orbit in range(1, 2300):
         for orbit in range(1, MAX_ORBIT+1):
             file_list = db.get_product_by_type(prod_type='1',
                                                proc_stage=args.proc,
@@ -1631,14 +1656,16 @@ def main():
             # loop over all ID of states
             for state_id in np.unique(states['state_id']):
                 indx = np.where(states['state_id'] == state_id)[0]
-                mtbl = (0,
-                        states['num_clus'][indx[0]],
-                        states['duration'][indx[0]],
-                        states['num_geo'][indx[0]])
+                mtbl = np.empty(1, dtype=clusdb.mtbl_dtype())
+                mtbl['num_clus'] = states['num_clus'][indx[0]]
+                mtbl['duration'] = states['duration'][indx[0]]
+                mtbl['num_info'] = states['num_geo'][indx[0]]
                 clus_conf = states['Clcon'][indx[0], :]
                 if args.verbose:
                     print(state_id, ' - ', orbit, indx[0], clus_conf.shape)
                 clusdb.update(orbit, state_id, mtbl, clus_conf)
+
+        clusdb.close()
     elif args.add_ocr:
         if not Path(clusdb.db_name).is_file():
             print("database not found, please create one using '--all_lv1'")
