@@ -106,6 +106,19 @@ def check_dsr_in_states(mds, verbose=False, check=False):
 
     return mds
 
+def get_clus_def(det_mds):
+    for det in det_mds:
+        num_chan = det['pmtc_hdr']['num_chan']
+        for chan in det['chan_data'][:num_chan]:
+            chan_id = chan['hdr']['id_is_lu'] >> 4
+            bcps = chan['hdr']['bcps']
+            num_clus = chan['hdr']['clusters']
+            for clus in chan['clus_hdr'][:num_clus]:
+                clus_id = clus['id']
+                coaddf = clus['coaddf']
+                start = clus['start']
+                length = clus['length']
+            
 
 # - Classes --------------------------------------
 class File():
