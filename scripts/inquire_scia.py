@@ -69,7 +69,7 @@ def main() -> None:
                              help='select latest consolidated products')
     parser_type.add_argument('--proc', nargs='+', choices=proc_opts,
                              help='select entries on ESA processor ID')
-    parser_type.add_argument('--rtime', nargs='+', choices=rtime_opts,
+    parser_type.add_argument('--rtime', nargs=1, choices=rtime_opts,
                              help='select entries on receive time: xh or xd')
     parser_type.add_argument('--date', type=str,
                              help="""
