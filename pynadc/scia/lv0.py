@@ -107,18 +107,70 @@ def check_dsr_in_states(mds, verbose=False, check=False):
     return mds
 
 def get_clus_def(det_mds):
+    """
+    determine cluster definition (same as clusDef in L1b states ADS)
+    """
+    clus_dtype = np.dtype([
+        ('id', 'u1'),              # 1 <= id <= 64
+        ('channel', 'u1'),         # 1 <= channel <= 8
+        ('coaddf', 'u1'),
+        ('type', 'u1'),            # coaddf == 1 ? 1 : 2
+        ('start', 'u2'),           # 0 <= start < 1023
+        ('length', 'u2'),          # 0 <= start < 1023
+        ('intg', 'u2'),            # 16 * coaddf * pet
+        ('n_read', 'u2'),
+        ('pet', 'f4')
+    ])
+
+    clus_list = []
     for det in det_mds:
         num_chan = det['pmtc_hdr']['num_chan']
         for chan in det['chan_data'][:num_chan]:
             chan_id = chan['hdr']['id_is_lu'] >> 4
             bcps = chan['hdr']['bcps']
+            if chan_id < 6:
+                pet = None
+                pet_list, vir_chan_b = get_det_vis_pet(chan['hdr'])
+                if isinstance(pet_list, float):
+                    pet = pet_list
+            else:
+                vir_chan_b = 0
+                pet = get_det_ir_pet(chan['hdr'])
+                pet_list = None
+
             num_clus = chan['hdr']['clusters']
             for clus in chan['clus_hdr'][:num_clus]:
                 clus_id = clus['id']
                 coaddf = clus['coaddf']
-                start = clus['start']
+                start = clus['start'] % 1024
                 length = clus['length']
-            
+                if isinstance(pet_list, list):
+                    if start >= vir_chan_b:
+                        pet = pet_list[1]
+                    else:
+                        pet = pet_list[0]
+                clus_list.append((chan_id, clus_id, start, length, coaddf, pet))
+
+    # fill the output structure
+    clus_set = sorted(set(clus_list), key=itemgetter(0, 2))
+    clus_def = np.empty(len(clus_set), dtype=clus_dtype())
+    for ni, clus in enumerate(clus_set):
+        clus_def[ni]['id'] = ni + 1
+        clus_def[ni]['channel'] = clus[0]
+        clus_def[ni]['coaddf'] = clus[4]
+        clus_def[ni]['type'] = min(2, clus[4])
+        clus_def[ni]['start'] = clus[2]
+        clus_def[ni]['length'] = clus[3]
+        clus_def[ni]['intg'] = max(1, int(16 * clus[4] * clus[5]))
+        clus_def[ni]['n_read'] = 0
+        clus_def[ni]['pet'] = clus[5]
+
+    # finally, add number of readouts
+    for clus in clus_def:
+        clus['n_read'] = clus_def['intg'].max() // clus['intg']
+        # print(clus)
+
+    return clus_def
 
 # - Classes --------------------------------------
 class File():

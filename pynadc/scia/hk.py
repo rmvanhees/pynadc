@@ -13,6 +13,8 @@ License:  Standard 3-clause BSD
 """
 import numpy as np
 
+from bitstring import BitArray
+
 def get_det_temp(channel, raw_tm):
     """
     convert raw temperature counts to Kelvin
@@ -61,3 +63,82 @@ def get_det_temp(channel, raw_tm):
 
     # use linear interpolation (nothing fancy)
     return np.interp(raw_tm, tab_tm[nch], tab_temp[nch])
+
+def get_det_vis_pet(chan_hdr):
+    """
+    convert raw timing data to detector data to pixel-exposure-time (VIS)
+    """
+    # The layout of the detector command word for channels 1--5
+    #  14 bits: exposure time factor (ETF)
+    #       ETF >= 1: pet = etf * 62.5 ms * ratio
+    #       ETF == 0: pet = 31.25 ms
+    #   2 bits: mode
+    #       0: Normal Mode
+    #       1: Normal Mode
+    #       2: Test Mode
+    #       3: ADC calibration
+    #   9 bits: section address (2 pixels resolution)
+    #       start of virtual channel b at 2 * section
+    #   5 bits: ratio
+    #       ratio of exposure time between virtual channels
+    #   2 bits: control
+    #       1: restart of readout cycle
+    #       3: hardware reset of detector module electronics
+    #
+    command = BitArray(uintbe=chan_hdr['command'], length=32)
+    etf = int(command.bin[0:14], 2)
+    section = int(command.bin[16:25], 2)
+    ratio = int(command.bin[25:30], 2)
+
+    vir_chan_b = 2 * section
+    if etf == 0:
+        return (1 / 32, vir_chan_b)
+
+    pet = etf / 16
+    if section > 0 and ratio > 1:
+        return ([pet * ratio, pet], vir_chan_b)
+
+    return (pet, vir_chan_b)
+
+def get_det_ir_pet(chan_hdr):
+    """
+    convert raw timing data to detector data to pixel-exposure-time (IR)
+    """
+    # The layout of the detector command word for channels 6--8
+    #  14 bits: exposure time factor (ETF)
+    #       ETF >= 1: pet = etf * 62.5 ms * ratio
+    #       ETF == 0: pet = 31.25 ms
+    #   2 bits: mode
+    #       0: Normal Mode
+    #       1: Hot Mode
+    #       2: Test Mode
+    #       3: ADC calibration
+    #   2 bits: comp. mode, sets the offset compensation
+    #       0: no offset compensation
+    #       1: store offset compensation
+    #       2: use stored offset
+    #       3: continuous offset
+    #   3 bits: not used
+    #   3 bits: fine bias settings [mV]
+    #       (-16, 10, -5, -3, -2, -1, 0, 2)
+    #   2 bits: not used
+    #   4 bits: short pixel exposure time for Hot mode
+    #       pet = 28.125e-6 * 2^x  with x <= 10
+    #   2 bits: control
+    #       1: restart of readout cycle
+    #       3: hardware reset of detector module electronics
+    #
+    command = BitArray(uintbe=chan_hdr['command'], length=32)
+    etf = int(command.bin[0:14], 2)
+    mode = int(command.bin[14:16], 2)
+    spet = int(command.bin[26:30], 2)
+
+    # hot mode
+    if mode == 1:
+        return 28.125e-6 * 2 ** min(spet, 10)
+
+    # normal mode
+    if etf == 0:
+        return 1 / 32
+
+    return etf / 16
