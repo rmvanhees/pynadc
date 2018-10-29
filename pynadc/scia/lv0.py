@@ -23,6 +23,7 @@ Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
 
 License:  Standard 3-clause BSD
 """
+from operator import itemgetter
 from pathlib import Path
 
 import numpy as np
@@ -110,6 +111,15 @@ def get_clus_def(det_mds):
     """
     determine cluster definition (same as clusDef in L1b states ADS)
     """
+    from .hk import get_det_vis_pet, get_det_ir_pet
+
+    mtbl_dtype = np.dtype([
+            ('type_clus', 'u1'),
+            ('num_clus', 'u1'),
+            ('duration', 'u2'),
+            ('num_info', 'u2'),
+        ])
+
     clus_dtype = np.dtype([
         ('id', 'u1'),              # 1 <= id <= 64
         ('channel', 'u1'),         # 1 <= channel <= 8
@@ -122,12 +132,16 @@ def get_clus_def(det_mds):
         ('pet', 'f4')
     ])
 
+    bcps = 0
     clus_list = []
     for det in det_mds:
+        first = True
         num_chan = det['pmtc_hdr']['num_chan']
         for chan in det['chan_data'][:num_chan]:
             chan_id = chan['hdr']['id_is_lu'] >> 4
-            bcps = chan['hdr']['bcps']
+            if first:
+                bcps += chan['hdr']['bcps']
+                first = False
             if chan_id < 6:
                 pet = None
                 pet_list, vir_chan_b = get_det_vis_pet(chan['hdr'])
@@ -153,7 +167,7 @@ def get_clus_def(det_mds):
 
     # fill the output structure
     clus_set = sorted(set(clus_list), key=itemgetter(0, 2))
-    clus_def = np.empty(len(clus_set), dtype=clus_dtype())
+    clus_def = np.empty(len(clus_set), dtype=clus_dtype)
     for ni, clus in enumerate(clus_set):
         clus_def[ni]['id'] = ni + 1
         clus_def[ni]['channel'] = clus[0]
@@ -170,7 +184,13 @@ def get_clus_def(det_mds):
         clus['n_read'] = clus_def['intg'].max() // clus['intg']
         # print(clus)
 
-    return clus_def
+    mtbl = np.zeros(1, dtype=mtbl_dtype)
+    mtbl['num_clus'] = len(clus_set)
+    mtbl['duration'] = (det_mds[-1]['pmtc_hdr']['bcps'] // det_mds.size
+                        * det_mds.size)
+    mtbl['num_info'] = det_mds.size
+
+    return mtbl, clus_def
 
 # - Classes --------------------------------------
 class File():
