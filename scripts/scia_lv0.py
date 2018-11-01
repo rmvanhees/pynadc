@@ -67,6 +67,8 @@ def main():
         print('exception occurred in module pynadc.scia.lv0')
         raise
 
+    obj.repair_info()
+
     (det_mds, aux_mds, pmd_mds) = obj.get_mds(state_id=args.state)
     lv0.check_dsr_in_states(det_mds, verbose=True)
     # lv0.check_dsr_in_states(aux_mds, verbose=True)

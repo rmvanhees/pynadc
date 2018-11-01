@@ -64,23 +64,26 @@ def check_dsr_in_states(mds, verbose=False, check=False):
     icu_time = mds['data_hdr']['icu_time'][indx[:-1]]
     state_id = mds['data_hdr']['state_id'][indx[:-1]]
     if 'pmtc_frame' in mds.dtype.names:
-        print('# aux_mds : ', mds['pmtc_frame']['bcp']['bcps'].shape)
         bcps = mds['pmtc_frame']['bcp']['bcps'][:, 0, 0]
     elif 'pmd_data' in mds.dtype.names:
-        print('# pmd_mds : ', mds['pmd_data']['bcps'].shape)
         bcps = mds['pmd_data']['bcps'][:, 0]
     else:
-        print('# det_mds : ', mds['pmtc_hdr']['bcps'].shape)
         bcps = mds['pmtc_hdr']['bcps']
     if verbose:
         for ni in range(num_dsr.size):
             if ni+1 < num_dsr.size:
                 diff_bcps = np.diff(bcps[indx[ni]:indx[ni+1]])
-            print('# {:3d} state_{:02d} {:5d} {:4d} '.format(
-                ni, state_id[ni], indx[ni], num_dsr[ni]),
-                  icu_time[ni],
-                  np.all(diff_bcps > 0),
-                  np.all(diff_bcps == diff_bcps[0]))
+            if len(diff_bcps) > 1:
+                print("# {:3d} state_{:02d} {:5d} {:4d}".format(
+                    ni, state_id[ni], indx[ni], num_dsr[ni]),
+                      icu_time[ni],
+                      np.all(diff_bcps > 0),
+                      np.all(diff_bcps == diff_bcps[0]))
+            else:
+                print("# {:3d} state_{:02d} {:5d} {:4d}".format(
+                    ni, state_id[ni], indx[ni], num_dsr[ni]),
+                      icu_time[ni],
+                      np.all(diff_bcps > 0))
 
     if not check:
         return mds
@@ -102,7 +105,7 @@ def check_dsr_in_states(mds, verbose=False, check=False):
                 # print(ni, reject, start, end)
                 mds['fep_hdr']['_quality'][start:end] = 0xFFFF
 
-        print('# rejected {} DSRs'.format(
+        print("# Info - rejected {} DSRs".format(
             np.sum(mds['fep_hdr']['_quality'] != 0)))
 
     return mds
@@ -114,11 +117,11 @@ def get_clus_def(det_mds):
     from .hk import get_det_vis_pet, get_det_ir_pet
 
     mtbl_dtype = np.dtype([
-            ('type_clus', 'u1'),
-            ('num_clus', 'u1'),
-            ('duration', 'u2'),
-            ('num_info', 'u2'),
-        ])
+        ('type_clus', 'u1'),
+        ('num_clus', 'u1'),
+        ('duration', 'u2'),
+        ('num_info', 'u2'),
+    ])
 
     clus_dtype = np.dtype([
         ('id', 'u1'),              # 1 <= id <= 64
@@ -203,6 +206,9 @@ class File():
         """
         # initialize class attributes
         self.filename = flname
+        self.sorted = {'det' : True,      # assume DSR packets are sorted
+                       'aux' : True,
+                       'pmd' : True}
         self.mph = {}
         self.sph = {}
         self.dsd = None
@@ -602,16 +608,19 @@ class File():
 
         # collect information about the level 0 measurement data in product
         num_det = num_aux = num_pmd = 0
+        last_det_icu_time = last_aux_icu_time = last_pmd_icu_time = 0
         with open(self.filename, 'rb') as fp:
             ds_hdr_dtype = self.ds_hdr_dtype()
             fp.seek(dsd['DS_OFFSET'])
             for ni, ds_rec in enumerate(self.info):
                 ds_hdr = np.fromfile(fp, dtype=ds_hdr_dtype, count=1)[0]
 
-                # check for corrupted data
+                # how much data do we still need to read
                 num_bytes = self.bytes_left(ds_hdr, ds_hdr_dtype.itemsize)
+                # check for header-data corruption
                 if num_bytes < 0:
-                    print('# read {} of {} DSRs'.format(ni, dsd['NUM_DSR']))
+                    print("# Info - read {} of {} DSRs".format(
+                        ni, dsd['NUM_DSR']))
                     break
 
                 # copy read buffer
@@ -622,33 +631,52 @@ class File():
                 ds_rec['fep_hdr']['_quality'] = 0
 
                 ds_rec['data_hdr']['packet_type'] >>= 4
-                if ds_rec['data_hdr']['packet_type'] == 1:
-                    num_det += 1
-                    offs_bcps = 0
-                elif (ds_rec['data_hdr']['packet_type'] == 2
-                      or ds_rec['fep_hdr']['length'] == 1659):
-                    num_aux += 1
-                    offs_bcps = 20
-                elif (ds_rec['data_hdr']['packet_type'] == 3
-                      or ds_rec['fep_hdr']['length'] == 6813):
+                ds_rec['data_hdr']['packet_type'] &= 0x3
+                if ds_rec['data_hdr']['packet_type'] == 3 \
+                   or ds_rec['fep_hdr']['length'] == 6813:
                     num_pmd += 1
                     offs_bcps = 32
+                    if last_pmd_icu_time > ds_rec['data_hdr']['icu_time']:
+                        self.sorted['pmd'] = False
+                    last_pmd_icu_time = ds_rec['data_hdr']['icu_time']
+                elif ds_rec['data_hdr']['packet_type'] == 2 \
+                     or ds_rec['fep_hdr']['length'] == 1659:
+                    num_aux += 1
+                    offs_bcps = 20
+                    if last_aux_icu_time > ds_rec['data_hdr']['icu_time']:
+                        self.sorted['aux'] = False
+                    last_aux_icu_time = ds_rec['data_hdr']['icu_time']
                 else:
-                    print('# warning: unknown packet type {} & size {}'.format(
-                        ds_rec['data_hdr']['packet_type'],
-                        ds_rec['fep_hdr']['length']))
-                    ds_rec['data_hdr']['packet_type'] = 1
+                    if ds_rec['data_hdr']['packet_type'] != 1:
+                        if ds_rec['data_hdr']['length'] != 66:
+                            print("# Warning - unknown packet type")
+                            print("# * feb_hdr: ", ds_rec['fep_hdr'])
+                            print("# * packted_hdr: ", ds_rec['packet_hdr'])
+                            print("# * data_hdr: ", ds_rec['data_hdr'])
+                        ds_rec['data_hdr']['packet_type'] = 1
                     num_det += 1
                     offs_bcps = 0
+                    if last_det_icu_time > ds_rec['data_hdr']['icu_time']:
+                        self.sorted['det'] = False
+                    last_det_icu_time = ds_rec['data_hdr']['icu_time']
 
                 # read remainder of DSR
                 ds_rec['buff'] = fp.read(num_bytes)
 
                 # read BCPS
                 ds_rec['bcps'] = np.frombuffer(
-                    ds_rec['buff'], '>i2', count=1, offset=offs_bcps)
+                    ds_rec['buff'], '>u2', count=1, offset=offs_bcps)
 
-        print('# number of DSRs: ', num_det, num_aux, num_pmd)
+                # if ds_rec['data_hdr']['packet_type'] == 1:
+                #    offs = ds_rec['data_hdr']['icu_time'] - 4.19e9
+                #    print(ni, ds_rec['data_hdr']['state_id'],
+                #          last_det_icu_time,
+                #          ds_rec['data_hdr']['icu_time'],
+                #          offs + ds_rec['bcps'] / 16)
+
+        print('# Info - number of DSRs (sorted={}): {:4d} {:3d} {:3d}'.format(
+            self.sorted['det'] & self.sorted['aux'] & self.sorted['pmd'],
+            num_det, num_aux, num_pmd))
 
     def bytes_left(self, mds, read_sofar=0):
         """
@@ -756,7 +784,7 @@ class File():
             #      offs, len(ds_rec['buff']))
             channel['hdr']['clusters'][nch] &= 0xF
             if channel['hdr']['sync'][nch] != 0xAAAA:
-                print('# channel-sync corruption', ni, nch)
+                print("# Warning - channel-sync corruption", ni, nch)
                 det['pmtc_hdr']['num_chan'] = nch
                 det['fep_hdr']['_quality'] |= 0x1
                 break
@@ -782,7 +810,7 @@ class File():
                 #      hdr['length'][ncl], hdr['coaddf'][ncl],
                 #      offs, len(ds_rec['buff']))
                 if hdr['sync'][ncl] != 0xBBBB:
-                    print('# cluster-sync corruption', ni, nch, ncl)
+                    print("# Warning - cluster-sync corruption", ni, nch, ncl)
                     channel['hdr']['clusters'][nch] = ncl
                     det['fep_hdr']['_quality'] |= 0x2
                     break
@@ -800,7 +828,8 @@ class File():
                 if hdr['coaddf'][ncl] == 1:
                     nbytes = 2 * hdr['length'][ncl]
                     if nbytes > bytes_left:
-                        print('# cluster-size corruption', ni, nch, ncl)
+                        print("# Warning - cluster-size corruption",
+                              ni, nch, ncl)
                         channel['hdr']['clusters'][nch] = ncl
                         buff[ncl] = None
                         det['fep_hdr']['_quality'] |= 0x4
@@ -812,7 +841,8 @@ class File():
                 else:
                     nbytes = 3 * hdr['length'][ncl]
                     if nbytes > bytes_left:
-                        print('# cluster-size corruption', ni, nch, ncl)
+                        print("# Warning - cluster-size corruption",
+                              ni, nch, ncl)
                         channel['hdr']['clusters'][nch] = ncl
                         buff[ncl] = None
                         det['fep_hdr']['_quality'] |= 0x4
@@ -832,6 +862,81 @@ class File():
             break
 
         return det
+
+    # repair SCIAMACHY_SOURCE_PACKETS
+    def repair_info(self):
+        """
+        Repairs chronological order of info records
+
+        Description
+        -----------
+        Checks attribute 'sorted', nothing is done when DSR's are sorted
+        1) repair corrupted icu_time values within a state execution
+        2) put state executions in chronological order (based on icu_time)
+           and remove repeated states or partly repeated states in product
+        """
+        if self.sorted['det'] & self.sorted['aux'] & self.sorted['pmd']:
+            return
+
+        info_list = ()
+        for name, _id in (['det', 1], ['aux', 2], ['pmd', 3]):
+            indx = np.where(self.info['data_hdr']['packet_type'] == _id)[0]
+            info = self.info[indx]
+
+            uniq, inverse, counts = np.unique(
+                info['data_hdr']['icu_time'],
+                return_counts=True, return_inverse=True)
+
+            # 1) repair corrupted icu_time values
+            for ii in np.where(counts == 1)[0]:
+                indx = np.where(inverse == ii)[0][0]
+                if indx > 0 and indx + 1 < info.size:
+                    if (info['data_hdr']['icu_time'][indx-1]
+                            == info['data_hdr']['icu_time'][indx+1]) \
+                        and (info['data_hdr']['state_id'][indx-1]
+                             == info['data_hdr']['state_id'][indx]
+                             == info['data_hdr']['state_id'][indx+1]) \
+                        and (info['bcps'][indx-1]
+                             < info['bcps'][indx]
+                             < info['bcps'][indx+1]):
+                        print("# Info - icu_time of {}_mds[{}] fixed".format(
+                            name, indx))
+                        info['data_hdr']['icu_time'][indx] = \
+                                        info['data_hdr']['icu_time'][indx-1]
+                    else:
+                        print("# Warning - can not fix {}_mds[{}]".format(
+                            name, indx))
+                else:
+                    print("# Warning - can not fix {}_mds[{}]".format(
+                        name, indx))
+
+            # 2) put state executions in chronological order
+            #    and remove repeated states or partly repeated states in product
+            if np.any(np.diff(info['data_hdr']['icu_time'].astype(int)) < 0):
+                uniq, inverse = np.unique(
+                    info['data_hdr']['icu_time'], return_inverse=True)
+
+                for ii in range(uniq.size):
+                    indx = np.where(inverse == ii)[0]
+                    blocks = np.where(np.diff(np.concatenate(([-1],
+                                                              indx,
+                                                              [-1]))) != 1)[0]
+                    if blocks.size == 1:
+                        info_list += (info[indx],)
+                        continue
+
+                    num = np.argmax(np.diff(blocks))
+                    if np.diff(blocks)[num] == 1:
+                        print("# Warning - rejected {}_mds: {}".format(
+                            name, indx))
+                        continue
+
+                    info_list += (info[indx[blocks[num]:blocks[num+1]]],)
+            else:
+                info_list += (info,)
+
+        # combine all detector, auxiliary and pmd DSRs
+        self.info = np.concatenate(info_list)
 
     # read SCIAMACHY_SOURCE_PACKETS
     def get_mds(self, state_id=None):
@@ -890,7 +995,7 @@ class File():
                 ni += 1
 
             det_mds = det_mds[0:ni]
-            print('# read {} detector mds'.format(ni))
+            print("# Info - read {} detector mds".format(ni))
 
         # ----- read level 0 auxiliary data packets -----
         indx_aux = np.where(self.info['data_hdr']['packet_type'] == 2)[0]
@@ -923,7 +1028,7 @@ class File():
                 ni += 1
 
             aux_mds = aux_mds[0:ni]
-            print('# read {} auxiliary mds'.format(ni))
+            print("# Info - read {} auxiliary mds".format(ni))
 
         # ----- read level 0 PMD data packets -----
         indx_pmd = np.where(self.info['data_hdr']['packet_type'] == 3)[0]
@@ -956,7 +1061,7 @@ class File():
                 ni += 1
 
             pmd_mds = pmd_mds[0:ni]
-            print('# read {} PMD mds'.format(ni))
+            print("# Info - read {} PMD mds".format(ni))
 
         return (det_mds, aux_mds, pmd_mds)
 
