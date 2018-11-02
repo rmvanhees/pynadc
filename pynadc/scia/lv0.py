@@ -200,7 +200,7 @@ class File():
     """
     Class to read Sciamachy level 0 products
     """
-    def __init__(self, flname):
+    def __init__(self, flname, only_headers=False):
         """
         read whole product into memory: ascii headers and all DSRs
         """
@@ -245,7 +245,8 @@ class File():
             raise SystemError('file {} incomplete'.format(flname))
 
         # read remainder of the file as info-records
-        self.__get_info__()
+        if not only_headers:
+            self.__get_info__()
 
     # ----- generic data structures -------------------------
     @staticmethod
@@ -875,6 +876,9 @@ class File():
         2) put state executions in chronological order (based on icu_time)
            and remove repeated states or partly repeated states in product
         """
+        if self.info is None:
+            self.__get_info__()
+
         if self.sorted['det'] & self.sorted['aux'] & self.sorted['pmd']:
             return
 
@@ -976,6 +980,9 @@ class File():
         sanity checks and will ingnore data of a DSR after a data coruption,
         but will interpret any remaining DSRs.
         """
+        if self.info is None:
+            self.__get_info__()
+
         # ----- read level 0 detector data packets -----
         # possible variants: raw, safe, clus_def
         indx_det = np.where(self.info['data_hdr']['packet_type'] == 1)[0]

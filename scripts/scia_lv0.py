@@ -36,6 +36,8 @@ def main():
                        help='select data from given orbit')
     group.add_argument('file', nargs='?', type=str,
                        help='read data from given file')
+    parser.add_argument('--only_headers', action='store_true',
+                        help='read only the product headers')
     parser.add_argument('--state', nargs='+', type=int,
                         help='must be the last argument on the command-line')
     args = parser.parse_args()
@@ -62,14 +64,24 @@ def main():
     print(scia_fl)
     # create object and open Sciamachy level 0 product
     try:
-        obj = lv0.File(scia_fl)
+        fid = lv0.File(scia_fl, only_headers=args.only_headers)
     except:
         print('exception occurred in module pynadc.scia.lv0')
         raise
 
-    obj.repair_info()
+    if args.only_headers:
+        for key in fid.mph:
+            print('MPH: ', key, fid.mph[key])
+        for key in fid.sph:
+            print('SPH: ', key, fid.sph[key])
+        for ni, dsd_rec in enumerate(fid.dsd):
+            for key in dsd_rec:
+                print('DSD[{:02d}]: '.format(ni), key, dsd_rec[key])
+        return
 
-    (det_mds, aux_mds, pmd_mds) = obj.get_mds(state_id=args.state)
+    fid.repair_info()
+
+    (det_mds, aux_mds, pmd_mds) = fid.get_mds(state_id=args.state)
     lv0.check_dsr_in_states(det_mds, verbose=True)
     # lv0.check_dsr_in_states(aux_mds, verbose=True)
     # lv0.check_dsr_in_states(pmd_mds, verbose=True)
