@@ -5,12 +5,12 @@ The pyNADC package contains the following tools and python modules:
 
 Access to Sciamachy data-products
 ---------------------------------
-* Fast read access to Sciamachy (ENVISAT) level 0 (format PDS/ESA).
+* Fast read access to Sciamachy (ENVISAT) level 0 (format PDS/ESA)
    The software attempt to read all data and offers convenient access to the
    parameter through structured Numpy arrays.
    The script 'scia_lv0.py' offers a guideline of how to use the module
    'pynadc.scia.lv0'.
-* Fast read access to Sciamachy (ENVISAT) level 1b (format PDS/ESA).
+* Fast read access to Sciamachy (ENVISAT) level 1b (format PDS/ESA)
    The software attempt to read all data and offers convenient access to the
    parameter through structured Numpy arrays.
    Both Science and calibration datasets can be read into memory, however,
@@ -38,7 +38,8 @@ these databases.
 
 Installation
 ------------
-Pre-required are Python v3.6+, Numpy v1.14+, h5py v2.8+ and bitstring v3.1+
+Pre-required are Python v3.6+, Numpy v1.14+, h5py v2.8+ and bitstring v3.1+.
+
 * python3 setup.py install
 
 
