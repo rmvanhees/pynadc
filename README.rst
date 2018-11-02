@@ -5,19 +5,20 @@ The pyNADC package contains the following tools and python modules:
 
 Access to Sciamachy data-products
 ---------------------------------
-* Fast read access to Sciamachy (ENVISAT) level 0 (format PDS/ESA). The
-   software attempt to read all data and offers convenient access to the
+* Fast read access to Sciamachy (ENVISAT) level 0 (format PDS/ESA).
+   The software attempt to read all data and offers convenient access to the
    parameter through structured Numpy arrays.
    The script 'scia_lv0.py' offers a guideline of how to use the module
    'pynadc.scia.lv0'.
-* Fast read access to Sciamachy (ENVISAT) level 1b (format PDS/ESA). The
-   software attempt to read all data and offers convenient access to the
+* Fast read access to Sciamachy (ENVISAT) level 1b (format PDS/ESA).
+   The software attempt to read all data and offers convenient access to the
    parameter through structured Numpy arrays.
    Both Science and calibration datasets can be read into memory, however,
    currently calibration of the science data is not included.
    The script 'scia_lv1.py' offers a guideline of how to use the module
    'pynadc.scia.lv1'.
-* The 'collect_scia_states.py' can be used to build a database with all
+* Build a database with Sciamachy instrument settings
+   The script 'collect_scia_states.py' can be used to build a database with all
    instrument configurations used during the mission of Sciamachy. This requires
    that the complete Sciamachy level 1b archive is available.
    Definitions of OCR states are not included in the level 1b products, and are
@@ -37,6 +38,7 @@ these databases.
 
 Installation
 ------------
+Pre-required are Python v3.6+, Numpy v1.14+, h5py v2.8+ and bitstring v3.1+
 * python3 setup.py install
 
 
