@@ -16,6 +16,41 @@ from pathlib import Path
 
 
 # - local functions --------------------------------
+def check_dsr_in_states(mds, verbose=False):
+    """
+    This module combines L0 DSR per state ID based on parameter icu_time.
+    """
+    # combine L0 DSR on parameter icu_time
+    # alternatively one could use parameter state_id
+    _arr = mds['data_hdr']['icu_time']
+    _arr = np.concatenate(([-1], _arr, [-1]))
+    indx = np.where(np.diff(_arr) != 0)[0]
+    num_dsr = np.diff(indx)
+    icu_time = mds['data_hdr']['icu_time'][indx[:-1]]
+    state_id = mds['data_hdr']['state_id'][indx[:-1]]
+    if 'pmtc_frame' in mds.dtype.names:
+        bcps = mds['pmtc_frame']['bcp']['bcps'][:, 0, 0]
+    elif 'pmd_data' in mds.dtype.names:
+        bcps = mds['pmd_data']['bcps'][:, 0]
+    else:
+        bcps = mds['pmtc_hdr']['bcps']
+    if verbose:
+        for ni in range(num_dsr.size):
+            if ni+1 < num_dsr.size:
+                diff_bcps = np.diff(bcps[indx[ni]:indx[ni+1]])
+            if len(diff_bcps) > 1:
+                print("# {:3d} state_{:02d} {:5d} {:4d}".format(
+                    ni, state_id[ni], indx[ni], num_dsr[ni]),
+                      icu_time[ni],
+                      np.all(diff_bcps > 0),
+                      np.all(diff_bcps == diff_bcps[0]))
+            else:
+                print("# {:3d} state_{:02d} {:5d} {:4d}".format(
+                    ni, state_id[ni], indx[ni], num_dsr[ni]),
+                      icu_time[ni],
+                      np.all(diff_bcps > 0))
+
+    return mds
 
 
 # - main code --------------------------------------
@@ -82,7 +117,7 @@ def main():
     fid.repair_info()
 
     (det_mds, aux_mds, pmd_mds) = fid.get_mds(state_id=args.state)
-    lv0.check_dsr_in_states(det_mds, verbose=True)
+    check_dsr_in_states(det_mds, verbose=True)
     # lv0.check_dsr_in_states(aux_mds, verbose=True)
     # lv0.check_dsr_in_states(pmd_mds, verbose=True)
 
