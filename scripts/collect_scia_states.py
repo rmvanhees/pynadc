@@ -1292,33 +1292,48 @@ class ClusDB:
                                    chunks=(8,), fletcher32=True,
                                    compression=1, shuffle=True)
 
-    def update(self, orbit, state) -> None:
+    def update(self, orbit, states_l1b) -> None:
         """
-        update database entry
+        update database entry from a level 1b product
 
         Parameters
         ----------
          orbit  :   revolution counter
-         state  :   state configuration from a level 1b product
+         states :   state configurations with equal state ID
         """
-        msg = "{:5d} : Warning - skipped state configuration for ID {:02d} {}"
+        msg = "Warning[{:5d}] skipped state configuration for ID {:02d}, {}"
 
-        nclus = state['num_clus']
-        if nclus not in [10, 29, 40, 56]:
-            print(msg.format(orbit, state['state_id'],
+        state_id = states_l1b['state_id'][0]
+        grp = self.fid['State_{:02d}'.format(state_id)]
+
+        states = []
+        for state in states_l1b:
+            nclus = state['num_clus']
+            if nclus not in [10, 29, 40, 56]:
+                continue
+
+            state_conf = grp['state_conf'][0]
+            state_conf['nclus'] = nclus
+            state_conf['duration'] = state['duration']
+            state_conf['num_geo'] = state['num_geo']
+            state_conf['coaddf'][:nclus] = state['Clcon']['coaddf'][:nclus]
+            state_conf['n_read'][:nclus] = state['Clcon']['n_read'][:nclus]
+            state_conf['intg'][:nclus] = state['Clcon']['intg'][:nclus]
+            state_conf['pet'][:nclus] = state['Clcon']['pet'][:nclus]
+            states.append(state_conf)
+
+        if not states:
+            print(msg.format(orbit, state_id,
                              'invalid number of clusters'), nclus)
             return
 
-        grp = self.fid['State_{:02d}'.format(state['state_id'])]
-        state_conf = grp['state_conf'][orbit]
-        state_conf['nclus'] = nclus
-        state_conf['duration'] = state['duration']
-        state_conf['num_geo'] = state['num_geo']
-        state_conf['coaddf'][:nclus] = state['Clcon']['coaddf'][:nclus]
-        state_conf['n_read'][:nclus] = state['Clcon']['n_read'][:nclus]
-        state_conf['intg'][:nclus] = state['Clcon']['intg'][:nclus]
-        state_conf['pet'][:nclus] = state['Clcon']['pet'][:nclus]
-        grp['state_conf'][orbit] = state_conf
+        state = np.unique(states)
+        if len(state) > 1:
+            print(msg.format(orbit, state_id,
+                             'inconsistent cluster definitions'), nclus)
+            return
+
+        grp['state_conf'][orbit] = state_conf[0]
 
 
 # - main code --------------------------------------
@@ -1366,7 +1381,7 @@ def main():
         clusdb.create()
 
         # all cluster-configurations of all L1B products
-        # for orbit in range(1, 2300):
+        # for orbit in range(8700, 8800):
         for orbit in range(1, MAX_ORBIT+1):
             file_list = db.get_product_by_type(prod_type='1',
                                                proc_stage=args.proc,
@@ -1397,7 +1412,7 @@ def main():
                 indx = np.where(states['state_id'] == state_id)[0]
                 if args.verbose:
                     print(msg.format(orbit, state_id))
-                clusdb.update(orbit, states[indx[0]])
+                clusdb.update(orbit, states[indx])
 
         clusdb.close()
     elif args.add_ocr:

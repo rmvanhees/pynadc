@@ -255,7 +255,7 @@ def state_conf_data(det_mds):
     -------
     state configuration
     """
-        from .hk import get_det_vis_pet, get_det_ir_pet
+    from .hk import get_det_vis_pet, get_det_ir_pet
 
     mtbl_dtype = np.dtype([
         ('type_clus', 'u1'),
