@@ -1301,7 +1301,7 @@ class ClusDB:
          orbit  :   revolution counter
          states :   state configurations with equal state ID
         """
-        msg = "Warning[{:5d}] skipped state configuration for ID {:02d}, {}"
+        msg = "Warning [{:05d}] skipped state configuration for ID {:02d}, {}"
 
         state_id = states_l1b['state_id'][0]
         grp = self.fid['State_{:02d}'.format(state_id)]
@@ -1329,11 +1329,23 @@ class ClusDB:
 
         state = np.unique(states)
         if len(state) > 1:
-            print(msg.format(orbit, state_id,
-                             'inconsistent cluster definitions'), nclus)
-            return
+            skip = False
+            mesg = msg.format(orbit, state_id, 'inconsistent')
+            for key in state.dtype.names:
+                if np.all(state[key] == state[key][0]):
+                    continue
+                
+                mesg += ' ' + key
+                if key != 'duration' and key != 'num_geo':
+                    skip = True
 
-        grp['state_conf'][orbit] = state_conf[0]
+            if skip:
+                print(mesg)
+                return
+            print("Info [{:05d}] state {:02d} of unexpected duration".format(
+                orbit, state_id))
+
+        grp['state_conf'][orbit] = state[0]
 
 
 # - main code --------------------------------------
@@ -1381,8 +1393,8 @@ def main():
         clusdb.create()
 
         # all cluster-configurations of all L1B products
-        # for orbit in range(8700, 8800):
-        for orbit in range(1, MAX_ORBIT+1):
+        for orbit in range(8600, 8700):
+        # for orbit in range(1, MAX_ORBIT+1):
             file_list = db.get_product_by_type(prod_type='1',
                                                proc_stage=args.proc,
                                                orbits=[orbit])

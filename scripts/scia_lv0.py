@@ -12,6 +12,8 @@ License:  Standard 3-clause BSD
 """
 from pathlib import Path
 
+import numpy as np
+
 # - global parameters ------------------------------
 
 
@@ -35,10 +37,13 @@ def check_dsr_in_states(mds, verbose=False):
     else:
         bcps = mds['pmtc_hdr']['bcps']
     if verbose:
+        diff_bcps = None
         for ni in range(num_dsr.size):
             if ni+1 < num_dsr.size:
                 diff_bcps = np.diff(bcps[indx[ni]:indx[ni+1]])
-            if len(diff_bcps) > 1:
+            if diff_bcps is None:
+                pass
+            elif len(diff_bcps) > 1:
                 print("# {:3d} state_{:02d} {:5d} {:4d}".format(
                     ni, state_id[ni], indx[ni], num_dsr[ni]),
                       icu_time[ni],
