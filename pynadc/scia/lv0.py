@@ -23,7 +23,6 @@ Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
 
 License:  Standard 3-clause BSD
 """
-from operator import itemgetter
 from pathlib import Path
 
 import numpy as np

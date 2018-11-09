@@ -1242,22 +1242,6 @@ class ClusDB:
             self.db_name = db_name
             self.verbose = verbose
 
-    @staticmethod
-    def __state_dtype():
-        """
-        Returns numpy-dtype definition for a state configuration
-        """
-        return np.dtype([
-            ('id', 'u1'),            # unique identifier [1, 2, 3, ...]
-            ('nclus', 'u1'),         # number of clusters
-            ('duration', 'u2'),      # duration of state in 1/16 sec
-            ('num_geo', 'u2'),       # number of geolocations
-            ('coaddf', 'u1', (56)),  # coadding-factor
-            ('n_read', 'u2', (56)),  # number of readouts
-            ('intg', 'u2', (56)),    # integration time (1/16 sec)
-            ('pet', 'f4', (56))      # pixel exposure time
-        ])
-
     def close(self) -> None:
         """
         Close resources
@@ -1270,6 +1254,7 @@ class ClusDB:
         Create and initialize the state definition database.
         """
         from time import gmtime, strftime
+        from pynadc.scia import clus_def
 
         self.fid = h5py.File(self.db_name, 'w', libver='latest',
                              driver='core', backing_store=True)
@@ -1288,8 +1273,8 @@ class ClusDB:
         for ni in range(1, 71):
             grp = self.fid.create_group('State_{:02d}'.format(ni))
             _ = grp.create_dataset('state_conf', (MAX_ORBIT,),
-                                   dtype=self.__state_dtype(),
-                                   chunks=(8,), fletcher32=True,
+                                   dtype=clus_def.state_dtype(),
+                                   chunks=(64,), fletcher32=True,
                                    compression=1, shuffle=True)
 
     def update(self, orbit, states_l1b) -> None:
@@ -1303,6 +1288,9 @@ class ClusDB:
         """
         msg = "Warning [{:05d}] skipped state configuration for ID {:02d}, {}"
 
+        # Measurements with a given state ID can be performed more than once.
+        # The instrument settings of these state executions  are collected
+        # in state_conf
         state_id = states_l1b['state_id'][0]
         grp = self.fid['State_{:02d}'.format(state_id)]
 
@@ -1322,11 +1310,15 @@ class ClusDB:
             state_conf['pet'][:nclus] = state['Clcon']['pet'][:nclus]
             states.append(state_conf)
 
+        # Check if each L1B state definition has an invalid number of cluster
         if not states:
             print(msg.format(orbit, state_id,
                              'invalid number of clusters'), nclus)
             return
 
+        # Are all state definitions equal?
+        # If not then the states may differ in duration (not critical) or
+        # one of the critical settings are different (warn the user)
         state = np.unique(states)
         if len(state) > 1:
             skip = False
@@ -1334,18 +1326,33 @@ class ClusDB:
             for key in state.dtype.names:
                 if np.all(state[key] == state[key][0]):
                     continue
-                
+
                 mesg += ' ' + key
-                if key != 'duration' and key != 'num_geo':
+                if key not in ('duration', 'num_geo'):
                     skip = True
 
+            # Skip with a warning because a critical state parameter differs
             if skip:
                 print(mesg)
                 return
+            # Only the duration differs then inform the user
             print("Info [{:05d}] state {:02d} of unexpected duration".format(
                 orbit, state_id))
 
         grp['state_conf'][orbit] = state[0]
+
+    def finalize(self):
+        """
+        fill empty entries
+        """
+        with h5py.File(self.db_name, 'r+') as fid:
+            for state_id in range(1, 71):
+                state_conf = fid['State_{:02d}/state_conf'.format(state_id)][:]
+                uniq, indices, counts = np.unique(state_conf,
+                                                  return_counts=True,
+                                                  return_index=True)
+                for _id in range(uniq.size):
+                    state_conf['id'][np.where(indices == _id)[0]] = _id
 
 
 # - main code --------------------------------------
@@ -1393,8 +1400,8 @@ def main():
         clusdb.create()
 
         # all cluster-configurations of all L1B products
-        for orbit in range(8600, 8700):
-        # for orbit in range(1, MAX_ORBIT+1):
+        # for orbit in range(8600, 8700):
+        for orbit in range(1, MAX_ORBIT+1):
             file_list = db.get_product_by_type(prod_type='1',
                                                proc_stage=args.proc,
                                                orbits=[orbit])
@@ -1450,7 +1457,7 @@ def main():
         if not Path(clusdb.db_name).is_file():
             print("database not found, please create one using '--all_lv1'")
         else:
-            fill_mtbl(clusdb.db_name)
+            clusdb.finalize()
     else:
         raise ValueError('unknown commandline parameter')
 

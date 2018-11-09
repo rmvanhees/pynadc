@@ -13,6 +13,32 @@ License:  Standard 3-clause BSD
 import numpy as np
 
 
+def clusdef_dtype():
+    """
+    Returns numpy-dtype definition for a cluster configuration
+    """
+    return np.dtype([
+        ('chan_id', 'u1'),
+        ('clus_id', 'u1'),
+        ('start', 'u2'),
+        ('length', 'u2')
+    ])
+
+def state_dtype():
+    """
+    Returns numpy-dtype definition for a state configuration
+    """
+    return np.dtype([
+        ('id', 'u1'),            # unique identifier [1, 2, 3, ...]
+        ('nclus', 'u1'),         # number of clusters [10, 29, 40, 56]
+        ('duration', 'u2'),      # duration of state in 1/16 sec
+        ('num_geo', 'u2'),       # number of geolocations
+        ('coaddf', 'u1', (56)),  # coadding-factor
+        ('n_read', 'u2', (56)),  # number of readouts
+        ('intg', 'u2', (56)),    # integration time (1/16 sec)
+        ('pet', 'f4', (56))      # pixel exposure time
+    ])
+
 def clus_conf(nclus):
     """
     Returns Sciamachy cluster configuration for a given number of clusters,
@@ -20,87 +46,80 @@ def clus_conf(nclus):
 
     Valid for the whole Sciamachy mission
     """
-    clusdef_dtype = np.dtype(
-        ('chan_id', 'u1'),
-        ('clus_id', 'u1'),
-        ('start', 'u2'),
-        ('length', 'u2')
-    )
-
     if nclus == 56:        # mostly nadir measurements
-        clusdef_tuple = (
-            (1, 0, 0, 5), (1, 1, 5, 192), (1, 2, 197, 355),
-            (1, 3, 552, 196), (1, 4, 748, 94), (1, 5, 1019, 5),
-            (2, 6, 1019, 5), (2, 7, 834, 114), (2, 8, 170, 664),
-            (2, 9, 76, 94), (2, 10, 0, 5),
-            (3, 11, 0, 10), (3, 12, 33, 50), (3, 13, 83, 80),
-            (3, 14, 163, 436), (3, 15, 599, 75), (3, 16, 674, 87),
-            (3, 17, 761, 135), (3, 18, 896, 34), (3, 19, 1019, 5),
-            (4, 20, 0, 5), (4, 21, 10, 36), (4, 22, 46, 32),
-            (4, 23, 78, 535), (4, 24, 613, 134), (4, 25, 747, 106),
-            (4, 26, 853, 66), (4, 27, 1019, 5),
-            (5, 28, 0, 5), (5, 29, 10, 46), (5, 30, 56, 28),
-            (5, 31, 84, 525), (5, 32, 609, 158), (5, 33, 767, 234),
-            (5, 34, 1019, 5),
-            (6, 35, 0, 10), (6, 36, 24, 83), (6, 37, 107, 228),
-            (6, 38, 335, 26), (6, 39, 361, 178), (6, 40, 539, 28),
-            (6, 41, 567, 179), (6, 42, 746, 154), (6, 43, 900, 31),
-            (6, 44, 931, 14), (6, 45, 945, 52), (6, 46, 1014, 10),
-            (7, 47, 0, 10), (7, 48, 48, 245), (7, 49, 293, 148),
-            (7, 50, 441, 442), (7, 51, 883, 105), (7, 52, 1014, 10),
-            (8, 53, 0, 10), (8, 54, 10, 1004), (8, 55, 1014, 10)
-        )
-        return np.array(clusdef_tuple, dtype=clusdef_dtype)
+        clusdef_tuple = [
+            (1, 1, 0, 5), (1, 2, 5, 192), (1, 3, 197, 355),
+            (1, 4, 552, 196), (1, 5, 748, 94), (1, 6, 1019, 5),
+            (2, 7, 1019, 5), (2, 8, 834, 114), (2, 9, 170, 664),
+            (2, 10, 76, 94), (2, 11, 0, 5),
+            (3, 12, 0, 10), (3, 13, 33, 50), (3, 14, 83, 80),
+            (3, 15, 163, 436), (3, 16, 599, 75), (3, 17, 674, 87),
+            (3, 18, 761, 135), (3, 19, 896, 34), (3, 20, 1019, 5),
+            (4, 21, 0, 5), (4, 22, 10, 36), (4, 23, 46, 32),
+            (4, 24, 78, 535), (4, 25, 613, 134), (4, 26, 747, 106),
+            (4, 27, 853, 66), (4, 28, 1019, 5),
+            (5, 29, 0, 5), (5, 30, 10, 46), (5, 31, 56, 28),
+            (5, 32, 84, 525), (5, 33, 609, 158), (5, 34, 767, 234),
+            (5, 35, 1019, 5),
+            (6, 36, 0, 10), (6, 37, 24, 83), (6, 38, 107, 228),
+            (6, 39, 335, 26), (6, 40, 361, 178), (6, 41, 539, 28),
+            (6, 42, 567, 179), (6, 43, 746, 154), (6, 44, 900, 31),
+            (6, 45, 931, 14), (6, 46, 945, 52), (6, 47, 1014, 10),
+            (7, 48, 0, 10), (7, 49, 48, 245), (7, 50, 293, 148),
+            (7, 51, 441, 442), (7, 52, 883, 105), (7, 53, 1014, 10),
+            (8, 54, 0, 10), (8, 55, 10, 1004), (8, 56, 1014, 10)
+        ]
+        return np.array(clusdef_tuple, dtype=clusdef_dtype())
 
     if nclus == 40:        # mostly limb & occultation measurements
-        clusdef_tuple = (
-            (1, 0, 0, 5), (1, 1, 5, 192), (1, 2, 197, 355),
-            (1, 3, 552, 290), (1, 4, 842, 177), (1, 5, 1019, 5),
-            (2, 6, 1019, 5), (2, 7, 948, 71), (2, 8, 170, 778),
-            (2, 9, 76, 94), (2, 10, 5, 71), (2, 11, 0, 5),
-            (3, 12, 0, 10), (3, 13, 10, 23), (3, 14, 33, 897),
-            (3, 15, 930, 89), (3, 16, 1019, 5),
-            (4, 17, 0, 5), (4, 18, 5, 5), (4, 19, 10, 909),
-            (4, 20, 919, 100), (4, 21, 1019, 5),
-            (5, 22, 0, 5), (5, 23, 5, 5), (5, 24, 10, 991),
-            (5, 25, 1001, 18), (5, 26, 1019, 5),
-            (6, 27, 0, 10), (6, 28, 10, 14), (6, 29, 24, 973),
-            (6, 30, 997, 17), (6, 31, 1014, 10),
-            (7, 32, 0, 10), (7, 33, 10, 38), (7, 34, 48, 940),
-            (7, 35, 988, 26), (7, 36, 1014, 10),
-            (8, 37, 0, 10), (8, 38, 10, 1004), (8, 39, 1014, 10)
-        )
-        return np.array(clusdef_tuple, dtype=clusdef_dtype)
+        clusdef_tuple = [
+            (1, 1, 0, 5), (1, 2, 5, 192), (1, 3, 197, 355),
+            (1, 4, 552, 290), (1, 5, 842, 177), (1, 6, 1019, 5),
+            (2, 7, 1019, 5), (2, 8, 948, 71), (2, 9, 170, 778),
+            (2, 10, 76, 94), (2, 11, 5, 71), (2, 12, 0, 5),
+            (3, 13, 0, 10), (3, 14, 10, 23), (3, 15, 33, 897),
+            (3, 16, 930, 89), (3, 17, 1019, 5),
+            (4, 18, 0, 5), (4, 19, 5, 5), (4, 20, 10, 909),
+            (4, 21, 919, 100), (4, 22, 1019, 5),
+            (5, 23, 0, 5), (5, 24, 5, 5), (5, 25, 10, 991),
+            (5, 26, 1001, 18), (5, 27, 1019, 5),
+            (6, 28, 0, 10), (6, 29, 10, 14), (6, 30, 24, 973),
+            (6, 31, 997, 17), (6, 32, 1014, 10),
+            (7, 33, 0, 10), (7, 34, 10, 38), (7, 35, 48, 940),
+            (7, 36, 988, 26), (7, 37, 1014, 10),
+            (8, 38, 0, 10), (8, 39, 10, 1004), (8, 40, 1014, 10)
+        ]
+        return np.array(clusdef_tuple, dtype=clusdef_dtype())
 
     # only, used by dedicated measurements
     if nclus == 29:
-        clusdef_tuple = (
-            (1, 0, 0, 5), (1, 1, 5, 10), (1, 2, 216, 528),
-            (1, 3, 744, 64), (1, 4, 1009, 10), (1, 5, 1019, 5),
-            (2, 6, 1019, 5), (2, 7, 190, 739), (2, 8, 94, 96),
-            (2, 9, 5, 10), (2, 10, 0, 5),
-            (3, 11, 0, 5), (3, 12, 46, 930), (3, 13, 1019, 5),
-            (4, 14, 0, 5), (4, 15, 46, 931), (4, 16, 1019, 5),
-            (5, 17, 0, 5), (5, 18, 54, 914), (5, 19, 1019, 5),
-            (6, 20, 0, 10), (6, 21, 45, 933), (6, 22, 1014, 10),
-            (7, 23, 0, 10), (7, 24, 73, 877), (7, 25, 1014, 10),
-            (8, 26, 0, 10), (8, 27, 73, 878), (8, 28, 1014, 10)
-        )
-        return np.array(clusdef_tuple, dtype=clusdef_dtype)
+        clusdef_tuple = [
+            (1, 1, 0, 5), (1, 2, 5, 10), (1, 3, 216, 528),
+            (1, 4, 744, 64), (1, 5, 1009, 10), (1, 6, 1019, 5),
+            (2, 7, 1019, 5), (2, 8, 190, 739), (2, 9, 94, 96),
+            (2, 10, 5, 10), (2, 11, 0, 5),
+            (3, 12, 0, 5), (3, 13, 46, 930), (3, 14, 1019, 5),
+            (4, 15, 0, 5), (4, 16, 46, 931), (4, 17, 1019, 5),
+            (5, 18, 0, 5), (5, 19, 54, 914), (5, 20, 1019, 5),
+            (6, 21, 0, 10), (6, 22, 45, 933), (6, 23, 1014, 10),
+            (7, 24, 0, 10), (7, 25, 73, 877), (7, 26, 1014, 10),
+            (8, 27, 0, 10), (8, 28, 73, 878), (8, 29, 1014, 10)
+        ]
+        return np.array(clusdef_tuple, dtype=clusdef_dtype())
 
     # only, used by dedicated measurements
     if nclus == 10:
-        clusdef_tuple = (
-            (1, 0, 0, 552), (1, 1, 552, 472),
-            (2, 2, 170, 854), (2, 3, 0, 170),
-            (3, 4, 0, 1024),
-            (4, 5, 0, 1024),
-            (5, 6, 0, 1024),
-            (6, 7, 0, 1024),
-            (7, 8, 0, 1024),
-            (8, 9, 0, 1024)
-        )
-        return np.array(clusdef_tuple, dtype=clusdef_dtype)
+        clusdef_tuple = [
+            (1, 1, 0, 552), (1, 2, 552, 472),
+            (2, 3, 170, 854), (2, 4, 0, 170),
+            (3, 5, 0, 1024),
+            (4, 6, 0, 1024),
+            (5, 7, 0, 1024),
+            (6, 8, 0, 1024),
+            (7, 9, 0, 1024),
+            (8, 10, 0, 1024)
+        ]
+        return np.array(clusdef_tuple, dtype=clusdef_dtype())
 
     return None
 
@@ -255,26 +274,9 @@ def state_conf_data(det_mds):
     -------
     state configuration
     """
+    from operator import itemgetter
+
     from .hk import get_det_vis_pet, get_det_ir_pet
-
-    mtbl_dtype = np.dtype([
-        ('type_clus', 'u1'),
-        ('num_clus', 'u1'),
-        ('duration', 'u2'),
-        ('num_info', 'u2'),
-    ])
-
-    clus_dtype = np.dtype([
-        ('id', 'u1'),              # 1 <= id <= 64
-        ('channel', 'u1'),         # 1 <= channel <= 8
-        ('coaddf', 'u1'),
-        ('type', 'u1'),            # coaddf == 1 ? 1 : 2
-        ('start', 'u2'),           # 0 <= start < 1023
-        ('length', 'u2'),          # 0 <= length <= 1024
-        ('intg', 'u2'),            # int(16 * coaddf * pet)
-        ('n_read', 'u2'),
-        ('pet', 'f4')
-    ])
 
     bcps = 0
     clus_list = []
@@ -307,31 +309,61 @@ def state_conf_data(det_mds):
                         pet = pet_list[1]
                     else:
                         pet = pet_list[0]
+                if chan_id == 2:
+                    start = 1024 - start - length
                 clus_list.append((chan_id, clus_id, start, length, coaddf, pet))
 
+    # find unique settings in 'clus_list'
+    clus_set = sorted(set(clus_list), key=itemgetter(0, 1))
+    # clus_set.append((9, 0, 0, 10, 1, 1.0))
+    nclus = len(clus_set)
+    if nclus < 10:
+        print('# Fatal - failed with number of cluster equal to ', nclus)
+        return None
+
+    if nclus not in [10, 29, 40, 56]:
+        print('# Warning - number of cluster equal to %d, try fix this' % nclus)
+        clus_def = np.zeros(nclus, dtype=clusdef_dtype())
+        for ni, clus in enumerate(clus_set):
+            clus_def['chan_id'][ni] = clus[0]
+            clus_def['clus_id'][ni] = ni + 1
+            clus_def['start'][ni] = clus[2]
+            clus_def['length'][ni] = clus[3]
+
+        # obtain reference cluster definitions
+        while nclus not in [10, 29, 40, 56]:
+            nclus -= 1
+        clus_ref_def = clus_conf(nclus)
+
+        # find and remove wrong entries from set
+        clus_error = np.setdiff1d(clus_def, clus_ref_def)
+        for indx in np.where(clus_def == clus_error)[0]:
+            del clus_set[indx]
+
+        if nclus not in [10, 29, 40, 56]:
+            print('# Fatal - failed with number of cluster equal to ', nclus)
+            return None
+
+    # count number of DSR per state execution
+    _, counts = np.unique(det_mds['data_hdr']['icu_time'],
+                          return_counts=True)
+
     # fill the output structure
-    clus_set = sorted(set(clus_list), key=itemgetter(0, 2))
-    clus_def = np.empty(len(clus_set), dtype=clus_dtype)
+    state_conf = np.squeeze(np.zeros(1, dtype=state_dtype()))
+    state_conf['nclus'] = nclus
+    state_conf['duration'] = det_mds['pmtc_hdr']['bcps'].max()
+    if counts.size > 1:
+        state_conf['num_geo'] = sorted(counts)[counts.size // 2]
+    else:
+        state_conf['num_geo'] = counts[0]
     for ni, clus in enumerate(clus_set):
-        clus_def[ni]['id'] = ni + 1
-        clus_def[ni]['channel'] = clus[0]
-        clus_def[ni]['coaddf'] = clus[4]
-        clus_def[ni]['type'] = min(2, clus[4])
-        clus_def[ni]['start'] = clus[2]
-        clus_def[ni]['length'] = clus[3]
-        clus_def[ni]['intg'] = max(1, int(16 * clus[4] * clus[5]))
-        clus_def[ni]['n_read'] = 0
-        clus_def[ni]['pet'] = clus[5]
+        state_conf['coaddf'][ni] = clus[4]
+        state_conf['intg'][ni] = max(1, int(16 * clus[4] * clus[5]))
+        state_conf['pet'][ni] = clus[5]
 
     # finally, add number of readouts
-    for clus in clus_def:
-        clus['n_read'] = clus_def['intg'].max() // clus['intg']
-        # print(clus)
+    for ni in range(nclus):
+        state_conf['n_read'][ni] = (
+            state_conf['intg'].max() // state_conf['intg'][ni])
 
-    mtbl = np.zeros(1, dtype=mtbl_dtype)
-    mtbl['num_clus'] = len(clus_set)
-    mtbl['duration'] = (det_mds[-1]['pmtc_hdr']['bcps'] // det_mds.size
-                        * det_mds.size)
-    mtbl['num_info'] = det_mds.size
-
-    return mtbl, clus_def
+    return state_conf
