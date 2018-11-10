@@ -10,18 +10,6 @@ def readme():
     with open('README.rst') as f:
         return f.read()
 
-
-
-long_desc = \
-"""
-The pynadc package provides (limited) read access to Sciamachy level 0 and 1b 
-products from Python. Access is restricted to product headers and (G)ADS
-datasets within the products. Implementation to access to DSR's is not 
-foreseen.
-
-The scripts are intended for SRON internal usage.
-"""
-
 setup( 
     name = 'pynadc',
     description='Python Sciamachy/GOSAT/Tropomi read and SQLite3 library',

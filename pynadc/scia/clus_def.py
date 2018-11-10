@@ -3,7 +3,7 @@ This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
-Definition of Sciamachy cluster configurations
+Definition of Sciamachy instrument and cluster configurations
 
 Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
    All Rights Reserved
@@ -16,6 +16,13 @@ import numpy as np
 def clusdef_dtype():
     """
     Returns numpy-dtype definition for a cluster configuration
+
+    Structure elements
+    ------------------
+    - chan_id  :  channel identifier, integer between [1, 8]
+    - clus_id  :  cluster identifier, integer between [1, 64]
+    - start    :  pixel number within channel, integer between [0, 1023]
+    - length   :  number of pixels, integer between [1, 1024]
     """
     return np.dtype([
         ('chan_id', 'u1'),
@@ -27,22 +34,33 @@ def clusdef_dtype():
 def state_dtype():
     """
     Returns numpy-dtype definition for a state configuration
+
+    Structure elements
+    ------------------
+    - id      :  unique identifier, integer (default 0)
+    - nclus   :  number of clusters, integer in [10, 29, 40, 56]
+    - duration  :  duration of state (1/16 sec), integer
+    - num_geo   :  number of geolocations, integer
+    - coaddf  :  coadding-factor of each cluster, integer
+    - n_read  :  number of readouts of each cluster, integer
+    - intg    :  integration time (1/16 sec) of each cluster, integer
+    - pet     :  pixel exposure time of each cluster, float
     """
     return np.dtype([
-        ('id', 'u1'),            # unique identifier [1, 2, 3, ...]
-        ('nclus', 'u1'),         # number of clusters [10, 29, 40, 56]
-        ('duration', 'u2'),      # duration of state in 1/16 sec
-        ('num_geo', 'u2'),       # number of geolocations
-        ('coaddf', 'u1', (56)),  # coadding-factor
-        ('n_read', 'u2', (56)),  # number of readouts
-        ('intg', 'u2', (56)),    # integration time (1/16 sec)
-        ('pet', 'f4', (56))      # pixel exposure time
+        ('id', 'u1'),
+        ('nclus', 'u1'),
+        ('duration', 'u2'),
+        ('num_geo', 'u2'),
+        ('coaddf', 'u1', (56)),
+        ('n_read', 'u2', (56)),
+        ('intg', 'u2', (56)),
+        ('pet', 'f4', (56))
     ])
 
 def clus_conf(nclus):
     """
     Returns Sciamachy cluster configuration for a given number of clusters,
-    only defined for 10, 40 or 56 clusters else the function return 'None'.
+    only defined for 10, 29, 40 or 56 clusters else the function return 'None'.
 
     Valid for the whole Sciamachy mission
     """
@@ -278,16 +296,17 @@ def state_conf_data(det_mds):
 
     from .hk import get_det_vis_pet, get_det_ir_pet
 
-    bcps = 0
+    # check input data
+    state_id = det_mds['data_hdr']['state_id']
+    if not np.all(state_id == state_id[0]):
+        raise ValueError('you should provide DSR of the same state')
+
+    # collect parameters which define the state configuration
     clus_list = []
     for det in det_mds:
-        first = True
         num_chan = det['pmtc_hdr']['num_chan']
         for chan in det['chan_data'][:num_chan]:
             chan_id = chan['hdr']['id_is_lu'] >> 4
-            if first:
-                bcps += chan['hdr']['bcps']
-                first = False
             if chan_id < 6:
                 pet = None
                 pet_list, vir_chan_b = get_det_vis_pet(chan['hdr'])

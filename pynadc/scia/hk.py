@@ -3,7 +3,7 @@ This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
-Routines to Convert Sciamachy house-keeping data from raw counts
+Routines to convert Sciamachy house-keeping data from raw counts
 to physical units.
 
 Copyright (c) 2018 SRON - Netherlands Institute for Space Research
