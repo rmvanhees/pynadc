@@ -84,7 +84,7 @@ def main() -> None:
     if 'func' not in args:
         parser.print_help()
     else:
-        _ = args.func(args, toScreen=True)
+        _ = args.func(args, to_screen=True)
 
 
 if __name__ == '__main__':
