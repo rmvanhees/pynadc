@@ -5,7 +5,7 @@ https://github.com/rmvanhees/pynadc
 
 Methods to read Sciamachy level 1b data products (ESA/PDS format)
 
-The SRON Sciamachy level 0 data set contains 48442 products from the period:
+The SRON Sciamachy level 1b data set contains 48442 products from the period:
  18 June 2002 until 08 April 2012
 
 Statistics on proc-stage
@@ -299,14 +299,23 @@ class File:
             ]
 
         for ncl in range(state['num_clus']):
-            count = (state['Clcon']['n_read'][ncl]
-                     * state['Clcon']['length'][ncl])
+            dims = (state['Clcon']['n_read'][ncl],
+                    state['Clcon']['length'][ncl])
             dtype_list.append(
                 ('clus_{:02d}'.format(ncl),
                  self.__lv1_clus(state['Clcon']['coaddf'][ncl]),
-                 (count)))
+                 (dims)))
 
         return np.dtype(dtype_list)
+
+    def chan_dtype(self):
+        """
+        Returns numpy-dtype definition for science channel data
+        """
+        return np.dtype([
+            ('mjd', self.__mjd_envi()),
+            ('data', 'f8', (lv1_consts('channel_pixels')))
+        ])
 
     # ----- read routines -------------------------
     def __get_mph__(self):
@@ -771,7 +780,7 @@ class File:
             buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
         return buff
 
-    def get_states(self):
+    def get_states(self, state_id=None):
         """
         read State definitions of the product
         """
@@ -804,8 +813,17 @@ class File:
         dsd = self.dsd_by_name('STATES')
         with open(self.filename, 'rb') as fp:
             fp.seek(dsd['DS_OFFSET'])
-            buff = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
-        return buff
+            states = np.fromfile(fp, dtype=record_dtype, count=dsd['NUM_DSR'])
+
+        if state_id is None:
+            return states
+
+        if not isinstance(state_id, int):
+            raise ValueError("state_id must be an integer")
+
+        indx = np.where((states['flag_attached'] == 0)
+                        & (states['state_id'] == state_id))[0]
+        return states[indx]
 
     # read SCIAMACHY_SOURCE_PACKETS
     def get_mds(self, state_id=None):
@@ -824,9 +842,11 @@ class File:
         dsd = self.dsd_by_name('MONITORING')
         moni_offs = dsd['DS_OFFSET']
 
+        # read state definitions
         states = self.get_states()
 
-        all_mds = ()
+        # read measurement data sets
+        all_mds = []
         with open(self.filename, 'rb') as fp:
             for state in states:
                 read_flag = False
@@ -837,40 +857,127 @@ class File:
                 if state_id is None or state['state_id'] in state_id:
                     read_flag = True
                     mds_dtype = self.mds_dtype(state)
+                    # print(state['mds_type'], state['state_id'],
+                    #      state['orbit_phase'],
+                    #      state['num_clus'], state['num_geo'],
+                    #      state['num_dsr'], state['length_dsr'])
 
-                    print(state['mds_type'], state['state_id'],
-                          state['orbit_phase'],
-                          state['num_clus'], state['num_geo'],
-                          state['num_dsr'], state['length_dsr'])
+                mds = None
+                if state['mds_type'] == 1:
+                    fp.seek(nadir_offs)
+                    nadir_offs += state['num_dsr'] * state['length_dsr']
+                elif state['mds_type'] == 2:
+                    fp.seek(limb_offs)
+                    limb_offs += state['num_dsr'] * state['length_dsr']
+                elif state['mds_type'] == 3:
+                    fp.seek(occul_offs)
+                    occul_offs += state['num_dsr'] * state['length_dsr']
+                else:
+                    fp.seek(moni_offs)
+                    moni_offs += state['num_dsr'] * state['length_dsr']
 
-                mds_list = []
-                for n_dsr in range(state['num_dsr']):
-                    if state['mds_type'] == 1:
-                        fp.seek(nadir_offs)
-                        nadir_offs += state['length_dsr']
-                    elif state['mds_type'] == 2:
-                        fp.seek(limb_offs)
-                        limb_offs += state['length_dsr']
-                    elif state['mds_type'] == 3:
-                        fp.seek(occul_offs)
-                        occul_offs += state['length_dsr']
-                    else:
-                        fp.seek(moni_offs)
-                        moni_offs += state['length_dsr']
+                if not read_flag:
+                    continue
 
-                    if read_flag:
-                        mds = np.fromfile(fp, mds_dtype, count=1)[0]
+                mds = np.fromfile(fp, mds_dtype, count=state['num_dsr'])
 
-                        # check if we read all bytes
-                        if mds_dtype.itemsize != state['length_dsr']:
-                            print('# warning: incomplete read', n_dsr,
-                                  mds_dtype.itemsize, state['length_dsr'])
-
-                        # combine data of current state
-                        mds_list.append(mds)
+                # check if we read all bytes
+                if mds_dtype.itemsize != state['length_dsr']:
+                    print('# warning: incomplete read',
+                          mds_dtype.itemsize, state['length_dsr'])
 
                 # add all MDS of a state to output tuple
-                if mds_list:
-                    all_mds += (mds_list,)
+                all_mds.append(mds)
 
         return all_mds
+
+    def get_channel(self, state_id, chan_id, mem_corr=False, stray_corr=False):
+        """
+        combines readouts of one science channel for a given state execution
+        """
+        if not isinstance(state_id, int):
+            raise ValueError("state_id must be an integer")
+
+        # read data of all state executions
+        all_mds = self.get_mds([state_id])
+        if not all_mds:
+            return None
+
+        # read instrument settings of these state executions
+        states = self.get_states(state_id)
+
+        # loop over each state execution (using index 'ni')
+        chan_list = []
+        for ni, mds in enumerate(all_mds):
+            num_clus = states['num_clus'][ni]
+            channel = states['Clcon']['channel'][ni, :]
+            start = states['Clcon']['start'][ni, :]
+            length = states['Clcon']['length'][ni, :]
+            coaddf = states['Clcon']['coaddf'][ni, :]
+            n_read = states['Clcon']['n_read'][ni, :]
+            intg_mn = states['intg'][ni, states['num_intg'][ni]-1] / 16
+
+            # allocate memory for measurement data (and initialize data to NaN)
+            chan = np.empty((mds.size, n_read.max()), dtype=self.chan_dtype())
+            chan['data'][...] = np.nan
+            for nj, dsr in enumerate(mds):
+                chan['mjd'][nj, :] = np.full(n_read.max(), dsr['mjd'])
+                dtime = np.arange(n_read.max()) * intg_mn
+                chan['mjd']['secnds'][nj, :] += dtime.astype('>u4')
+                chan['mjd']['musec'][nj, :] += (1e6 * (dtime % 1)).astype('>u4')
+                for _nc in range(num_clus):
+                    if channel[_nc] != chan_id:
+                        continue
+                    name = 'clus_{:02d}'.format(_nc)
+                    if coaddf[_nc] == 1:
+                        sign = dsr[name]['sign']
+                    else:
+                        sign = dsr[name]['sign'] & 0xffffff
+
+                    # apply memory or non-linearity correction
+                    if mem_corr:
+                        if coaddf[_nc] == 1:
+                            mem = dsr[name]['mem'].astype('f8')
+                        else:
+                            mem = (dsr[name]['sign'] >> 24).astype('f8')
+                            mem[mem > 127] -= 256
+                        corr = scale_mem_nlin(chan_id, mem)
+                        sign = sign.astype('f8') - coaddf[_nc] * corr
+
+                    # apply stray-light correction
+                    if stray_corr:
+                        scale = dsr['scale_factor'][chan_id-1] / 10
+                        if not mem_corr:
+                            sign = sign.astype('f8')
+                        sign -= dsr[name]['stray'].astype('f8') / scale
+
+                    step = n_read.max() // n_read[_nc]
+                    pslice = np.s_[start[_nc]:start[_nc]+length[_nc]]
+                    chan['data'][nj, step-1::step, pslice] = sign
+                    # print(ni, nj, _nc, channel[_nc], start[_nc], length[_nc],
+                    #      step, pslice, sign.shape)
+
+            chan_list.append(chan)
+
+        return chan_list
+
+
+# datetime(2000, 1, 1) + timedelta(*chan['mjd'][nj, ni])
+
+def scale_mem_nlin(chan_id, rvals):
+    """
+    scale memory/non-linearity values
+    """
+    if chan_id < 6:
+        return 1.25 * (rvals + 37)
+
+    if chan_id == 6:
+        return 1.25 * (rvals + 102)
+
+    if chan_id == 7:
+        return 1.5 * (rvals + 102)
+
+    if chan_id == 8:
+        return 1.25 * (rvals + 126)
+
+    raise ValueError("invalid channel ID: {}".format(chan_id))
