@@ -53,6 +53,25 @@ def lv1_consts(key=None):
     raise KeyError('level 1b constant {} is not defined'.format(key))
 
 
+def scale_mem_nlin(chan_id, rvals):
+    """
+    scale memory/non-linearity values
+    """
+    if chan_id < 6:
+        return 1.25 * (rvals + 37)
+
+    if chan_id == 6:
+        return 1.25 * (rvals + 102)
+
+    if chan_id == 7:
+        return 1.5 * (rvals + 102)
+
+    if chan_id == 8:
+        return 1.25 * (rvals + 126)
+
+    raise ValueError("invalid channel ID: {}".format(chan_id))
+
+
 # - Classes --------------------------------------
 class File:
     """
@@ -308,12 +327,13 @@ class File:
 
         return np.dtype(dtype_list)
 
-    def chan_dtype(self):
+    @staticmethod
+    def chan_dtype():
         """
         Returns numpy-dtype definition for science channel data
         """
         return np.dtype([
-            ('mjd', self.__mjd_envi()),
+            ('time', 'datetime64[us]'),
             ('data', 'f8', (lv1_consts('channel_pixels')))
         ])
 
@@ -444,8 +464,7 @@ class File:
         read Summary of Quality Flags per State (SQADS)
         """
         record_dtype = np.dtype([
-            ('mjd', {'names': ['days', 'secnds', 'musec'],
-                     'formats': ['>i4', '>u4', '>u4']}),
+            ('mjd', self.__mjd_envi()),
             ('flag_attached', 'i1'),
             ('mean_wv_diff', '>f4', (lv1_consts('all_channels'))),
             ('sdev_wv_diff', '>f4', (lv1_consts('all_channels'))),
@@ -468,8 +487,7 @@ class File:
         read Geolocation of the States (LADS)
         """
         record_dtype = np.dtype([
-            ('mjd', {'names': ['days', 'secnds', 'musec'],
-                     'formats': ['>i4', '>u4', '>u4']}),
+            ('mjd', self.__mjd_envi()),
             ('flag_attached', 'i1'),
             ('corners', {'names': ['lat', 'lon'],
                          'formats': ['>i4', '>i4']}, (4))
@@ -785,8 +803,7 @@ class File:
         read State definitions of the product
         """
         record_dtype = np.dtype([
-            ('mjd', {'names': ['days', 'secnds', 'musec'],
-                     'formats': ['>i4', '>u4', '>u4']}),
+            ('mjd', self.__mjd_envi()),
             ('flag_attached', 'i1'),
             ('flag_reason', 'i1'),
             ('orbit_phase', '>f4'),
@@ -895,6 +912,8 @@ class File:
         """
         combines readouts of one science channel for a given state execution
         """
+        from datetime import timedelta
+
         if not isinstance(state_id, int):
             raise ValueError("state_id must be an integer")
 
@@ -920,11 +939,15 @@ class File:
             # allocate memory for measurement data (and initialize data to NaN)
             chan = np.empty((mds.size, n_read.max()), dtype=self.chan_dtype())
             chan['data'][...] = np.nan
+
             for nj, dsr in enumerate(mds):
-                chan['mjd'][nj, :] = np.full(n_read.max(), dsr['mjd'])
-                dtime = np.arange(n_read.max()) * intg_mn
-                chan['mjd']['secnds'][nj, :] += dtime.astype('>u4')
-                chan['mjd']['musec'][nj, :] += (1e6 * (dtime % 1)).astype('>u4')
+                mst_time = np.datetime64('2000')
+                mst_time += np.timedelta64(timedelta(int(dsr['mjd']['days']),
+                                                     int(dsr['mjd']['secnds']),
+                                                     int(dsr['mjd']['musec'])))
+                chan['time'][nj, :] = (
+                    mst_time + int(1000000 * intg_mn) * np.arange(n_read.max()))
+
                 for _nc in range(num_clus):
                     if channel[_nc] != chan_id:
                         continue
@@ -960,24 +983,3 @@ class File:
             chan_list.append(chan)
 
         return chan_list
-
-
-# datetime(2000, 1, 1) + timedelta(*chan['mjd'][nj, ni])
-
-def scale_mem_nlin(chan_id, rvals):
-    """
-    scale memory/non-linearity values
-    """
-    if chan_id < 6:
-        return 1.25 * (rvals + 37)
-
-    if chan_id == 6:
-        return 1.25 * (rvals + 102)
-
-    if chan_id == 7:
-        return 1.5 * (rvals + 102)
-
-    if chan_id == 8:
-        return 1.25 * (rvals + 126)
-
-    raise ValueError("invalid channel ID: {}".format(chan_id))

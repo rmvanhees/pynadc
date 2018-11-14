@@ -23,6 +23,7 @@ Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
 
 License:  Standard 3-clause BSD
 """
+from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
@@ -50,6 +51,35 @@ def lv0_consts(key=None):
     raise KeyError('level 0 constant {} is not defined'.format(key))
 
 
+def mjd_to_datetime(state_id, det_mds):
+    """
+    Calculates datetime at end of each integration time
+    """
+    # BCPS enable delay per instrument state
+    ri_delay = (0,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 111, 86,
+                303, 86, 86, 86, 86, 86, 86, 86, 111, 303)
+
+    # Add BCPS H/W delay (92.765 ms)
+    _ri = 0.092765 + ri_delay[state_id] / 256
+
+    # the function datetime.timedelta only accepts Python integers
+    mst_time = np.full(det_mds.size, np.datetime64('2000', 'us'))
+    for ni, det in enumerate(det_mds):
+        days = int(det['isp']['days'])
+        secnds = int(det['isp']['secnds'])
+        musec = int(det['isp']['musec']
+                    + 1e6 * (det['chan_data']['hdr']['bcps'][0] / 16 + _ri))
+        mst_time[ni] += np.timedelta64(timedelta(days, secnds, musec))
+
+    return mst_time
+
+
 # - Classes --------------------------------------
 class File():
     """
@@ -61,9 +91,9 @@ class File():
         """
         # initialize class attributes
         self.filename = flname
-        self.sorted = {'det' : True,      # assume DSR packets are sorted
-                       'aux' : True,
-                       'pmd' : True}
+        self.sorted = {'det': True,      # assume DSR packets are sorted
+                       'aux': True,
+                       'pmd': True}
         self.mph = {}
         self.sph = {}
         self.dsd = None
@@ -236,14 +266,14 @@ class File():
             ('chan_data', self.__chan_data(), (8))
         ])
 
-    def chan_dtype(self):
+    @staticmethod
+    def chan_dtype():
         """
         Returns numpy-dtype definition for science channel data
         """
         return np.dtype([
-            ('isp', self.__mjd_envi()),
+            ('time', 'datetime64[us]'),
             ('icu_time', 'u4'),
-            ('bcps', 'u2'),
             ('temp', 'f8'),
             ('coaddf', 'u1', (lv0_consts('channel_pixels'))),
             ('data', 'f8', (lv0_consts('channel_pixels')))
@@ -495,8 +525,8 @@ class File():
                     if last_pmd_icu_time > ds_rec['data_hdr']['icu_time']:
                         self.sorted['pmd'] = False
                     last_pmd_icu_time = ds_rec['data_hdr']['icu_time']
-                elif ds_rec['data_hdr']['packet_type'] == 2 \
-                     or ds_rec['fep_hdr']['length'] == 1659:
+                elif (ds_rec['data_hdr']['packet_type'] == 2
+                      or ds_rec['fep_hdr']['length'] == 1659):
                     num_aux += 1
                     offs_bcps = 20
                     if last_aux_icu_time > ds_rec['data_hdr']['icu_time']:
@@ -565,6 +595,7 @@ class File():
 
         # read channel data blocks
         channel = det['chan_data']
+        channel['hdr'][:] = 0
         for nch in range(det['pmtc_hdr']['num_chan']):
             channel['hdr'][nch] = np.frombuffer(
                 ds_rec['buff'],
@@ -622,6 +653,7 @@ class File():
 
         # read channel data blocks
         channel = det['chan_data']
+        channel['hdr'][:] = 0
         for nch in range(det['pmtc_hdr']['num_chan']):
             if offs == len(ds_rec['buff']):
                 det['pmtc_hdr']['num_chan'] = nch
@@ -760,8 +792,8 @@ class File():
                              < info['bcps'][indx+1]):
                         print("# Info - icu_time of {}_mds[{}] fixed".format(
                             name, indx))
-                        info['data_hdr']['icu_time'][indx] = \
-                                        info['data_hdr']['icu_time'][indx-1]
+                        info['data_hdr']['icu_time'][indx] = (
+                            info['data_hdr']['icu_time'][indx-1])
                     else:
                         print("# Warning - can not fix {}_mds[{}]".format(
                             name, indx))
@@ -770,7 +802,7 @@ class File():
                         name, indx))
 
             # 2) put state executions in chronological order
-            #    and remove repeated states or partly repeated states in product
+            #  and remove repeated states or partly repeated states in product
             if np.any(np.diff(info['data_hdr']['icu_time'].astype(int)) < 0):
                 uniq, inverse = np.unique(
                     info['data_hdr']['icu_time'], return_inverse=True)
@@ -933,16 +965,18 @@ class File():
         """
         from .hk import get_det_temp
 
-        (det_mds, _, _) = self.get_mds(state_id)
+        if not isinstance(state_id, int):
+            raise ValueError("state_id must be an integer")
+
+        det_mds, _, _ = self.get_mds([state_id])
         if det_mds.size == 0:
             return None
         chan = np.empty(det_mds.size, dtype=self.chan_dtype())
+        chan['time'][:] = mjd_to_datetime(state_id, det_mds)
         chan['data'][...] = np.nan
 
         for ni, dsr in enumerate(det_mds):
-            chan['isp'][ni] = dsr['isp']
             chan['icu_time'][ni] = dsr['data_hdr']['icu_time']
-            chan['bcps'][ni] = dsr['pmtc_hdr']['bcps']
             for nch in range(dsr['pmtc_hdr']['num_chan']):
                 chan_data = dsr['chan_data'][nch]
                 if chan_data['hdr']['id_is_lu'] >> 4 != chan_id:

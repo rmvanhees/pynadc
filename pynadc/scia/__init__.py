@@ -5,7 +5,7 @@ https://github.com/rmvanhees/pynadc
 
 Sciamachy package
 
-Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research 
+Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  Standard 3-clause BSD
