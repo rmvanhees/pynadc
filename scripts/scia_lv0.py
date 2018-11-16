@@ -18,44 +18,50 @@ import numpy as np
 
 
 # - local functions --------------------------------
-def check_dsr_in_states(mds, verbose=False):
+def check_dsr_in_states(isp_in, verbose=False):
     """
-    This module combines L0 DSR per state ID based on parameter icu_time.
+    This module combines L0 ISP per state ID based on parameter icu_time.
     """
-    # combine L0 DSR on parameter icu_time
+    # selects complete ISPs
+    isp = isp_in[isp_in['fep_hdr']['_quality'] == 0]
+
+    # combine L0 ISP on parameter icu_time
     # alternatively one could use parameter state_id
-    _arr = mds['data_hdr']['icu_time']
+    _arr = isp['data_hdr']['icu_time']
     _arr = np.concatenate(([-1], _arr, [-1]))
     indx = np.where(np.diff(_arr) != 0)[0]
     num_dsr = np.diff(indx)
-    icu_time = mds['data_hdr']['icu_time'][indx[:-1]]
-    state_id = mds['data_hdr']['state_id'][indx[:-1]]
-    if 'pmtc_frame' in mds.dtype.names:
-        bcps = mds['pmtc_frame']['bcp']['bcps'][:, 0, 0]
-    elif 'pmd_data' in mds.dtype.names:
-        bcps = mds['pmd_data']['bcps'][:, 0]
+    icu_time = isp['data_hdr']['icu_time'][indx[:-1]]
+    state_id = isp['data_hdr']['state_id'][indx[:-1]]
+    if 'pmtc_frame' in isp.dtype.names:
+        bcps = isp['pmtc_frame']['bcp']['bcps'][:, 0, 0].astype(int)
+    elif 'pmd_data' in isp.dtype.names:
+        bcps = isp['pmd_data']['bcps'][:, 0].astype(int)
     else:
-        bcps = mds['pmtc_hdr']['bcps']
-    if verbose:
-        diff_bcps = None
-        for ni in range(num_dsr.size):
-            if ni+1 < num_dsr.size:
-                diff_bcps = np.diff(bcps[indx[ni]:indx[ni+1]])
-            if diff_bcps is None:
-                pass
-            elif len(diff_bcps) > 1:
-                print("# {:3d} state_{:02d} {:5d} {:4d}".format(
-                    ni, state_id[ni], indx[ni], num_dsr[ni]),
-                      icu_time[ni],
-                      np.all(diff_bcps > 0),
-                      np.all(diff_bcps == diff_bcps[0]))
-            else:
-                print("# {:3d} state_{:02d} {:5d} {:4d}".format(
-                    ni, state_id[ni], indx[ni], num_dsr[ni]),
-                      icu_time[ni],
-                      np.all(diff_bcps > 0))
+        bcps = isp['pmtc_hdr']['bcps'].astype(int)
 
-    return mds
+    if not verbose:
+        return isp
+
+    diff_bcps = None
+    for ni in range(num_dsr.size):
+        if ni+1 == num_dsr.size:
+            continue
+
+        diff_bcps = np.diff(bcps[indx[ni]:indx[ni+1]])
+
+        if len(diff_bcps) == 1:
+            print("# {:3d} state_{:02d} {:5d} {:4d}".format(
+                ni, state_id[ni], indx[ni], num_dsr[ni]),
+                  icu_time[ni])
+        else:
+            print("# {:3d} state_{:02d} {:5d} {:4d}".format(
+                ni, state_id[ni], indx[ni], num_dsr[ni]),
+                  icu_time[ni],
+                  np.all(diff_bcps > 0),
+                  np.unique(diff_bcps))
+
+    return isp
 
 
 # - main code --------------------------------------
@@ -109,6 +115,7 @@ def main():
         print('exception occurred in module pynadc.scia.lv0')
         raise
 
+    # show the ASCII headers of the level 0 product and exit
     if args.only_headers:
         for key in fid.mph:
             print('MPH: ', key, fid.mph[key])
@@ -119,12 +126,14 @@ def main():
                 print('DSD[{:02d}]: '.format(ni), key, dsd_rec[key])
         return
 
+    # repair the info-records
     fid.repair_info()
 
-    (det_mds, aux_mds, pmd_mds) = fid.get_mds(state_id=args.state)
-    check_dsr_in_states(det_mds, verbose=True)
-    # lv0.check_dsr_in_states(aux_mds, verbose=True)
-    # lv0.check_dsr_in_states(pmd_mds, verbose=True)
+    # read level 0 ISP
+    (det_isp, aux_isp, pmd_isp) = fid.get_isp(state_id=args.state)
+    check_dsr_in_states(det_isp, verbose=True)
+    check_dsr_in_states(aux_isp, verbose=False)
+    check_dsr_in_states(pmd_isp, verbose=False)
 
 
 #--------------------------------------------------

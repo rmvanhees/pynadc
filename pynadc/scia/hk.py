@@ -11,9 +11,12 @@ Copyright (c) 2018 SRON - Netherlands Institute for Space Research
 
 License:  Standard 3-clause BSD
 """
+from datetime import timedelta
+
 import numpy as np
 
 from bitstring import BitArray
+
 
 def get_det_temp(channel, raw_tm):
     """
@@ -64,6 +67,7 @@ def get_det_temp(channel, raw_tm):
     # use linear interpolation (nothing fancy)
     return np.interp(raw_tm, tab_tm[nch], tab_temp[nch])
 
+
 def get_det_vis_pet(chan_hdr):
     """
     convert raw timing data to detector data to pixel-exposure-time (VIS)
@@ -99,6 +103,7 @@ def get_det_vis_pet(chan_hdr):
         return ([pet * ratio, pet], vir_chan_b)
 
     return (pet, vir_chan_b)
+
 
 def get_det_ir_pet(chan_hdr):
     """
@@ -142,3 +147,32 @@ def get_det_ir_pet(chan_hdr):
         return 1 / 32
 
     return etf / 16
+
+
+def mjd_to_datetime(state_id, det_isp):
+    """
+    Calculates datetime at end of each integration time
+    """
+    # BCPS enable delay per instrument state
+    ri_delay = (0,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 86, 86,
+                86, 86, 86, 86, 86, 86, 86, 86, 111, 86,
+                303, 86, 86, 86, 86, 86, 86, 86, 111, 303)
+
+    # Add BCPS H/W delay (92.765 ms)
+    _ri = 0.092765 + ri_delay[state_id] / 256
+
+    # the function datetime.timedelta only accepts Python integers
+    mst_time = np.full(det_isp.size, np.datetime64('2000', 'us'))
+    for ni, dsr in enumerate(det_isp):
+        days = int(dsr['mjd']['days'])
+        secnds = int(dsr['mjd']['secnds'])
+        musec = int(dsr['mjd']['musec']
+                    + 1e6 * (dsr['chan_data']['hdr']['bcps'][0] / 16 + _ri))
+        mst_time[ni] += np.timedelta64(timedelta(days, secnds, musec))
+
+    return mst_time

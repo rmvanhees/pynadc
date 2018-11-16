@@ -280,13 +280,13 @@ def state_conf_db(state_id, orbit,
     return None
 
 
-def state_conf_data(det_mds):
+def state_conf_data(det_isp):
     """
     Derive state configuration from level 0 measurements
 
     Parameters
     ----------
-    * det_mds  :  SCIA level 0 detector DSRs of one state execution
+    * det_isp  :  SCIA level 0 detector ISPs of one state execution
 
     Returns
     -------
@@ -297,15 +297,15 @@ def state_conf_data(det_mds):
     from .hk import get_det_vis_pet, get_det_ir_pet
 
     # check input data
-    state_id = det_mds['data_hdr']['state_id']
+    state_id = det_isp['data_hdr']['state_id']
     if not np.all(state_id == state_id[0]):
-        raise ValueError('you should provide DSR of the same state')
+        raise ValueError('you should provide ISP of the same state')
 
     # collect parameters which define the state configuration
     clus_list = []
-    for det in det_mds:
-        num_chan = det['pmtc_hdr']['num_chan']
-        for chan in det['chan_data'][:num_chan]:
+    for dsr in det_isp:
+        num_chan = dsr['pmtc_hdr']['num_chan']
+        for chan in dsr['chan_data'][:num_chan]:
             chan_id = chan['hdr']['id_is_lu'] >> 4
             if chan_id < 6:
                 pet = None
@@ -363,14 +363,14 @@ def state_conf_data(det_mds):
             print('# Fatal - failed with number of cluster equal to ', nclus)
             return None
 
-    # count number of DSR per state execution
-    _, counts = np.unique(det_mds['data_hdr']['icu_time'],
+    # count number of ISP per state execution
+    _, counts = np.unique(det_isp['data_hdr']['icu_time'],
                           return_counts=True)
 
     # fill the output structure
     state_conf = np.squeeze(np.zeros(1, dtype=state_dtype()))
     state_conf['nclus'] = nclus
-    state_conf['duration'] = det_mds['pmtc_hdr']['bcps'].max()
+    state_conf['duration'] = det_isp['pmtc_hdr']['bcps'].max()
     if counts.size > 1:
         state_conf['num_geo'] = sorted(counts)[counts.size // 2]
     else:
