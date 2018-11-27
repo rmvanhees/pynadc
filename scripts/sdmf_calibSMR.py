@@ -1,17 +1,15 @@
-#!/usr/bin/env python
-'''
+"""
 This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
-.. ADD DESCRIPTION ..
+Calibrate Sciamachy Solar Mean Radiance measurements
 
-Copyright (c) 2016 SRON - Netherlands Institute for Space Research 
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
-
-'''
+License:  BSD-3-Clause
+"""
 #
 # Code layout:
 #  SECTION VERSION
@@ -32,13 +30,8 @@ License:  Standard 3-clause BSD
 #  SECTION MAIN
 #  - code to be run as a standalone program
 #
-from __future__ import print_function
-from __future__ import division
-
 import sys
 import argparse
-import os.path
-import warnings
 
 import numpy as np
 import numpy.ma as ma
@@ -63,11 +56,11 @@ class readSunInfo(Exception):
     pass
 
 #-------------------------SECTION AUXILIARY CKD-----------------------------
-def get_h5_RadSensMoni( NDF=True, debug=False ):
-    fmtRSPM  ='%-dfloat32, %-dfloat32, 8192float32, (%-d,%-d,8192)float64'
+def get_h5_RadSensMoni(NDF=True, debug=False):
+    fmtRSPM = '%-dfloat32, %-dfloat32, 8192float32, (%-d,%-d,8192)float64'
     nameRSPM = ('ang_ele', 'ang_asm', 'wvlen', 'sensitivity')
 
-    fid = h5py.File( '/SCIA/share/nadc_tools/key_radsens.h5', 'r' )
+    fid = h5py.File('/SCIA/share/nadc_tools/key_radsens.h5', 'r')
     grp = fid['PPG0']
     dset = grp['PPG0']
     ppg0 = dset[:]
@@ -78,21 +71,21 @@ def get_h5_RadSensMoni( NDF=True, debug=False ):
     dset = grp['ABS_RAD']
     abs_rad = dset[:].astype('float64')
     abs_rad /= (5.035e8 * ref_wl * ppg0)
-    del(ppg0)
+    del ppg0
 
     grp = fid['OBM_s_p']
     dset = grp['Axis 1  Wavelength']
     obm_s_p_wl = dset[:]
     dset = grp['OBM_s_p']
     tmp = dset[:].astype('float64')
-    obm_s_p = np.empty_like( tmp )
+    obm_s_p = np.empty_like(tmp)
     for nc in range(8):
         i_mn = nc * 1024
         i_mx = i_mn + 1024
-        obm_s_p[i_mn:i_mx] = np.interp( ref_wl[i_mn:i_mx], 
-                                        obm_s_p_wl[i_mn:i_mx], 
-                                        tmp[i_mn:i_mx] )
-    del(tmp)
+        obm_s_p[i_mn:i_mx] = np.interp(ref_wl[i_mn:i_mx],
+                                       obm_s_p_wl[i_mn:i_mx],
+                                       tmp[i_mn:i_mx])
+    del tmp
 
     grp = fid['ELEV_p']
     dset = grp['Axis 1  wavelength']
@@ -100,7 +93,7 @@ def get_h5_RadSensMoni( NDF=True, debug=False ):
     dset = grp['Axis 2  elevation angle']
     elev_p_angle = dset[:]
     dset = grp['ELEV_p']
-    elev_p = dset[2,:]
+    elev_p = dset[2, :]
 
     grp = fid['ELEV_s']
     dset = grp['Axis 1  wavelength']
@@ -108,10 +101,10 @@ def get_h5_RadSensMoni( NDF=True, debug=False ):
     dset = grp['Axis 2  elevation angle']
     elev_s_angle = dset[:]
     dset = grp['ELEV_s']
-    elev_s = dset[2,:]
+    elev_s = dset[2, :]
 
-    elev_p_a0 = np.interp( ref_wl, elev_p_wl, elev_p.astype('float64') )
-    elev_s_a0 = np.interp( ref_wl, elev_s_wl, elev_s.astype('float64') )
+    elev_p_a0 = np.interp(ref_wl, elev_p_wl, elev_p.astype('float64'))
+    elev_s_a0 = np.interp(ref_wl, elev_s_wl, elev_s.astype('float64'))
     elev_a0 = obm_s_p * elev_s_a0 + elev_p_a0
 
     if NDF:
@@ -120,14 +113,14 @@ def get_h5_RadSensMoni( NDF=True, debug=False ):
         ndf_wl = dset[:]
         dset = grp['NDF']
         tmp = dset[:].astype('float64')
-        ndf = np.empty_like( tmp )
+        ndf = np.empty_like(tmp)
         for nc in range(8):
             i_mn = nc * 1024
             i_mx = i_mn + 1024
-            ndf[i_mn:i_mx] = np.interp( ref_wl[i_mn:i_mx], 
-                                        ndf_wl[i_mn:i_mx], 
-                                        tmp[i_mn:i_mx] )
-        del(tmp)
+            ndf[i_mn:i_mx] = np.interp(ref_wl[i_mn:i_mx],
+                                       ndf_wl[i_mn:i_mx],
+                                       tmp[i_mn:i_mx])
+        del tmp
 
         grp = fid['NDF_s_p']
         dset = grp['Axis 1  Wavelength']
@@ -135,14 +128,14 @@ def get_h5_RadSensMoni( NDF=True, debug=False ):
         dset = grp['NDF_s_p']
         ndf_s_p = dset[:]
         tmp = dset[:].astype('float64')
-        ndf_s_p = np.empty_like( tmp )
+        ndf_s_p = np.empty_like(tmp)
         for nc in range(8):
             i_mn = nc * 1024
             i_mx = i_mn + 1024
-            ndf_s_p[i_mn:i_mx] = np.interp( ref_wl[i_mn:i_mx], 
-                                            ndf_s_p_wl[i_mn:i_mx], 
-                                            tmp[i_mn:i_mx])
-        del(tmp)
+            ndf_s_p[i_mn:i_mx] = np.interp(ref_wl[i_mn:i_mx],
+                                           ndf_s_p_wl[i_mn:i_mx],
+                                           tmp[i_mn:i_mx])
+        del tmp
 
         abs_rad *= (2 * ndf / (1 + ndf_s_p))
         obm_s_p *= ndf_s_p
@@ -170,39 +163,40 @@ def get_h5_RadSensMoni( NDF=True, debug=False ):
 
     # re-arrange data: switch ang_asm and ang_ele and store both increasing
     dimWave = brdf_p_wl.shape[0]
-    dimASM  = brdf_p_asm.shape[0]
-    dimELE  = brdf_p_ele.shape[0]
+    dimASM = brdf_p_asm.shape[0]
+    dimELE = brdf_p_ele.shape[0]
     dimBRDF = dimASM * dimELE
     indx = []
     for ni in range(dimELE):
-        indx += list(ni + np.linspace(dimBRDF-dimELE,0,num=dimASM).astype(int))
+        indx += list(ni
+                     + np.linspace(dimBRDF-dimELE, 0, num=dimASM).astype(int))
 
     # write data to output structure, interpolated to the ele,asm grid
-    rspm = np.empty( 1, dtype=fmtRSPM % (dimELE,dimASM,dimELE,dimASM))
+    rspm = np.empty(1, dtype=fmtRSPM % (dimELE, dimASM, dimELE, dimASM))
     rspm.dtype.names = nameRSPM
     rspm['ang_ele'] = brdf_p_ele
     rspm['ang_asm'] = brdf_p_asm[::-1]
     rspm['wvlen'] = ref_wl
 
-    brdf_p = brdf_p.reshape( dimBRDF, dimWave )
-    brdf_s = brdf_s.reshape( dimBRDF, dimWave )
+    brdf_p = brdf_p.reshape(dimBRDF, dimWave)
+    brdf_s = brdf_s.reshape(dimBRDF, dimWave)
     for ni in range(dimBRDF):
-        brdf_p_ni = np.interp( ref_wl, brdf_p_wl, brdf_p[indx[ni],:] )
-        brdf_s_ni = np.interp( ref_wl, brdf_s_wl, brdf_s[indx[ni],:] )
-        rspm['sensitivity'][0, ni // dimASM, ni % dimASM,:] = \
+        brdf_p_ni = np.interp(ref_wl, brdf_p_wl, brdf_p[indx[ni], :])
+        brdf_s_ni = np.interp(ref_wl, brdf_s_wl, brdf_s[indx[ni], :])
+        rspm['sensitivity'][0, ni // dimASM, ni % dimASM, :] = \
             abs_rad * (obm_s_p * brdf_s_ni + brdf_p_ni) / elev_a0
 
     if debug:
-        fid = h5py.File( 'scia_key_rspm.h5', 'w' )
-        dset = fid.create_dataset( 'rspm', data=rspm )
+        fid = h5py.File('scia_key_rspm.h5', 'w')
+        dset = fid.create_dataset('rspm', data=rspm)
         fid.close()
     return rspm
 
 #-------------------------SECTION READ DATA---------------------------------
 class SDMFextractSun:
-    '''
+    """
     Read Sciamachy Sun/State 62 SDMF (v3.1) data
-    '''
+    """
     def __init__(self, state_id=62, sun_db='/SCIA/SDMF31/sdmf_extract_sun.h5'):
         self.sun_db = sun_db
         self.state_id = state_id
@@ -212,24 +206,24 @@ class SDMFextractSun:
         self.smr = None
         self.wvlen = None
 
-        with h5py.File( sun_db, 'r' ) as fid:
+        with h5py.File(sun_db, 'r') as fid:
             dset = fid['ClusDef']
             self.clusDef = dset[:]
 
     def selectOrbits(self, orbitRange):
-        with h5py.File( self.sun_db, 'r' ) as fid:
+        with h5py.File(self.sun_db, 'r') as fid:
             grp = fid['State_%02d' % self.state_id]
             dset = grp['orbitList']
             orbitList = dset[:]
 
-        if isinstance(orbitRange,int):
+        if isinstance(orbitRange, int):
             self.metaIndx = np.argmin(abs(orbitList - orbitRange))
         else:
-            self.metaIndx = np.where( (orbitList >= orbitRange[0])
-                                      & (orbitList <= orbitRange[1]) )[0]
+            self.metaIndx = np.where((orbitList >= orbitRange[0])
+                                     & (orbitList <= orbitRange[1]))[0]
         self.orbitList = orbitList[self.metaIndx]
         if self.orbitList.size == 0:
-            print( '* Info: no orbits selected from sdmf_extract_sun.h5' )
+            print('* Info: no orbits selected from sdmf_extract_sun.h5')
             raise readSunInfo
 
     def readData(self):
@@ -243,7 +237,7 @@ class SDMFextractSun:
             metaIndx = self.metaIndx
             self.metaIndx = None
 
-        fid = h5py.File( self.sun_db, 'r' )
+        fid = h5py.File(self.sun_db, 'r')
         grp = fid['State_%02d' % self.state_id]
 
         dset = grp['metaTable']
@@ -263,24 +257,23 @@ class SDMFextractSun:
         dset = grp['cluster_01']
         self.numSpectra = dset[0].shape[0]
 
-        self.coaddf = np.ones( (self.numPixels,), dtype=np.uint8 )
-        self.pet = np.zeros( (self.numPixels,), dtype=float )
-        self.spectra = ma.array( np.zeros(
-                (self.numSpectra, self.numPixels), dtype='float64'), 
-                                 mask=np.zeros(
-                (self.numSpectra, self.numPixels), dtype=int),
-                                 hard_mask=True )
-        for nc in range( self.clusDef.shape[0] ):
+        self.coaddf = np.ones((self.numPixels,), dtype=np.uint8)
+        self.pet = np.zeros((self.numPixels,), dtype=float)
+        self.spectra = ma.array(
+            np.zeros((self.numSpectra, self.numPixels), dtype='float64'),
+            mask=np.zeros((self.numSpectra, self.numPixels), dtype=int),
+            hard_mask=True)
+        for nc in range(self.clusDef.shape[0]):
             dset = grp['cluster_%02d' % (nc+1)]
             x = self.clusDef[nc]
             self.coaddf[x[2]:x[2]+x[3]] = dset.attrs['coaddf'][0]
             self.pet[x[2]:x[2]+x[3]] = dset.attrs['PET'][0]
-            self.spectra[:,x[2]:x[2]+x[3]] = dset[metaIndx].astype('float64')
+            self.spectra[:, x[2]:x[2]+x[3]] = dset[metaIndx].astype('float64')
         fid.close()
 
 #-------------------------SECTION CALIBRATE DATA----------------------------
 class SMRcalib:
-    '''
+    """
     Listing of implemented calibration IDs:
         Mask dead & blinded pixels
         Co-addition division correction
@@ -292,24 +285,25 @@ class SMRcalib:
      6. Apply mirror model
      7. Radiance correction
      8. Combine scans to Sun Mean Reference (implied for option "db")
-    '''
+    """
     def __init__(self):
         self.funclist = (
-            'maskDead', 'coaddDivision', 'memoryEffect', 'nonLinearity', 
+            'maskDead', 'coaddDivision', 'memoryEffect', 'nonLinearity',
             'backGround', 'strayLight', 'fitParam', 'mirrorModel',
             'radiance', 'combineSpectra'
-            )
+        )
+
         self.funcdict = dict(
-            zip((self.funclist), 
-                (self.maskDead, self.coaddDivision, 
-                 self.memoryEffect, self.nonLinearity, 
-                 self.backGround, self.strayLight, 
-                 self.fitParam, self.mirrorModel, 
+            zip((self.funclist),
+                (self.maskDead, self.coaddDivision,
+                 self.memoryEffect, self.nonLinearity,
+                 self.backGround, self.strayLight,
+                 self.fitParam, self.mirrorModel,
                  self.radiance, self.combineSpectra))
-            )
+        )
 
     def maskDead(self, smr, verbose=False):
-        '''
+        """
         (*) Identifies dead pixels (based on measurements)
             and blinded pixels at start and end of detector array.
         Parameters
@@ -323,18 +317,18 @@ class SMRcalib:
         Notes
         -----
         None
-        '''
+        """
         if verbose:
-            print( '(*) Perform masking of the dead/bad pixel' )
+            print('(*) Perform masking of the dead/bad pixel')
         smr.errorType = 'F'
         #
         # mask blinded pixels
         #
-        smr.blinded = np.empty( (smr.numPixels,), dtype=np.bool )
+        smr.blinded = np.empty((smr.numPixels,), dtype=np.bool)
         smr.blinded[:] = False
 
-        id_list = np.array( list(range(10)) + list(range(1024-10,1024)) )
-        smr.blinded[   0+id_list] = True     # channel 1
+        id_list = np.array(list(range(10)) + list(range(1024-10, 1024)))
+        smr.blinded[0+id_list] = True        # channel 1
         smr.blinded[1024+id_list] = True     # channel 2
         smr.blinded[2048+id_list] = True     # channel 3
         smr.blinded[3072+id_list] = True     # channel 4
@@ -346,24 +340,24 @@ class SMRcalib:
         # mask dead pixels
         #
         i_masked = smr.spectra.mask.sum()
-        smr.spectra = ma.masked_equal( smr.spectra, 0, copy=False )
+        smr.spectra = ma.masked_equal(smr.spectra, 0, copy=False)
         if verbose:
             masked = smr.spectra.mask.sum()
-            print( '* Info: masked %6.1f pixels/spectrum with zero signal'
-                   % ((masked - i_masked) / float(smr.numSpectra)) )
-            i_masked = masked 
+            print('* Info: masked %6.1f pixels/spectrum with zero signal'
+                  % ((masked - i_masked) / float(smr.numSpectra)))
+            i_masked = masked
 
-        smr.spectra = ma.masked_where( (smr.spectra / smr.coaddf) >= 65535.,
-                                       smr.spectra, copy=False )
+        smr.spectra = ma.masked_where((smr.spectra / smr.coaddf) >= 65535.,
+                                      smr.spectra, copy=False)
         if verbose:
             masked = smr.spectra.mask.sum()
-            print( '* Info: masked %6.1f pixels/spectrum with saturated signal'
-                   % ((masked - i_masked) / float(smr.numSpectra)) )
-            i_masked = masked 
+            print('* Info: masked %6.1f pixels/spectrum with saturated signal'
+                  % ((masked - i_masked) / float(smr.numSpectra)))
+            i_masked = masked
 
     def coaddDivision(self, smr, verbose=False):
-        '''
-        (*) Co-addition division correction divides the data by the number 
+        """
+        (*) Co-addition division correction divides the data by the number
         of measurements added in the on-board co-added.
         Parameters
         ----------
@@ -377,16 +371,16 @@ class SMRcalib:
         Notes
         -----
         * None
-        '''
+        """
         if verbose:
-            print( '(*) Perform division by co-adding factor' )
+            print('(*) Perform division by co-adding factor')
         smr.errorType = 'M'
 
         smr.spectra /= smr.coaddf
 
     def memoryEffect(self, smr, verbose=False):
-        '''
-        (1) Memory Effect correction, this is the effect that the current 
+        """
+        (1) Memory Effect correction, this is the effect that the current
         measurement depends on the previous measurement.
         Parameters
         ----------
@@ -401,14 +395,14 @@ class SMRcalib:
         * approximation first read-out is obviously wrong, but first readout is
         not used anyway...
         * error estimate not implemented
-        '''
+        """
         if verbose:
-            print( '(1) Perform memory correction (Reticon detectors)' )
+            print('(1) Perform memory correction (Reticon detectors)')
         smr.errorType = 'A'
         #
         # read memory correction values
         #
-        with h5py.File( '/SCIA/share/nadc_tools/MEMcorr.h5', 'r' ) as fid:
+        with h5py.File('/SCIA/share/nadc_tools/MEMcorr.h5', 'r') as fid:
             dset = fid['MemTable']
             memtbl = dset[:]
         #
@@ -419,18 +413,18 @@ class SMRcalib:
             ipx = id_array + nch * smr.channelSize
 
             coaddf = smr.coaddf[ipx].max()
-            sign = np.rint(smr.spectra[0,ipx]).astype('uint16')
-            for nspec in range( smr.numSpectra ):
+            sign = np.rint(smr.spectra[0, ipx]).astype('uint16')
+            for nspec in range(smr.numSpectra):
                 corr = memtbl[nch, sign]
-                sign = np.rint(smr.spectra[nspec,ipx]).astype('uint16')
+                sign = np.rint(smr.spectra[nspec, ipx]).astype('uint16')
                 if coaddf > 1:
                     for ni in range(1, coaddf):
                         corr += memtbl[nch, sign]
                     corr /= coaddf
-                smr.spectra.data[nspec,ipx] -= corr
+                smr.spectra.data[nspec, ipx] -= corr
 
     def nonLinearity(self, smr, verbose=False):
-        '''
+        """
         (2) Non-Linearity correction.
         Parameters
         ----------
@@ -443,14 +437,14 @@ class SMRcalib:
         Notes
         -----
         * error estimate not implemented
-        '''
+        """
         if verbose:
-            print( '(2) Perform non-linearity correction (Epitaxx detectors)' )
+            print('(2) Perform non-linearity correction (Epitaxx detectors)')
         smr.errorType = 'A'
         #
         # read non-linearity correction values
         #
-        with h5py.File( '/SCIA/share/nadc_tools/NLcorr.h5', 'r' ) as fid:
+        with h5py.File('/SCIA/share/nadc_tools/NLcorr.h5', 'r') as fid:
             dset = fid['CurveIndex']
             curveIndex = dset[:]
             dset = fid['nLinTable']
@@ -463,14 +457,14 @@ class SMRcalib:
             pixelList = id_array + nch * smr.channelSize
             curves = curveIndex[nch, id_array]
             for nspec in range(smr.numSpectra):
-                sign = np.rint(smr.spectra[nspec,pixelList]).astype('uint16')
-                smr.spectra.data[nspec,pixelList] -= nlintbl[curves, sign]
+                sign = np.rint(smr.spectra[nspec, pixelList]).astype('uint16')
+                smr.spectra.data[nspec, pixelList] -= nlintbl[curves, sign]
 
     def backGround(self, smr, verbose=False):
-        '''
-        (3) Background Signal correction, consists of the dark current (DC) 
+        """
+        (3) Background Signal correction, consists of the dark current (DC)
         and the thermal background (BG_term).
-           BS(i,j) = coaddf * pet * (DC + c_ice * QE * BG_therm)  
+           BS(i,j) = coaddf * pet * (DC + c_ice * QE * BG_therm)
         Parameters
         ----------
         coaddf  : number of measurements co-added [i,j] (C3)
@@ -478,7 +472,8 @@ class SMRcalib:
         DC      : dark current (C2/C3)
         c_ice   : transmission coefficient of the ice layer (C2)
         QE      : quantum efficiency of the detector (C1/C2)
-        BG_term : thermal background, depends on T_det, T_opt, T_cal and T_grating (C3)
+        BG_term : thermal background,
+                  depends on T_det, T_opt, T_cal and T_grating (C3)
 
         Returns
         -------
@@ -487,11 +482,11 @@ class SMRcalib:
         Notes
         -----
         * error estimate not implemented
-        '''
+        """
         from math import cos, pi
 
         if verbose:
-            print( '(3) Perform subtraction of dark signal' )
+            print('(3) Perform subtraction of dark signal')
         smr.errorType = 'A'
 
         # make a copy to correct Epitaxx PET without modifying the SMR object
@@ -501,7 +496,7 @@ class SMRcalib:
         #
         # read dark correction values
         #
-        with h5py.File( '/SCIA/SDMF31/sdmf_dark.h5', 'r' ) as fid:
+        with h5py.File('/SCIA/SDMF31/sdmf_dark.h5', 'r') as fid:
             grp = fid['/DarkFit']
             dset = grp['metaTable']
             mtbl = dset[:]
@@ -510,13 +505,13 @@ class SMRcalib:
             orbit[np.where(mtbl['stateCount'] < 3)] = 999999
             metaIndx = np.argmin(orbit - smr.absOrbit)
             dset = grp['analogOffset']
-            ao = dset[metaIndx,:]
+            ao = dset[metaIndx, :]
             dset = grp['darkCurrent']
-            lc = dset[metaIndx,:]
+            lc = dset[metaIndx, :]
 
         corr = ao + pet * lc
 
-        with h5py.File( '/SCIA/SDMF30/sdmf_simudark.h5', 'r' ) as fid:
+        with h5py.File('/SCIA/SDMF30/sdmf_simudark.h5', 'r') as fid:
             grp = fid['/ch8']
             dset = grp['orbitList']
             orbitList = dset[:]
@@ -525,18 +520,18 @@ class SMRcalib:
             mtbl = dset[:]
             mtbl = dset[metaIndx]
             dset = grp['ao']
-            ao = dset[:,metaIndx]
+            ao = dset[:, metaIndx]
             dset = grp['lc']
-            lc = dset[:,metaIndx]
+            lc = dset[:, metaIndx]
             dset = grp['amp1']
-            amp1 = dset[:,metaIndx]
+            amp1 = dset[:, metaIndx]
 
-        orbvar = cos( 2 * pi * (mtbl['PHASE1'] + smr.mtbl['orbitPhase']) ) \
-            + mtbl['AMP2'] * cos( 4 * pi * (mtbl['PHASE2'] 
-                                            + smr.mtbl['orbitPhase']) )
-#        orbsig = cos( 2 * pi * (mtbl['PHASE1'] + smr.mtbl['orbitPhase']) ) \
-#            + mtbl['SIG_AMP2'] * cos( 4 * pi * ( mtbl['PHASE2'] 
-#                                                 + smr.mtbl['orbitPhase']) )
+        orbvar = cos(2 * pi * (mtbl['PHASE1'] + smr.mtbl['orbitPhase'])) \
+                 + mtbl['AMP2'] * cos(4 * pi * (mtbl['PHASE2']
+                                                + smr.mtbl['orbitPhase']))
+#        orbsig = cos(2 * pi * (mtbl['PHASE1'] + smr.mtbl['orbitPhase'])) \
+#            + mtbl['SIG_AMP2'] * cos(4 * pi * (mtbl['PHASE2']
+#                                                 + smr.mtbl['orbitPhase']))
 
         indx = 7 * smr.channelSize + np.arange(smr.channelSize)
         corr[indx] = ao + pet[indx] * (lc + orbvar * amp1)
@@ -546,24 +541,24 @@ class SMRcalib:
         # masked invalid pixels
         #
         i_masked = smr.spectra.mask.sum()
-        tmp = np.array( [~(np.isfinite(corr)),] * smr.numSpectra )
-        smr.spectra = ma.masked_where( tmp, smr.spectra, copy=False )
-        del(tmp)
+        tmp = np.array([~(np.isfinite(corr)),] * smr.numSpectra)
+        smr.spectra = ma.masked_where(tmp, smr.spectra, copy=False)
+        del tmp
         if verbose:
             masked = smr.spectra.mask.sum()
-            print( '* Info: masked %6.1f pixels/spectrum with invalid darks'
-                   % ((masked - i_masked) / float(smr.numSpectra)) )
+            print('* Info: masked %6.1f pixels/spectrum with invalid darks'
+                  % ((masked - i_masked) / float(smr.numSpectra)))
             i_masked = masked
 
-        smr.spectra = ma.masked_less( smr.spectra, 1, copy=False )
+        smr.spectra = ma.masked_less(smr.spectra, 1, copy=False)
         if verbose:
             masked = smr.spectra.mask.sum()
-            print( '* Info: masked %6.1f pixels/spectrum with too large darks'
-                   % ((masked - i_masked) / float(smr.numSpectra)) )
+            print('* Info: masked %6.1f pixels/spectrum with too large darks'
+                  % ((masked - i_masked) / float(smr.numSpectra)))
             i_masked = masked
 
     def strayLight(self, smr, verbose=False):
-        '''
+        """
         (4) Stray Light correction
         Parameters
         ----------
@@ -577,14 +572,14 @@ class SMRcalib:
         Notes
         -----
         * error estimate not implemented
-        '''
+        """
         if verbose:
-            print( '(4) Perform subtraction of spectral stray-light' )
+            print('(4) Perform subtraction of spectral stray-light')
         smr.errorType = 'A'
         #
         # read stray-light correction matrix
         #
-        with h5py.File( '/SCIA/share/nadc_tools/Straylight.h5', 'r' ) as fid:
+        with h5py.File('/SCIA/share/nadc_tools/Straylight.h5', 'r') as fid:
             dset = fid['strayMatrix']
             strayMatrix = dset[:]
             dset = fid['strayGhost']
@@ -600,20 +595,20 @@ class SMRcalib:
         deriv_out[-1] = (3 * grid_out[-1] - 4 * grid_out[-2] + grid_out[-3])/2.
 
         # obtain lower and upper indices for regridding, per channel
-        low_indx = np.zeros( grid_in.shape )
-        high_indx = np.zeros( grid_in.shape )
+        low_indx = np.zeros(grid_in.shape)
+        high_indx = np.zeros(grid_in.shape)
         input_ch = np.floor(grid_in / smr.channelSize)
         for nc in range(smr.numChannels):
             w = (input_ch == nc)
             grid_ch = grid_in[w]
 
             # trick to omit round-off errors (fast - only integer manipulation)
-            ll = np.empty( grid_ch.shape, dtype=np.uint16 )
-            ll[1:] = (grid_ch[:-1] + grid_ch[1:]).astype( 'uint16' )
+            ll = np.empty(grid_ch.shape, dtype=np.uint16)
+            ll[1:] = (grid_ch[:-1] + grid_ch[1:]).astype('uint16')
             ll[(ll % 2) == 1] += 1
             ll //= 2
             ll[0] = nc * smr.channelSize
-            ul = np.roll( ll, -1 )
+            ul = np.roll(ll, -1)
             ul[-1] = (nc+1) * smr.channelSize
             low_indx[w] = ll
             high_indx[w] = ul
@@ -621,21 +616,22 @@ class SMRcalib:
         # reduce the spectrum, according to grid_in
         # scale_mask: compensates the reduced spectrum for masked read-outs
         # fillings: compensates for the PET w.r.t. 1/16 sec
-        spec_r = np.zeros( (smr.numSpectra, grid_in.shape[0]), dtype='float64' )
+        spec_r = np.zeros((smr.numSpectra, grid_in.shape[0]), dtype='float64')
         for ni in range(grid_in.shape[0]):
-            num = ma.count(smr.spectra[:,low_indx[ni]:high_indx[ni]], axis=1)
+            num = ma.count(smr.spectra[:, low_indx[ni]:high_indx[ni]], axis=1)
             num[num < 1] = 1
             scale_mask = num / float(high_indx[ni] - low_indx[ni])
             fillings = 16 * smr.pet[grid_in[ni]]
 
-            spec_r[:,ni] = smr.spectra[:,low_indx[ni]:high_indx[ni]].sum(axis=1)
-            spec_r[:,ni] /= (fillings * scale_mask)
-#            print( ni, low_indx[ni], high_indx[ni], spec_r[120,ni], 
-#                   scale_mask[120], fillings, deriv_out[ni] )
+            spec_r[:, ni] = smr.spectra[:,
+                                        low_indx[ni]:high_indx[ni]].sum(axis=1)
+            spec_r[:, ni] /= (fillings * scale_mask)
+#            print(ni, low_indx[ni], high_indx[ni], spec_r[120,ni],
+#                   scale_mask[120], fillings, deriv_out[ni])
 
         # reverse channel 2 (using the numpy 'view' method)
-        tmp = spec_r[:,(input_ch == 1)]
-        spec_r[:,(input_ch == 1)] = tmp[:,::-1]
+        tmp = spec_r[:, (input_ch == 1)]
+        spec_r[:, (input_ch == 1)] = tmp[:, ::-1]
 
         # obtain straylight spectrum
         stray_r = np.dot(spec_r, np.transpose(strayMatrix))
@@ -644,10 +640,10 @@ class SMRcalib:
         stray_r /= deriv_out
 
         # resample straylight spectrum to SCIA spectrum
-        stray = np.zeros( (smr.numSpectra, smr.numPixels), dtype='float64' )
+        stray = np.zeros((smr.numSpectra, smr.numPixels), dtype='float64')
         for ns in range(smr.numSpectra):
-            stray[ns,:] = np.interp( np.arange(smr.numPixels, dtype='float64' ),
-                                     grid_out, stray_r[ns,:] )
+            stray[ns, :] = np.interp(np.arange(smr.numPixels, dtype='float64'),
+                                     grid_out, stray_r[ns, :])
 
         # blank out blinded pixels
         stray[:, smr.blinded] = 0.
@@ -656,30 +652,30 @@ class SMRcalib:
         stray *= ((16 * smr.pet * smr.coaddf) / smr.coaddf.max())
 
         # reverse channel 2 (using the numpy 'view' method)
-        tmp = stray[:,1024:2048]
-        tmp[:,:] = tmp[:,::-1]
+        tmp = stray[:, 1024:2048]
+        tmp[:, :] = tmp[:, ::-1]
 
         # calculate stray-light contribution of the ghosts
-        ghosts = np.zeros( (smr.numSpectra, smr.numPixels), dtype='float64' )
-        for ng in range( strayGhost.shape[0] ):
-            pp = np.arange( strayGhost[ng,3], strayGhost[ng,5], dtype=int )
+        ghosts = np.zeros((smr.numSpectra, smr.numPixels), dtype='float64')
+        for ng in range(strayGhost.shape[0]):
+            pp = np.arange(strayGhost[ng, 3], strayGhost[ng, 5], dtype=int)
 
-            pos = np.polyval( strayGhost[ng,2::-1], pp )
-            fact = np.polyval( strayGhost[ng,10:6:-1], pp )
-            mask = ((pos >= strayGhost[ng,4]) & (pos <= strayGhost[ng,6]) 
+            pos = np.polyval(strayGhost[ng, 2::-1], pp)
+            fact = np.polyval(strayGhost[ng, 10:6:-1], pp)
+            mask = ((pos >= strayGhost[ng, 4]) & (pos <= strayGhost[ng, 6])
                     & (fact > 0))
-    
+
             pos = pos[mask]
-            ghost = fact[mask] * smr.spectra[:,pp[mask]]
+            ghost = fact[mask] * smr.spectra[:, pp[mask]]
             if pos[0] > pos[-1]:
                 pos = pos[::-1]
-                ghost = ghost[:,::-1]
-            pixels = np.arange( int(pos[0]), int(pos[-1]), dtype=int )
+                ghost = ghost[:, ::-1]
+            pixels = np.arange(int(pos[0]), int(pos[-1]), dtype=int)
             for ns in range(smr.numSpectra):
-                ghosts[ns,pixels] += np.interp( pixels, pos, ghost[ns,:] )
+                ghosts[ns, pixels] += np.interp(pixels, pos, ghost[ns, :])
 
 #        for ni in range(smr.numPixels):
-#            print( ni, smr.spectra[120,ni], stray[120,ni], ghosts[120,ni] )
+#            print(ni, smr.spectra[120,ni], stray[120,ni], ghosts[120,ni])
 
         # blank out blinded pixels
         ghosts[:, smr.blinded] = 0.
@@ -688,7 +684,7 @@ class SMRcalib:
         smr.spectra -= (stray + ghosts)
 
     def fitParam(self, smr, verbose=False):
-        '''
+        """
         (5) Correct Sun (state 62) for the intensity change during the scan
         Parameters
         ----------
@@ -701,28 +697,31 @@ class SMRcalib:
         Notes
         -----
         * error estimate not implemented
-        '''
+        """
         if verbose:
-            print( '(5) Perform correction for diffuser effects' )
+            print('(5) Perform correction for diffuser effects')
         smr.errorType = 'M'
         #
         # read fit parameters for the correction of diffuser effects
         #
-        with h5py.File( '/SCIA/SDMF31/Auxiliary/sun_fitpars.h5', 'r' ) as fid:
+        with h5py.File('/SCIA/SDMF31/Auxiliary/sun_fitpars.h5', 'r') as fid:
             dset = fid['fit_parameters']
             fit_param = dset[:]
 
-        jd = smr.julianDay.mean() - fit_param[0,0]
-        saa = smr.sunAzim[1:-1].mean() - fit_param[1,0]
-        sza = smr.sunElev - fit_param[2,0]
+        jd = smr.julianDay.mean() - fit_param[0, 0]
+        saa = smr.sunAzim[1:-1].mean() - fit_param[1, 0]
+        sza = smr.sunElev - fit_param[2, 0]
 
-        saa_grid = np.arange(fit_param[3,0]) / (fit_param[3,0] - 1) \
-            * (fit_param[5,0]-fit_param[4,0]) + fit_param[4,0] - fit_param[1,0]
-        sza_grid = np.arange(fit_param[6,0]) / (fit_param[6,0] - 1) \
-            * (fit_param[8,0]-fit_param[7,0]) + fit_param[7,0] - fit_param[2,0]
+        saa_grid = np.arange(fit_param[3, 0]) / (fit_param[3, 0] - 1) \
+                   * (fit_param[5, 0]-fit_param[4, 0]) + fit_param[4, 0] \
+                   - fit_param[1, 0]
+        sza_grid = np.arange(fit_param[6, 0]) / (fit_param[6, 0] - 1) \
+                   * (fit_param[8, 0]-fit_param[7, 0]) + fit_param[7, 0] \
+                   - fit_param[2, 0]
 
         for ip in range(smr.numPixels):
-            if fit_param[0,ip] == 0: continue
+            if fit_param[0, ip] == 0:
+                continue
 
             np0 = 19
             np1 = 19 + fit_param[3, ip]
@@ -731,15 +730,15 @@ class SMRcalib:
             np1 += fit_param[6, ip]
             sza_lut = fit_param[np0:np1, ip]
 
-            saa_val = np.interp( saa, saa_grid, saa_lut )
-            sza_val = np.interp( sza, sza_grid, sza_lut )
+            saa_val = np.interp(saa, saa_grid, saa_lut)
+            sza_val = np.interp(sza, sza_grid, sza_lut)
             slope = saa_val + fit_param[10, ip] + fit_param[11, ip] * jd \
                 + fit_param[12, ip] * jd**2
             ymod = (1 + slope * sza) * (1 + sza_val)
-            smr.spectra.data[:,ip] /= ymod
+            smr.spectra.data[:, ip] /= ymod
 
     def mirrorModel(self, smr, verbose=False):
-        '''(6) Apply Sun mirror model
+        """(6) Apply Sun mirror model
         Parameters
         ----------
         Returns
@@ -747,23 +746,23 @@ class SMRcalib:
         Notes
         -----
         Implementation TBD
-        '''
+        """
         if verbose:
-            print( '(6) Perform correction for mirror degradation' )
+            print('(6) Perform correction for mirror degradation')
         smr.errorType = 'M'
         pass
 
     def radiance(self, smr, verbose=False):
-        from pynadc.scia import db,lv1
-        '''
-        (7) Radiance correction, the light which the telescope recieved in 
-        the nadir direction, i.e. all the light comming from the Earth in the 
+        from pynadc.scia import db, lv1
+        """
+        (7) Radiance correction, the light which the telescope recieved in
+        the nadir direction, i.e. all the light comming from the Earth in the
         FoV.
         Parameters
         ----------
-        F_t : radiance sensitivity function, obtained from on-ground, 
+        F_t : radiance sensitivity function, obtained from on-ground,
               updated by monitor [i,j] (C1/C2)
-        
+
         Returns
         -------
         Radiance I(i,j)
@@ -771,22 +770,22 @@ class SMRcalib:
         Notes
         -----
         * error estimate not implemented
-        '''
+        """
         if verbose:
-            print( '(7) Perform radiance correction' )
+            print('(7) Perform radiance correction')
         smr.errorType = 'M'
 
         # obtain wavelength grid from level 1b product
         orbits = [int(smr.absOrbit)]
-        fileList = db.get_product_by_type( prod_type='1',
-                                           proc_best=True, 
-                                           orbits=orbits )
+        fileList = db.get_product_by_type(prod_type='1',
+                                          proc_best=True,
+                                          orbits=orbits)
         if len(fileList) > 0:
             try:
-                l1b = lv1.File( fileList[0] )
+                l1b = lv1.File(fileList[0])
                 l1b.getSRS()
             except scia_l1b.fmtError as e:
-                print( e.msg )
+                print(e.msg)
                 sys.exit(1)
 
             wv_interp = True
@@ -797,31 +796,33 @@ class SMRcalib:
             smr.wvlen = smr.rspm['wvlen']    # use rspm grid as approximation
 
         # reverse channel 2 (using the numpy 'view' method)
-        tmp = smr.spectra.data[:,1024:2048]
-        tmp[:,:] = tmp[:,::-1]
+        tmp = smr.spectra.data[:, 1024:2048]
+        tmp[:, :] = tmp[:, ::-1]
 
         # make a copy to correct Epitaxx PET without modifying the SMR object
         pet = smr.pet.copy()
         pet[5 * smr.channelSize:] -= 1.18125e-3
 
         # linear interpolate for obs_ele, obs_asm
-        obs_ele = np.array( smr.sunElev )
-        obs_asm = -45 - 0.5 * np.array( smr.asmAngle )
+        obs_ele = np.array(smr.sunElev)
+        obs_asm = -45 - 0.5 * np.array(smr.asmAngle)
         for no in range(smr.numSpectra):
-            na = np.argmin( abs(smr.rspm['ang_asm'][0,:] - obs_asm[no]) )
+            na = np.argmin(abs(smr.rspm['ang_asm'][0, :] - obs_asm[no]))
             if obs_asm[no] < smr.rspm['ang_asm'][0, na] and na > 0: na -= 1
             frac_asm = (obs_asm[no] - smr.rspm['ang_asm'][0, na]) \
                 / (smr.rspm['ang_asm'][0, na+1] - smr.rspm['ang_asm'][0, na])
 
-            ne = np.argmin( abs(smr.rspm['ang_ele'][0,:] - obs_ele[no]) )
+            ne = np.argmin(abs(smr.rspm['ang_ele'][0, :] - obs_ele[no]))
             if obs_ele[no] < smr.rspm['ang_ele'][0, ne] and ne > 0: ne -= 1
             frac_ele = (obs_ele[no] - smr.rspm['ang_ele'][0, ne]) \
                 / (smr.rspm['ang_ele'][0, ne+1] - smr.rspm['ang_ele'][0, ne])
 
-            radsensAzi1 = (1-frac_asm) * smr.rspm['sensitivity'][0,ne,na,:] \
-                + frac_asm * smr.rspm['sensitivity'][0,ne,na+1,:]
-            radsensAzi2 = (1-frac_asm) * smr.rspm['sensitivity'][0,ne+1,na,:] \
-                + frac_asm * smr.rspm['sensitivity'][0,ne+1,na+1,:]
+            radsensAzi1 = (1-frac_asm) \
+                          * smr.rspm['sensitivity'][0, ne, na, :] \
+                          + frac_asm * smr.rspm['sensitivity'][0, ne, na+1, :]
+            radsensAzi2 = (1-frac_asm) \
+                          * smr.rspm['sensitivity'][0, ne+1, na, :] \
+                          + frac_asm * smr.rspm['sensitivity'][0, ne+1, na+1, :]
             radsens = (1-frac_ele) * radsensAzi1 + frac_ele * radsensAzi2
 
             if wv_interp:
@@ -829,19 +830,20 @@ class SMRcalib:
                 for nc in range(smr.numChannels):
                     i_mn = nc * smr.channelSize
                     i_mx = i_mn + smr.channelSize
-                    radsens[i_mn:i_mx] = np.interp( smr.wvlen[i_mn:i_mx],
-                                               smr.rspm['wvlen'][0,i_mn:i_mx], 
-                                               tmp[i_mn:i_mx] )
-                del(tmp)
+                    radsens[i_mn:i_mx] = np.interp(
+                        smr.wvlen[i_mn:i_mx],
+                        smr.rspm['wvlen'][0, i_mn:i_mx],
+                        tmp[i_mn:i_mx])
+                del tmp
 
-            smr.spectra.data[no,:] /= (pet * radsens)
+            smr.spectra.data[no, :] /= (pet * radsens)
 
         # mask invalid values
-        smr.spectra = ma.masked_less( smr.spectra, 0, copy=False )
-        smr.spectra = ma.masked_invalid( smr.spectra, copy=False )
+        smr.spectra = ma.masked_less(smr.spectra, 0, copy=False)
+        smr.spectra = ma.masked_invalid(smr.spectra, copy=False)
 
     def combineSpectra(self, smr, verbose=False):
-        '''
+        """
         (8) Calculate Sun Mean Reference Spectrum
         Parameters
         ----------
@@ -854,18 +856,18 @@ class SMRcalib:
         Notes
         -----
         * error estimate not implemented
-        '''
+        """
         if verbose:
-            print( '(8) Return average of the Sun spectra' )
+            print('(8) Return average of the Sun spectra')
         smr.errorType = 'A'
 
         # omit first and last spectra
-        smr.smr      = ma.mean( smr.spectra[1:-1,:], axis=0 )
-        smr.smrError = ma.std( smr.spectra[1:-1,:], axis=0 )
-        smr.bdpm     = (ma.count_masked( smr.spectra[1:-1,:], axis=0 ) > 0)
+        smr.smr = ma.mean(smr.spectra[1:-1, :], axis=0)
+        smr.smrError = ma.std(smr.spectra[1:-1, :], axis=0)
+        smr.bdpm = (ma.count_masked(smr.spectra[1:-1, :], axis=0) > 0)
 
-        smr.smrVar   = np.zeros( smr.numPixels, dtype='float64' )
-        smr.smrSlope = np.zeros( smr.numPixels, dtype='float64' )
+        smr.smrVar = np.zeros(smr.numPixels, dtype='float64')
+        smr.smrSlope = np.zeros(smr.numPixels, dtype='float64')
 
         x = np.arange(238)
         A = np.vstack([x, np.ones(238)]).T
@@ -878,50 +880,50 @@ class SMRcalib:
 
 #-------------------------SECTION WRITE DATA--------------------------------
 class SMRdb:
-    def __init__( self, args=None, db_name='./sdmf_smr.h5',
-                  truncate=False, calibration=None, verbose=False ):
+    def __init__(self, args=None, db_name='./sdmf_smr.h5',
+                 truncate=False, calibration=None, verbose=False):
         if args:
-            self.db_name  = args.db_name
+            self.db_name = args.db_name
             self.calibration = args.calibration.copy()
             self.truncate = args.truncate
-            self.verbose  = args.verbose
+            self.verbose = args.verbose
         else:
-            self.db_name  = db_name
+            self.db_name = db_name
             self.calibration = calibration
             self.truncate = truncate
-            self.verbose  = verbose
+            self.verbose = verbose
 
     def checkDataBase(self):
-        with h5py.File( self.db_name, 'r' ) as fid:
+        with h5py.File(self.db_name, 'r') as fid:
             mystr = ','.join(list(self.calibration.astype('str')))
             if fid.attrs['calibOptions'] != mystr:
-                print( 'Fatal:', 'incompatible calibration options' )
+                print('Fatal:', 'incompatible calibration options')
                 raise dbError('incompatible calibration options')
             myversion = '%(major)d.%(minor)d' % _swVersion
-            if fid.attrs['swVersion'].rsplit('.',1)[0] != myversion:
-                print( 'Fatal:', 'incompatible with _swVersion' )
+            if fid.attrs['swVersion'].rsplit('.', 1)[0] != myversion:
+                print('Fatal:', 'incompatible with _swVersion')
                 raise dbError('incompatible with _swVersion')
             myversion = '%(major)d.%(minor)d' % _dbVersion
-            if fid.attrs['dbVersion'].rsplit('.',1)[0] != myversion:
-                print( 'Fatal:', 'incompatible with _dbVersion' )
+            if fid.attrs['dbVersion'].rsplit('.', 1)[0] != myversion:
+                print('Fatal:', 'incompatible with _dbVersion')
                 raise dbError('incompatible with _dbVersion')
             myversion = '%(major)d.%(minor)d' % _calibVersion
-            if fid.attrs['calibVersion'].rsplit('.',1)[0] != myversion:
-                print( 'Fatal:', 'incompatible with _calibVersion' )
+            if fid.attrs['calibVersion'].rsplit('.', 1)[0] != myversion:
+                print('Fatal:', 'incompatible with _calibVersion')
                 raise dbError('incompatible with _calibVersion')
 
     def fill_mtbl(self, smr):
-        from datetime import datetime 
+        from datetime import datetime
 
-        fmtMTBL  = \
+        fmtMTBL = \
             'float64,a20,uint16,uint16,float32,float32,float32,float32' \
             + ',float32,float32,float32,float32,8float32'
-        nameMTBL = ('julianDay','entryDate','absOrbit','quality',
-                    'orbitPhase','longitude','latitude','asmAngle',
-                    'esmAngle','sunAzim','sunElev','obmTemp',
+        nameMTBL = ('julianDay', 'entryDate', 'absOrbit', 'quality',
+                    'orbitPhase', 'longitude', 'latitude', 'asmAngle',
+                    'esmAngle', 'sunAzim', 'sunElev', 'obmTemp',
                     'detTemp')
 
-        self.mtbl = np.empty(1, dtype=fmtMTBL )
+        self.mtbl = np.empty(1, dtype=fmtMTBL)
         self.mtbl.dtype.names = nameMTBL
         self.mtbl['julianDay'] = smr.mtbl['julianDay']
         self.mtbl['entryDate'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -938,65 +940,66 @@ class SMRdb:
         self.mtbl['detTemp'] = smr.mtbl['detTemp']
 
     def create(self, smr):
-        with h5py.File( self.db_name, 'w', libver='latest' ) as fid:
-            ds = fid.create_dataset( 'orbitList', dtype='uint16',
-                                     data=smr.absOrbit.reshape(1,), 
-                                     maxshape=(None,), chunks=(512,) )
-            ds = fid.create_dataset( 'metaTable', 
-                                     data=self.mtbl,
-                                     chunks=(16384 // self.mtbl.dtype.itemsize,),
-                                     shuffle=True, compression='gzip',
-                                     compression_opts=1, maxshape=(None,) )
-            ds = fid.create_dataset( 'smr', 
-                                     data=smr.smr.reshape(1,smr.numPixels), 
-                                     maxshape=(None,smr.numPixels), 
-                                     chunks=(8,smr.numPixels), 
-                                     compression='gzip', compression_opts=1,
-                                     shuffle=True )
-            ds = fid.create_dataset( 'smrVariance', 
-                                     data=smr.smrVar.reshape(1,smr.numPixels), 
-                                     maxshape=(None,smr.numPixels), 
-                                     chunks=(8,smr.numPixels), 
-                                     compression='gzip', compression_opts=1,
-                                     shuffle=True )
-            ds = fid.create_dataset( 'smrSlope', 
-                                     data=smr.smrSlope.reshape(1,smr.numPixels), 
-                                     maxshape=(None,smr.numPixels), 
-                                     chunks=(8,smr.numPixels), 
-                                     compression='gzip', compression_opts=1,
-                                     shuffle=True )
-            ds = fid.create_dataset( 'smrError', 
-                                     data=smr.smrError.reshape(1,smr.numPixels), 
-                                     maxshape=(None,smr.numPixels), 
-                                     chunks=(8,smr.numPixels), 
-                                     compression='gzip', compression_opts=1,
-                                     shuffle=True )
-            ds = fid.create_dataset( 'bdpm', 
-                                     data=smr.bdpm.reshape(1,smr.numPixels), 
-                                     maxshape=(None,smr.numPixels), 
-                                     chunks=(8,smr.numPixels), 
-                                     compression='gzip', compression_opts=1,
-                                     shuffle=True )
+        with h5py.File(self.db_name, 'w', libver='latest') as fid:
+            ds = fid.create_dataset('orbitList', dtype='uint16',
+                                    data=smr.absOrbit.reshape(1,),
+                                    maxshape=(None,), chunks=(512,))
+            ds = fid.create_dataset('metaTable',
+                                    data=self.mtbl,
+                                    chunks=(16384 // self.mtbl.dtype.itemsize,),
+                                    shuffle=True, compression='gzip',
+                                    compression_opts=1, maxshape=(None,))
+            ds = fid.create_dataset('smr',
+                                    data=smr.smr.reshape(1, smr.numPixels),
+                                    maxshape=(None, smr.numPixels),
+                                    chunks=(8, smr.numPixels),
+                                    compression='gzip', compression_opts=1,
+                                    shuffle=True)
+            ds = fid.create_dataset('smrVariance',
+                                    data=smr.smrVar.reshape(1, smr.numPixels),
+                                    maxshape=(None, smr.numPixels),
+                                    chunks=(8, smr.numPixels),
+                                    compression='gzip', compression_opts=1,
+                                    shuffle=True)
+            ds = fid.create_dataset('smrSlope',
+                                    data=smr.smrSlope.reshape(1, smr.numPixels),
+                                    maxshape=(None, smr.numPixels),
+                                    chunks=(8, smr.numPixels),
+                                    compression='gzip', compression_opts=1,
+                                    shuffle=True)
+            ds = fid.create_dataset('smrError',
+                                    data=smr.smrError.reshape(1, smr.numPixels),
+                                    maxshape=(None, smr.numPixels),
+                                    chunks=(8, smr.numPixels),
+                                    compression='gzip', compression_opts=1,
+                                    shuffle=True)
+            ds = fid.create_dataset('bdpm',
+                                    data=smr.bdpm.reshape(1, smr.numPixels),
+                                    maxshape=(None, smr.numPixels),
+                                    chunks=(8, smr.numPixels),
+                                    compression='gzip', compression_opts=1,
+                                    shuffle=True)
             if smr.wvlen is not None:
-                ds = fid.create_dataset( 'wavelength', 
-                                         data=smr.wvlen.reshape(1,smr.numPixels), 
-                                         maxshape=(None,smr.numPixels), 
-                                         chunks=(8,smr.numPixels), 
-                                         compression='gzip', compression_opts=1,
-                                         shuffle=True )
+                ds = fid.create_dataset('wavelength',
+                                        data=smr.wvlen.reshape(1,
+                                                               smr.numPixels),
+                                        maxshape=(None, smr.numPixels),
+                                        chunks=(8, smr.numPixels),
+                                        compression='gzip', compression_opts=1,
+                                        shuffle=True)
 
             # create attributes in the HDF5 root
             mystr = ','.join(list(self.calibration.astype('str')))
             fid.attrs['calibOptions'] = mystr
             fid.attrs['swVersion'] = \
-                '%(major)d.%(minor)d.%(revision)d' % _swVersion
+                            '%(major)d.%(minor)d.%(revision)d' % _swVersion
             fid.attrs['dbVersion'] = \
-                '%(major)d.%(minor)d.%(revision)d' % _dbVersion
+                            '%(major)d.%(minor)d.%(revision)d' % _dbVersion
             fid.attrs['calibVersion'] = \
-                '%(major)d.%(minor)d.%(revision)d' % _calibVersion
+                            '%(major)d.%(minor)d.%(revision)d' % _calibVersion
 
     def append(self, smr):
-        with h5py.File( self.db_name, 'r+' ) as fid:
+        with h5py.File(self.db_name, 'r+') as fid:
             dset = fid['orbitList']         # orbitList
             ax1 = dset.len()
             dset.resize(ax1+1, axis=0)
@@ -1007,65 +1010,65 @@ class SMRdb:
             dset[ax1] = self.mtbl
             dset = fid['smr']               # SMR
             dset.resize(ax1+1, axis=0)
-            dset[ax1,:] = smr.smr.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.smr.reshape(1, smr.numPixels)
             dset = fid['smrVariance']       # SMR(variance)
             dset.resize(ax1+1, axis=0)
-            dset[ax1,:] = smr.smrVar.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.smrVar.reshape(1, smr.numPixels)
             dset = fid['smrSlope']       # SMR(slope)
             dset.resize(ax1+1, axis=0)
-            dset[ax1,:] = smr.smrSlope.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.smrSlope.reshape(1, smr.numPixels)
             dset = fid['smrError']          # SMR(error)
             dset.resize(ax1+1, axis=0)
-            dset[ax1,:] = smr.smrError.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.smrError.reshape(1, smr.numPixels)
             dset = fid['bdpm']              # BDPM
             dset.resize(ax1+1, axis=0)
-            dset[ax1,:] = smr.bdpm.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.bdpm.reshape(1, smr.numPixels)
             if smr.wvlen is not None:
                 dset = fid['wavelength']    # waveLength
                 dset.resize(ax1+1, axis=0)
-                dset[ax1,:] = smr.wvlen.reshape(1,smr.numPixels)
+                dset[ax1, :] = smr.wvlen.reshape(1, smr.numPixels)
 
     def rewrite(self, smr):
-        with h5py.File( self.db_name, 'r+' ) as fid:
+        with h5py.File(self.db_name, 'r+') as fid:
             dset = fid['orbitList']         # orbitList
             orbitList = dset[:]
             ax1 = np.nonzero(orbitList == smr.absOrbit)[0][0]
             dset = fid['metaTable']         # metaTable
             dset[ax1] = self.mtbl
             dset = fid['smr']               # SMR
-            dset[ax1,:] = smr.smr.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.smr.reshape(1, smr.numPixels)
             dset = fid['smrVariance']       # SMR(variance)
-            dset[ax1,:] = smr.smrVar.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.smrVar.reshape(1, smr.numPixels)
             dset = fid['smrSlope']       # SMR(slope)
-            dset[ax1,:] = smr.smrSlope.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.smrSlope.reshape(1, smr.numPixels)
             dset = fid['smrError']          # SMR(error)
-            dset[ax1,:] = smr.smrError.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.smrError.reshape(1, smr.numPixels)
             dset = fid['bdpm']              # BDPM
-            dset[ax1,:] = smr.bdpm.reshape(1,smr.numPixels)
+            dset[ax1, :] = smr.bdpm.reshape(1, smr.numPixels)
             if smr.wvlen is not None:
                 dset = fid['wavelength']    # waveLength
-                dset[ax1,:] = smr.wvlen.reshape(1,smr.numPixels)
+                dset[ax1, :] = smr.wvlen.reshape(1, smr.numPixels)
 
     def store(self, smr, verbose=False):
-        self.fill_mtbl( smr )
-        if not h5py.is_hdf5( self.db_name ):
-            if verbose: print( '* Info: create new database' )
-            self.create( smr )
-        elif self.truncate: 
-            if verbose: print( '* Info: replace database (and start a new)' )
-            self.create( smr )
+        self.fill_mtbl(smr)
+        if not h5py.is_hdf5(self.db_name):
+            if verbose: print('* Info: create new database')
+            self.create(smr)
+        elif self.truncate:
+            if verbose: print('* Info: replace database (and start a new)')
+            self.create(smr)
         else:
             self.checkDataBase()
-            with h5py.File( self.db_name, 'r' ) as fid:
+            with h5py.File(self.db_name, 'r') as fid:
                 dset = fid['orbitList']
                 orbitList = dset[:]
 
             if np.nonzero(orbitList == smr.absOrbit)[0].size == 0:
-                if verbose: print( '* Info: append new SMR to database' )
-                self.append( smr )
+                if verbose: print('* Info: append new SMR to database')
+                self.append(smr)
             else:
-                if verbose: print( '* Info: overwrite entry in database' )
-                self.rewrite( smr )
+                if verbose: print('* Info: overwrite entry in database')
+                self.rewrite(smr)
 
 #-------------------------SECTION DISPLAY DATA------------------------------
 class SMRshow:
@@ -1073,7 +1076,7 @@ class SMRshow:
         self.refCalibID = -1
         if args.effect:
             if args.calibration.size == 0:
-                print( 'Fatal, need atleast one calibration option' )
+                print('Fatal, need atleast one calibration option')
                 sys.exit(1)
             elif args.calibration.size == 1:
                 self.refCalibID = 0
@@ -1083,32 +1086,32 @@ class SMRshow:
     def showPixel(self, smr, pixelID):
         import matplotlib.pyplot as plt
 
-        plt.figure( 1, figsize=(11.69,8.27) )
-        plt.title( 'SMR - State 62 - Orbit %d - Pixel %d'
-                   % (smr.absOrbit, pixelID) )
-        plt.grid( True )
-        plt.plot( smr.spectra[:,pixelID], 'b+-' )
+        plt.figure(1, figsize=(11.69, 8.27))
+        plt.title('SMR - State 62 - Orbit %d - Pixel %d'
+                  % (smr.absOrbit, pixelID))
+        plt.grid(True)
+        plt.plot(smr.spectra[:, pixelID], 'b+-')
         plt.show()
-        
+
     def showSpectrum(self, args, smr):
         import matplotlib.pyplot as plt
 
         pixelList = []
         for nch in args.channel:
-            pixelList += list(range( (nch-1) * smr.channelSize,
-                                     nch * smr.channelSize ))
+            pixelList += list(range((nch-1) * smr.channelSize,
+                                    nch * smr.channelSize))
 
-        fig = plt.figure( 1, figsize=(11.69,8.27) )
-        fig.text( 0.5, 0.01, 'Temperatures of OBM and Detectors: %6.2f - '
-                  % (smr.obmTemp) + np.array_str(smr.detTemp, precision=2),
-                  fontsize=9, horizontalalignment='center',
-                  verticalalignment='bottom' )
-        plt.title( 'SMR - State 62 - Orbit %d' % smr.absOrbit )
-        plt.grid( True )
+        fig = plt.figure(1, figsize=(11.69, 8.27))
+        fig.text(0.5, 0.01, 'Temperatures of OBM and Detectors: %6.2f - '
+                 % (smr.obmTemp) + np.array_str(smr.detTemp, precision=2),
+                 fontsize=9, horizontalalignment='center',
+                 verticalalignment='bottom')
+        plt.title('SMR - State 62 - Orbit %d' % smr.absOrbit)
+        plt.grid(True)
 
         if smr.wvlen is not None:
-            plt.xlim( [smr.wvlen[pixelList[0]], smr.wvlen[pixelList[-1]]] )
-            plt.xlabel( 'Wavelength (nm)')
+            plt.xlim([smr.wvlen[pixelList[0]], smr.wvlen[pixelList[-1]]])
+            plt.xlabel('Wavelength (nm)')
 
             for nch in args.channel:
                 if (nch % 2) == 0:
@@ -1118,25 +1121,25 @@ class SMRshow:
                 i_mx = nch * smr.channelSize
                 i_mn = i_mx - smr.channelSize
                 if smr.smr is None:
-                    plt.plot( smr.wvlen[i_mn:i_mx], 
-                              smr.spectra[120,i_mn:i_mx], icol )
+                    plt.plot(smr.wvlen[i_mn:i_mx],
+                             smr.spectra[120, i_mn:i_mx], icol)
                 else:
-                    plt.plot( smr.wvlen[i_mn:i_mx], smr.smr[i_mn:i_mx], icol )
+                    plt.plot(smr.wvlen[i_mn:i_mx], smr.smr[i_mn:i_mx], icol)
         else:
-            plt.xlabel( 'Pixel number')
-            plt.xlim( [pixelList[0],pixelList[-1]] )
+            plt.xlabel('Pixel number')
+            plt.xlim([pixelList[0], pixelList[-1]])
 
             if smr.smr is None:
-                plt.plot( pixelList, smr.spectra[120,pixelList], 'b.' )
+                plt.plot(pixelList, smr.spectra[120, pixelList], 'b.')
             else:
-                plt.plot( pixelList, smr.smr[pixelList], 'b.' )
-            plt.ylabel( 'Signal')
+                plt.plot(pixelList, smr.smr[pixelList], 'b.')
+            plt.ylabel('Signal')
 
         # remove outliers
         tmp = smr.smr[pixelList].compressed()
         tmp = tmp[np.isfinite(tmp)]
         tmp.sort()
-        plt.ylim((0,tmp[99*tmp.size/100]))
+        plt.ylim((0, tmp[99*tmp.size/100]))
 
         plt.show()
 
@@ -1145,48 +1148,47 @@ class SMRshow:
 
         pixelList = []
         for nch in args.channel:
-            pixelList += list(range( (nch-1) * smr.channelSize,
-                                     nch * smr.channelSize ))
+            pixelList += list(range((nch-1) * smr.channelSize,
+                                    nch * smr.channelSize))
 
-        fig, axs = plt.subplots( nrows=2, ncols=1, sharex=True, 
-                                 figsize=(11.69,8.27) )
+        fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True,
+                                figsize=(11.69, 8.27))
         ax = axs[0]
-        effect = smr.refSpectra[120,pixelList].copy()
+        effect = smr.refSpectra[120, pixelList].copy()
         if smr.errorType == 'M':
             str_effect = '%d / %d' % (args.calibration[-2], args.calibration[-1])
             if smr.smr is None:
-                effect /= smr.spectra[120,pixelList]
+                effect /= smr.spectra[120, pixelList]
             else:
                 effect /= smr.smr[pixelList]
         elif smr.errorType == 'A':
             str_effect = '%d - %d' % (args.calibration[-2], args.calibration[-1])
             if smr.smr is None:
-                effect -= smr.spectra[120,pixelList]
+                effect -= smr.spectra[120, pixelList]
             else:
                 effect -= smr.smr[pixelList]
         else:
             pass
-        ax.plot( pixelList, effect, 'b.' )
-        ax.set_xlim( [pixelList[0],pixelList[-1]] )
-        ax.grid( True )
-        ax.set_title( 'SMR - calibration: ' + str_effect )
+        ax.plot(pixelList, effect, 'b.')
+        ax.set_xlim([pixelList[0], pixelList[-1]])
+        ax.grid(True)
+        ax.set_title('SMR - calibration: ' + str_effect)
 
         ax = axs[1]
         if smr.smr is None:
-            ax.plot( pixelList, smr.spectra[120,pixelList], 'b.' )
+            ax.plot(pixelList, smr.spectra[120, pixelList], 'b.')
         else:
-            ax.plot( pixelList, smr.smr[pixelList], 'b.' )
-        ax.set_xlim( [pixelList[0],pixelList[-1]] )
-        ax.grid( True )
-        ax.set_title( 'SMR - calibration: '
-                      + ','.join(str(x) for x in args.calibration )
-)
-        fig.suptitle( 'SMR - State 62 - Orbit %d'% smr.absOrbit )
+            ax.plot(pixelList, smr.smr[pixelList], 'b.')
+        ax.set_xlim([pixelList[0], pixelList[-1]])
+        ax.grid(True)
+        ax.set_title('SMR - calibration: '
+                     + ','.join(str(x) for x in args.calibration))
+        fig.suptitle('SMR - State 62 - Orbit %d'% smr.absOrbit)
         plt.show()
-                
+
     def screen(self, args, smr):
         if args.pixel:
-            self.showPixel( smr, args.pixel )
+            self.showPixel(smr, args.pixel)
         elif args.effect:
             self.showEffect(args, smr)
         else:
@@ -1197,15 +1199,15 @@ def handleCmdParams():
     from argparse import ArgumentParser, ArgumentTypeError
     import re
 
-    def parseCalibList( str ):
-        '''
+    def parseCalibList(str):
+        """
         - always perform 'maskDead' and 'coaddDivision'
-        - optional are: (1) 'memoryEffect', (2) 'nonLinearity', 
-                      (3)'backGround', (4) 'strayLight', (5) 'fitParam', 
+        - optional are: (1) 'memoryEffect', (2) 'nonLinearity',
+                      (3)'backGround', (4) 'strayLight', (5) 'fitParam',
                       (6) 'mirrorModel', (7) 'radiance', (8) 'combineSpectra'
         - note: option 'db' implies 'combineSpectra'
         - internally we count from 0 to 9
-        '''
+        """
         if str.lower() == 'none':
             return np.arange(2, dtype=np.uint8)
         if str.lower() == 'full':
@@ -1221,9 +1223,9 @@ def handleCmdParams():
             raise argparse.ArgumentTypeError(msg)
 
         # add required calibration steps
-        return np.concatenate( ([0,1], id_list+1) )
-    
-    def parseOrbitList( str ):
+        return np.concatenate(([0, 1], id_list+1))
+
+    def parseOrbitList(str):
         msg1 = "'" + str + "' is not a range or number." \
             + " Expected forms like '20000-25000' or '20000'."
         msg2 = "'" + str + "' is not valid orbit number."
@@ -1233,74 +1235,76 @@ def handleCmdParams():
 
         m = re.match(r'(\d+)(?:-(\d+))?$', str)
         if not m:
-            raise ArgumentTypeError( msg1 )
+            raise ArgumentTypeError(msg1)
         v1 = int(m.group(1))
         if m.group(2):
             v2 = int(m.group(2))
             if v1 < 1 or v2 > 100000:
-                raise ArgumentTypeError( msg2 )
+                raise ArgumentTypeError(msg2)
             return (v1, v2)
         else:
             return v1
 
-    def parseChannelList( str ):
+    def parseChannelList(str):
         msg1 = "'" + str + "' is not a range or number." \
             + " Expected forms like '1-5' or '2'."
         msg2 = "'" + str + "' is not valid channel ID."
 
         m = re.match(r'(\d+)(?:-(\d+))?$', str)
         if not m:
-            raise ArgumentTypeError( msg1 )
+            raise ArgumentTypeError(msg1)
         v1 = int(m.group(1))
         v2 = int(m.group(2) or v1)
         if v1 < 1 or v2 > 8:
-            raise ArgumentTypeError( msg2 )
-        return list( range(v1, v2+1) )
+            raise ArgumentTypeError(msg2)
+        return list(range(v1, v2+1))
 
-    parser = argparse.ArgumentParser( 
+    parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description= 'Perform calibration on Sciamachy State 62 data',
-        epilog=SMRcalib.__doc__ )
+        description='Perform calibration on Sciamachy State 62 data',
+        epilog=SMRcalib.__doc__)
 
-    parser.add_argument( '-v', '--verbose', action='store_true',
-                         help='show documentation of object SMRcalib' )
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='show documentation of object SMRcalib')
     mystr = '%(major)d.%(minor)d.%(revision)d' % _swVersion
-    parser.add_argument( '-V', '--version', action='version', 
-                         version='%(prog)s ' + mystr,
-                         help='Display the version number then quit')
+    parser.add_argument('-V', '--version', action='version',
+                        version='%(prog)s ' + mystr,
+                        help='Display the version number then quit')
 
     # define subparser to display SMR
-    subparsers = parser.add_subparsers( title='subcommands',
-                                        dest='subparser_name' )
-    parser_db = subparsers.add_parser( 'db',
-                                    help='options to archive SMR in database' )
-    parser_db.add_argument( 'db_name', nargs='?', type=str,
-                            default='./sdmf_smr.h5',
-                            help='write to hdf5 database' )    
-    parser_db.add_argument( '--orbit', type=parseOrbitList,
-                            default=None,
-                            help='process data from a orbit range' )
-    parser_db.add_argument( '-c', '--calibration', default='full', 
-                            type=parseCalibList,
-            help='calibration IDs (comma separated), or \"none\" or \"full\"' )
-    parser_db.add_argument( '--truncate', action='store_true', default=False,
-                            help='destroy database and start a new one' )
-    parser_db.add_argument( '-P', '--progressbar', action='store_true', 
-                            default=False, help='display progress bar' )
-    parser_show = subparsers.add_parser( 'show',
-                                         help='options to display SMR' )
-    parser_show.add_argument( '--orbit', type=int, default=12005, 
-                              help='process Sun spectrum of given orbit' )
-    parser_show.add_argument( '-c', '--calibration', default='full', 
-                              type=parseCalibList,
-            help='calibration IDs (comma separated), or \"none\" or \"full\"' )
-    parser_show.add_argument( '--chan', type=parseChannelList,
-                              dest='channel', default='1-8',
-                              help='show data of one or more channels' )
-    parser_show.add_argument( '--pixel', type=int,
-                              default=None, help='show data of one pixel' )
-    parser_show.add_argument( '--effect', action='store_true', default=False,
-                              help='show effect of last calibration step' )
+    subparsers = parser.add_subparsers(title='subcommands',
+                                       dest='subparser_name')
+    parser_db = subparsers.add_parser('db',
+                                      help='options to archive SMR in database')
+    parser_db.add_argument('db_name', nargs='?', type=str,
+                           default='./sdmf_smr.h5',
+                           help='write to hdf5 database')
+    parser_db.add_argument('--orbit', type=parseOrbitList,
+                           default=None,
+                           help='process data from a orbit range')
+    parser_db.add_argument('-c', '--calibration', default='full',
+                           type=parseCalibList,
+                           help=('calibration IDs (comma separated)'
+                                 ', or \"none\" or \"full\"'))
+    parser_db.add_argument('--truncate', action='store_true', default=False,
+                           help='destroy database and start a new one')
+    parser_db.add_argument('-P', '--progressbar', action='store_true',
+                           default=False, help='display progress bar')
+    parser_show = subparsers.add_parser('show',
+                                        help='options to display SMR')
+    parser_show.add_argument('--orbit', type=int, default=12005,
+                             help='process Sun spectrum of given orbit')
+    parser_show.add_argument('-c', '--calibration', default='full',
+                             type=parseCalibList,
+                             help=('calibration IDs (comma separated)'
+                                   ', or \"none\" or \"full\"'))
+    parser_show.add_argument('--chan', type=parseChannelList,
+                             dest='channel', default='1-8',
+                             help='show data of one or more channels')
+    parser_show.add_argument('--pixel', type=int,
+                             default=None, help='show data of one pixel')
+    parser_show.add_argument('--effect', action='store_true', default=False,
+                             help='show effect of last calibration step')
     return parser.parse_args()
 
 # update_progress() : Displays or updates a console progress bar
@@ -1322,18 +1326,18 @@ def update_progress(progress):
         progress = 1
         status = "Done...\r\n"
     block = int(round(barLength*progress))
-    text = "\rPercent: [{}] {:.2%} {}".format( "#"*block + "-"*(barLength-block), progress, status)
+    text = "\rPercent: [{}] {:.2%} {}".format("#"*block + "-"*(barLength-block), progress, status)
     sys.stdout.write(text)
     sys.stdout.flush()
 
 #-------------------------SECTION MAIN--------------------------------------
 if __name__ == '__main__':
-    sys.path.append( '/opt/local/EOS/bin' )
+    sys.path.append('/opt/local/EOS/bin')
     #
     #
     #
     args = handleCmdParams()
-    if args.verbose: print( args )
+    if args.verbose: print(args)
     #
     # show data
     #
@@ -1347,7 +1351,7 @@ if __name__ == '__main__':
         # read data
         try:
             smr = SDMFextractSun()
-            smr.selectOrbits( args.orbit )
+            smr.selectOrbits(args.orbit)
             smr.readData()
 
             # read required keydata
@@ -1362,7 +1366,7 @@ if __name__ == '__main__':
         except readSunInfo:
             sys.exit(1)
         except:
-            print( "Unexpected error:", sys.exc_info()[0] )
+            print("Unexpected error:", sys.exc_info()[0])
             raise
         else:
             obj_fig.screen(args, smr)
@@ -1376,7 +1380,7 @@ if __name__ == '__main__':
         # make sure we combine the Sun spectra
         indx = obj_cal.funclist.index('combineSpectra')
         if indx not in args.calibration:
-            args.calibration = np.append( args.calibration, indx )
+            args.calibration = np.append(args.calibration, indx)
 
         # create database object
         obj_db = SMRdb(args)
@@ -1384,7 +1388,7 @@ if __name__ == '__main__':
         # read data
         smr = SDMFextractSun()
         try:
-            smr.selectOrbits( args.orbit )
+            smr.selectOrbits(args.orbit)
         except readSunInfo:
             sys.exit(0)
 
@@ -1412,5 +1416,5 @@ if __name__ == '__main__':
             except readSunInfo:
                 sys.exit(1)
             except:
-                print( "Unexpected error:", sys.exc_info()[0] )
+                print("Unexpected error:", sys.exc_info()[0])
                 raise

@@ -5,9 +5,9 @@ https://github.com/rmvanhees/pynadc
 
 Sciamachy package
 
-Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
+Copyright (c) 2012 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
+License:  BSD-3-Clause
 """
 __all__ = ['clus_def', 'db', 'hk', 'lv0', 'lv1']

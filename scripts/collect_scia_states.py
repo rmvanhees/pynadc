@@ -73,10 +73,10 @@ Bug reporting
 Please report issues at the pyNADC Github page:
 https://github.com/rmvanhees/pynadc.git
 
-Copyright (c) 2016-2018 SRON - Netherlands Institute for Space Research
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
+License:  BSD-3-Clause
 """
 from pathlib import Path
 

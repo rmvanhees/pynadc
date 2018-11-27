@@ -18,10 +18,10 @@ Statistics on proc-stage
   46665 P
      52 S
 
-Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
+Copyright (c) 2012 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
+License:  BSD-3-Clause
 """
 from pathlib import Path
 

@@ -5,10 +5,10 @@ https://github.com/rmvanhees/pynadc
 
 Perform pre-defined queries on the SQLite database of a GOSAT product archive
 
-Copyright (c) 2016-2018 SRON - Netherlands Institute for Space Research
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
+License:  BSD-3-Clause
 """
 import argparse
 

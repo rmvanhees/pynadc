@@ -5,10 +5,10 @@ https://github.com/rmvanhees/pynadc
 
 Definition of Sciamachy instrument and cluster configurations
 
-Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
+Copyright (c) 2012 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
+License:  BSD-3-Clause
 """
 import numpy as np
 

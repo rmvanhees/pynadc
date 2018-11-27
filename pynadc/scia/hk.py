@@ -9,7 +9,7 @@ to physical units.
 Copyright (c) 2018 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
+License:  BSD-3-Clause
 """
 from datetime import timedelta
 

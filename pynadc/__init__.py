@@ -15,10 +15,10 @@ For details on the available modules inside a subpackage, see the subpackage
 documentation.
 For details on the modules, see the documentation of the corresponding module.
 
-Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
+Copyright (c) 2012 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
+License:  BSD-3-Clause
 """
 __all__ = ['gosat', 'scia']
 
