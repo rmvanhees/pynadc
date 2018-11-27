@@ -5,19 +5,17 @@ https://github.com/rmvanhees/pynadc
 
 Methods to query the NADC Sciamachy SQLite database
 
-Copyright (c) 2012-2018 SRON - Netherlands Institute for Space Research
+Copyright (c) 2012 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
+License:  BSD-3-Clause
 """
-import os.path
 import sqlite3
-
-DB_NAME = '/SCIA/share/db/sron_scia.db'
+from pathlib import Path
 
 
 # --------------------------------------------------
-def get_product_by_name(args=None, dbname=DB_NAME, product=None,
+def get_product_by_name(args=None, dbname=None, product=None,
                         to_screen=False, dump=False, debug=False):
     """
     Query NADC Sciamachy SQLite database on product name
@@ -25,7 +23,7 @@ def get_product_by_name(args=None, dbname=DB_NAME, product=None,
     Input
     -----
     args     : dictionary with keys dbname, product, to_screen, dump, debug
-    dbname   : full path to Sciamachy SQLite database [default: DB_NAME]
+    dbname   : full path to Sciamachy SQLite database
     product  : name of product [value required]
     to_screen : print query result to standard output [default: False]
     dump     : return database content about product, instead of full-path
@@ -42,7 +40,11 @@ def get_product_by_name(args=None, dbname=DB_NAME, product=None,
         dump = args.dump
         debug = args.debug
 
-    if not os.path.isfile(dbname):
+    if dbname is None:
+        print('Fatal, SQLite database is not specified')
+        return []
+
+    if not Path(dbname).is_file():
         print('Fatal, can not find SQLite database: %s' % dbname)
         return []
 
@@ -82,21 +84,21 @@ def get_product_by_name(args=None, dbname=DB_NAME, product=None,
                 print(name, '\t', row[name])
         else:
             if row[2] == 0:
-                print(row[0] + '/' + row[1])
+                print(Path(*row[:-1]))
             else:
-                print(row[0] + '/' + row[1] + '.gz')
+                print(Path(*row[:-1]).with_suffix('.gz'))
 
     if dump:
         return row
 
     if row[2] == 0:
-        return row[0] + '/' + row[1]
+        return str(Path(*row[:-1]))
 
-    return row[0] + '/' + row[1] + '.gz'
+    return str(Path(*row[:-1]).with_suffix('.gz'))
 
 
 # --------------------------------------------------
-def get_product_by_type(args=None, dbname=DB_NAME, prod_type=None,
+def get_product_by_type(args=None, dbname=None, prod_type=None,
                         proc_stage=None, proc_best=None,
                         orbits=None, date=None, rtime=None,
                         to_screen=False, dump=False, debug=False):
@@ -107,7 +109,7 @@ def get_product_by_type(args=None, dbname=DB_NAME, prod_type=None,
     -----
     args       : dictionary with keys dbname, type, proc, best, orbit, date,
                  rtime, to_screen, dump, debug
-    dbname     : full path to Sciamachy SQLite database [default: DB_NAME]
+    dbname     : full path to Sciamachy SQLite database
     prod_type  : level of product, available 0, 1, 2 [value required]
     prod_stage ; baseline of product (PROC_STAGE): N, R, P, R, U, W, ...
                  [default: None]
@@ -133,7 +135,11 @@ def get_product_by_type(args=None, dbname=DB_NAME, prod_type=None,
         dump = args.dump
         debug = args.debug
 
-    if not os.path.isfile(dbname):
+    if dbname is None:
+        print('Fatal, SQLite database is not specified')
+        return []
+
+    if not Path(dbname).is_file():
         print('Fatal, can not find SQLite database: %s' % dbname)
         return []
 
@@ -253,17 +259,17 @@ def get_product_by_type(args=None, dbname=DB_NAME, prod_type=None,
                 print(row)
             else:
                 if row[2] == 0:
-                    print(row[0] + '/' + row[1])
+                    print(Path(*row[:-1]))
                 else:
-                    print(row[0] + '/' + row[1] + '.gz')
+                    print(Path(*row[:-1]).with_suffix('.gz'))
         else:
             if dump:
                 row_list.append(row)
             else:
                 if row[2] == 0:
-                    row_list.append(row[0] + '/' + row[1])
+                    row_list.append(str(Path(*row[:-1])))
                 else:
-                    row_list.append(row[0] + '/' + row[1] + '.gz')
+                    row_list.append(str(Path(*row[:-1]).with_suffix('.gz')))
 
     conn.close()
     return row_list
