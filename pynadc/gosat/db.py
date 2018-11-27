@@ -5,27 +5,25 @@ https://github.com/rmvanhees/pynadc
 
 Methods to query the NADC GOSAT SQLite database
 
-Copyright (c) 2016--2018 SRON - Netherlands Institute for Space Research
+Copyright (c) 2016 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
-License:  Standard 3-clause BSD
+License:  BSD-3-Clause
 """
 import socket
-import os.path
 import sqlite3
 
-DB_NAME = '/GOSAT/share/db/sron_gosat.db'
-
+from pathlib import Path
 
 def date_subdir(name):
     """
     define function to construct date sub-directories from FTS product-name
     """
-    return os.path.join(name[9:13], name[13:15], name[15:17])
+    return Path(name[9:13], name[13:15], name[15:17], name)
 
 
 # --------------------------------------------------
-def get_product_by_name(args=None, dbname=DB_NAME, product=None,
+def get_product_by_name(args=None, dbname=None, product=None,
                         to_screen=False, dump=False, debug=False):
     """
     Query NADC GOSAT SQLite database on product name
@@ -33,7 +31,7 @@ def get_product_by_name(args=None, dbname=DB_NAME, product=None,
     Input
     -----
     args     : dictionary with keys dbname, product, to_screen, dump, debug
-    dbname   : full path to GOSAT SQLite database [default: DB_NAME]
+    dbname   : full path to GOSAT SQLite database
     product  : name of product [value required]
     to_screen : print query result to standard output [default: False]
     dump     : return database content about product, instead of full-path
@@ -50,7 +48,11 @@ def get_product_by_name(args=None, dbname=DB_NAME, product=None,
         dump = args.dump
         debug = args.debug
 
-    if not os.path.isfile(dbname):
+    if dbname is None:
+        print('Fatal, SQLite database is not specified')
+        return []
+        
+    if not Path(dbname).is_file():
         print('Fatal, can not find SQLite database: %s' % dbname)
         return []
 
@@ -105,20 +107,19 @@ def get_product_by_name(args=None, dbname=DB_NAME, product=None,
         return row
 
     if len(row) == 2:
-        full_path = os.path.join(root, row[1])
+        full_path = Path(root, row[1])
     else:                    ## should check for len(row) equals 4
         if level_1x:
-            full_path = os.path.join(root, row[1] + '_1X', row[2],
-                                     date_subdir(row[3]), row[3])
+            full_path = Path(root, row[1] + '_1X', row[2], date_subdir(row[3]))
         else:
-            full_path = os.path.join(root, row[1], row[2],
-                                     date_subdir(row[3]), row[3])
+            full_path = Path(root, row[1], row[2], date_subdir(row[3]))
+
     if to_screen:
         print(full_path)
-    return full_path
+    return str(full_path)
 
 # --------------------------------------------------
-def get_product_by_type(args=None, dbname=DB_NAME, prod_type=None,
+def get_product_by_type(args=None, dbname=None, prod_type=None,
                         date=None, rtime=None,
                         obs_mode=None, prod_version=None,
                         to_screen=False, debug=False):
@@ -129,7 +130,7 @@ def get_product_by_type(args=None, dbname=DB_NAME, prod_type=None,
     -----
     args      : dictionary with keys dbname, type, date, rtime, obs_mode,
                 prod_version, to_screen, dump, debug
-    dbname    : full path to GOSAT SQLite database [default: DB_NAME]
+    dbname    : full path to GOSAT SQLite database
     prod_type : type of product, supported TFTS_1 and TCAI_2 [value required]
     date      : select on dateTimeStart [default: None]
     rtime     : select on receiveTime [default: None]
@@ -153,7 +154,11 @@ def get_product_by_type(args=None, dbname=DB_NAME, prod_type=None,
         rtime = args.rtime
         debug = args.debug
 
-    if not os.path.isfile(dbname):
+    if dbname is None:
+        print('Fatal, SQLite database is not specified')
+        return []
+        
+    if not Path(dbname).is_file():
         print('Fatal, can not find SQLite database: %s' % dbname)
         return []
 
@@ -214,12 +219,12 @@ def get_product_by_type(args=None, dbname=DB_NAME, prod_type=None,
         else:
             query_str.append(' and')
 
-        mystr = ' receiveDate between datetime(\'now\',\'-%-d %s\')' \
+        mystr = ' receiveDate between datetime(\'now\',\'-{} {}\')' \
             + ' and datetime(\'now\')'
         if rtime[-1] == 'h':
-            query_str.append(mystr % (int(rtime[0:-1]), 'hour'))
+            query_str.append(mystr.format(rtime[:-1], 'hour'))
         else:
-            query_str.append(mystr % (int(rtime[0:-1]), 'day'))
+            query_str.append(mystr.format(rtime[:-1], 'day'))
 
     if prod_type.upper() == 'TFTS_1':
         if obs_mode:
@@ -251,18 +256,18 @@ def get_product_by_type(args=None, dbname=DB_NAME, prod_type=None,
         root = cuu.fetchone()[0]
 
         if len(row) == 2:
-            full_path = os.path.join(root, row[1])
-        else:   ## should check for len(row) equals 4
+            full_path = Path(root, row[1])
+        else:                    # should check for len(row) equals 4
             if row[3].find('_1X') > 0:
-                full_path = os.path.join(root, row[1] + '_1X', row[2],
-                                         date_subdir(row[3]), row[3])
+                full_path = Path(root, row[1] + '_1X', row[2],
+                                 date_subdir(row[3]))
             else:
-                full_path = os.path.join(root, row[1], row[2],
-                                         date_subdir(row[3]), row[3])
+                full_path = Path(root, row[1], row[2], date_subdir(row[3]))
+
         if to_screen:
             print(full_path)
 
-        row_list.append(full_path)
+        row_list.append(str(full_path))
 
     conn.close()
     return row_list

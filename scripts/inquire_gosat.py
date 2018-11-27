@@ -39,7 +39,7 @@ def main() -> None:
     """
     type_opts = ('TCAI_2', 'TFTS_1', 'tcai_2', 'tfts_1')
     obs_opts = ('OB1D', 'OB1N', 'SPOD', 'SPON')
-    rtime_opts = (['{}h'.format(x) for x in range(24)]
+    rtime_opts = (['{}h'.format(x) for x in range(1, 24)]
                   + ['{}d'.format(x) for x in range(1, 8)])
 
     parser = argparse.ArgumentParser()
@@ -68,7 +68,7 @@ def main() -> None:
                              help='select FTS entries on observation mode')
     parser_type.add_argument('--prod_version', type=str,
                              help='select FTS entries on product version')
-    parser_type.add_argument('--rtime', nargs='+', choices=rtime_opts,
+    parser_type.add_argument('--rtime', type=str, choices=rtime_opts,
                              help='select entries on receive time: xh or xd')
     parser_type.add_argument('--date', type=str,
                              help="""

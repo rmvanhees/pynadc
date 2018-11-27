@@ -38,7 +38,7 @@ def main() -> None:
     and calls a query function
     """
     proc_opts = ['B', 'N', 'O', 'P', 'R', 'S', 'U', 'W', 'Y']
-    rtime_opts = (['{}h'.format(x) for x in range(24)]
+    rtime_opts = (['{}h'.format(x) for x in range(1, 24)]
                   + ['{}d'.format(x) for x in range(1, 8)])
 
     parser = argparse.ArgumentParser()
@@ -69,7 +69,7 @@ def main() -> None:
                              help='select latest consolidated products')
     parser_type.add_argument('--proc', nargs='+', choices=proc_opts,
                              help='select entries on ESA processor ID')
-    parser_type.add_argument('--rtime', nargs=1, choices=rtime_opts,
+    parser_type.add_argument('--rtime', type=str, choices=rtime_opts,
                              help='select entries on receive time: xh or xd')
     parser_type.add_argument('--date', type=str,
                              help="""
