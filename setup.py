@@ -51,7 +51,6 @@ setup(
         'scripts/scia_lv1.py'
     ],
     install_requires=[
-        'setuptools-scm>=2.1',
         'bitstring>=3.1',
         'numpy>=1.14',
         'h5py>=2.8'
