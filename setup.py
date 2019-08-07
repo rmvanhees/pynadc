@@ -1,28 +1,22 @@
-from pathlib import Path
-
 from setuptools import setup
-from setuptools_scm import get_version
 
-version_py = str(Path('.', 'pynadc', 'version.py').resolve())
-__version__ = get_version(root='.', relative_to=__file__, write_to=version_py)
 
 def readme():
-    with open('README.rst') as f:
-        return f.read()
+    with open('README.rst') as fp:
+        return fp.read()
+
 
 setup( 
     name = 'pynadc',
     description='Python Sciamachy/GOSAT/Tropomi read and SQLite3 library',
     long_description=readme(),
-    use_scm_version=True,
-    setup_requires=[
-        'setuptools_scm'
-    ],
+    use_scm_version={"root": ".", "relative_to": __file__},
+    setup_requires=['setuptools_scm'],
     classifiers=[
           'Development Status :: 4 - Beta',
           'Intended Audience :: Developers',
           'Intended Audience :: Science/Research',
-          'License :: OSI Approved :: BSD License',
+          'License :: OSI Approved :: BSD License (standard 3-clause)',
           'Operating System :: MacOS :: MacOS X',
           'Operating System :: POSIX :: Linux',
           'Programming Language :: Python :: 3 :: Only',
@@ -35,7 +29,7 @@ setup(
     author_email='r.m.van.hees@sron.nl',
     maintainer='Richard van Hees',
     maintainer_email='r.m.van.hees@sron.nl',
-    license='BSD',
+    license='BSD-3-Clause',
     packages=[
         'pynadc',
         'pynadc.gosat',
@@ -52,8 +46,8 @@ setup(
     ],
     install_requires=[
         'bitstring>=3.1',
-        'numpy>=1.14',
-        'h5py>=2.8'
+        'numpy>=1.16',
+        'h5py>=2.9'
     ],
     zip_safe=False
 )
