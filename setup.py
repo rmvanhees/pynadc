@@ -33,13 +33,16 @@ setup(
     packages=[
         'pynadc',
         'pynadc.gosat',
+        'pynadc.gosat2',
         'pynadc.scia'
     ],
     scripts=[
         'scripts/add_entry_gosat.py',
+        'scripts/add_entry_gosat2.py',
         'scripts/add_entry_scia.py',
         'scripts/collect_scia_states.py',
         'scripts/inquire_gosat.py',
+        'scripts/inquire_gosat2.py',
         'scripts/inquire_scia.py',
         'scripts/scia_lv0.py',
         'scripts/scia_lv1.py'
