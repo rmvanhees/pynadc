@@ -353,7 +353,6 @@ class ArchiveGosat2():
             return
 
         # do actual query
-        print(repr(dict_gosat))
         cur.execute(str_sql % dict_gosat)
         cur.close()
         con.commit()

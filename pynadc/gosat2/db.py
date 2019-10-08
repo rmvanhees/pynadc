@@ -29,8 +29,10 @@ def subdir_from_product(name):
         obs_name = 'SWIR_{}'
     elif name[29:32] == '1BT':
         obs_name = 'TIR_{}'
+    elif name[29:32] == '1BC':
+        obs_name = 'COMMON_{}'
     else:
-        raise ValueError('expect GOSAT-2 band SWIR or TIR')
+        raise ValueError('expect GOSAT-2 band COMMON, SWIR or TIR')
 
     if name[39] == 'D':
         obs_name = obs_name.format('DAY')
@@ -155,7 +157,7 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
     date      : select on dateTimeStart [default: None]
     rtime     : select on receiveTime [default: None]
     band      : select on band and observation mode, supported
-                SWIR_DAY, TIR_DAY, TIR_NIGHT [default: None]
+                SWIR_DAY, TIR_DAY, TIR_NIGHT, COMMON_DAY, COMMON_NIGHT
     prod_version : select on product version:
                 algorithmVersion + parameterVersion [default: None]
     to_screen  : print query result to standard output [default: False]
