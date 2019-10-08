@@ -204,7 +204,6 @@ class ArchiveGosat2():
                         dset = grp['startDateSWIR']
                     else:
                         dset = grp['startDateTIR']
-                    print(dset[:])
                     dict_gosat['dateTimeStart'] = cleanup_string(dset)
 
                     if grp['endDateSWIR'][:] == b'-':
@@ -215,7 +214,6 @@ class ArchiveGosat2():
                         dset = grp['endDateSWIR']
                     else:
                         dset = grp['endDateTIR']
-                    print(dset[:])
                     dict_gosat['dateTimeEnd'] = cleanup_string(dset)
             else:
                 return {}
