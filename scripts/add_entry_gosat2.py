@@ -196,15 +196,26 @@ class ArchiveGosat2():
                     dset = grp['endDate']
                     dict_gosat['dateTimeEnd'] = cleanup_string(dset)
                 else:
-                    if grp['startDateSWIR'][:] < grp['startDateTIR'][:]:
+                    if grp['startDateSWIR'][:] == b'-':
+                        dset = grp['startDateTIR']
+                    elif grp['startDateTIR'][:] == b'-':
+                        dset = grp['startDateSWIR']
+                    elif grp['startDateSWIR'][:] < grp['startDateTIR'][:]:
                         dset = grp['startDateSWIR']
                     else:
                         dset = grp['startDateTIR']
+                    print(dset[:])
                     dict_gosat['dateTimeStart'] = cleanup_string(dset)
-                    if grp['endDateSWIR'][:] > grp['endDateTIR'][:]:
+
+                    if grp['endDateSWIR'][:] == b'-':
+                        dset = grp['endDateTIR']
+                    elif grp['endDateTIR'][:] == b'-':
+                        dset = grp['endDateSWIR']
+                    elif grp['endDateSWIR'][:] > grp['endDateTIR'][:]:
                         dset = grp['endDateSWIR']
                     else:
                         dset = grp['endDateTIR']
+                    print(dset[:])
                     dict_gosat['dateTimeEnd'] = cleanup_string(dset)
             else:
                 return {}
