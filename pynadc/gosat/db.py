@@ -109,10 +109,7 @@ def get_product_by_name(args=None, dbname=None, product=None,
     if len(row) == 2:
         full_path = Path(root, row[1])
     else:                    ## should check for len(row) equals 4
-        if level_1x:
-            full_path = Path(root, row[1] + '_1X', row[2], date_subdir(row[3]))
-        else:
-            full_path = Path(root, row[1], row[2], date_subdir(row[3]))
+        full_path = Path(root, row[1], row[2], date_subdir(row[3]))
 
     if to_screen:
         print(full_path)
@@ -258,11 +255,7 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
         if len(row) == 2:
             full_path = Path(root, row[1])
         else:                    # should check for len(row) equals 4
-            if row[3].find('_1X') > 0:
-                full_path = Path(root, row[1] + '_1X', row[2],
-                                 date_subdir(row[3]))
-            else:
-                full_path = Path(root, row[1], row[2], date_subdir(row[3]))
+            full_path = Path(root, row[1], row[2], date_subdir(row[3]))
 
         if to_screen:
             print(full_path)

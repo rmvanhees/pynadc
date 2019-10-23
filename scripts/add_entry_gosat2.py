@@ -119,11 +119,8 @@ def sql_write_basedirs(dbname):
     """
     list_paths = [
         {"host": 'shogun',
-         "path": '/array/slot1A/GOSAT-2/L1B_FTS',
-         "nfs": '/nfs/GOSAT2/L1B_FTS'},
-        {"host": 'lepus',
-         "path": '/data/richardh/GOSAT-2/L1B_FTS',
-         "nfs": '/deos/richardh/GOSAT2/L1B_FTS'}
+         "path": '/array/slot1F/GOSAT-2/L1B_FTS',
+         "nfs": '/nfs/GOSAT2/L1B_FTS'}
     ]
 
     str_sql = ('insert into rootPaths values'
