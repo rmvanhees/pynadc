@@ -3,9 +3,9 @@ This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
-GOSAT package
+GOSAT-2 package
 
-Copyright (c) 2012 SRON - Netherlands Institute for Space Research
+Copyright (c) 2019 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause

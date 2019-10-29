@@ -14,8 +14,6 @@ import argparse
 
 from pynadc.gosat import db
 
-DB_NAME = '/GOSAT/share/db/sron_gosat.db'
-
 
 # - local functions --------------------------------------------
 def scia_orbit_range(string) -> list:
@@ -42,8 +40,15 @@ def main() -> None:
     rtime_opts = (['{}h'.format(x) for x in range(1, 24)]
                   + ['{}d'.format(x) for x in range(1, 8)])
 
+    if Path('/data/gosat/share/db/sron_gosat.db').is_file():
+        db_name = '/data/gosat/share/db/sron_gosat.db'
+    elif Path('/nfs/GOSAT/share/db/sron_gosat.db').is_file():
+        db_name = '/nfs/GOSAT/share/db/sron_gosat.db'
+    else:
+        raise FileNotFoundError('sron_gosat2.db')
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dbname', type=str, default=DB_NAME,
+    parser.add_argument('--dbname', type=str, default=db_name,
                         help='name of SQLite database')
     parser.add_argument('--dump', action='store_true', default=False,
                         help='return database dump instead pathFilename')
