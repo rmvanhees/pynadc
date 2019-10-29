@@ -11,6 +11,7 @@ Copyright (c) 2016 SRON - Netherlands Institute for Space Research
 License:  BSD-3-Clause
 """
 import argparse
+from pathlib import Path
 
 from pynadc.gosat import db
 
