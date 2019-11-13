@@ -74,7 +74,7 @@ def get_product_by_name(args=None, dbname=None, product=None,
     if dbname is None:
         print('Fatal, SQLite database is not specified')
         return []
-        
+
     if not Path(dbname).is_file():
         print('Fatal, can not find SQLite database: %s' % dbname)
         return []
@@ -179,7 +179,7 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
     if dbname is None:
         print('Fatal, SQLite database is not specified')
         return []
-        
+
     if not Path(dbname).is_file():
         print('Fatal, can not find SQLite database: %s' % dbname)
         return []
@@ -253,10 +253,15 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
             query_str.append(mystr.format(rtime[:-1], 'day'))
 
     if band:
+        if len(query_str) == 1:
+            query_str.append('where')
+        else:
+            query_str.append('and')
+
         if band.endswith('DAY'):
-            query_str.append('where operationMode == \'OB1D\'')
+            query_str.append('operationMode == \'OB1D\'')
         elif band.endswith('NIGHT'):
-            query_str.append('where operationMode == \'OB1N\'')
+            query_str.append('operationMode == \'OB1N\'')
         else:
             raise ValueError('expect GOSAT-2 band to contain DAY or NIGHT')
 
@@ -265,6 +270,7 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
             query_str.append('where')
         else:
             query_str.append('and')
+
         query_str.append('algorithmVersion == \'%s\'' % prod_version[:3])
         query_str.append('and paramVersion == \'%s\'' % prod_version[3:])
 
