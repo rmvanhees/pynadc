@@ -21,7 +21,7 @@ import h5py
 def cleanup_string(dset):
     """
     """
-    return dset[:].tostring().decode('ascii').rstrip('\0')
+    return dset[:].tobytes().decode('ascii').rstrip('\0')
 
 
 # --------------------------------------------------

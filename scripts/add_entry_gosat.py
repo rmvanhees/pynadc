@@ -199,22 +199,22 @@ class ArchiveGosat():
             if '/Global' in fid:
                 grp = fid['/Global/MD_Metadata']
                 dset = grp['dateStamp']
-                dict_gosat['creationDate'] = dset[:].tostring().decode('ascii')
+                dict_gosat['creationDate'] = dset[:].tobytes().decode('ascii')
 
                 grp = fid['/Global/metadata']
                 dset = grp['sensorName']
-                dict_gosat['sensorName'] = dset[:].tostring().decode('ascii')
+                dict_gosat['sensorName'] = dset[:].tobytes().decode('ascii')
                 dset = grp['algorithmName']
                 dict_gosat['algorithmName'] = \
-                                            dset[:].tostring().decode('ascii')
+                                            dset[:].tobytes().decode('ascii')
                 dset = grp['algorithmVersion']
                 dict_gosat['algorithmVersion'] = \
-                                            dset[:].tostring().decode('ascii')
+                                            dset[:].tobytes().decode('ascii')
                 dset = grp['parameterVersion']
-                dict_gosat['paramVersion'] = dset[:].tostring().decode('ascii')
+                dict_gosat['paramVersion'] = dset[:].tobytes().decode('ascii')
                 dset = grp['observationMode']
                 dict_gosat['observationMode'] = \
-                                            dset[:].tostring().decode('ascii')
+                                            dset[:].tobytes().decode('ascii')
 
                 grp = fid['/ancillary/OrbitData']
                 dset = grp['startDate']
