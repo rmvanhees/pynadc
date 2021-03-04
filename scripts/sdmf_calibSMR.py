@@ -324,7 +324,7 @@ class SMRcalib:
         #
         # mask blinded pixels
         #
-        smr.blinded = np.empty((smr.numPixels,), dtype=np.bool)
+        smr.blinded = np.empty((smr.numPixels,), dtype=bool)
         smr.blinded[:] = False
 
         id_list = np.array(list(range(10)) + list(range(1024-10, 1024)))
