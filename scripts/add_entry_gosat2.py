@@ -5,11 +5,12 @@ https://github.com/rmvanhees/pynadc
 
 Defines class ArchiveGosat2 to add new entries to GOSAT-2 SQLite database
 
-Copyright (c) 2019 SRON - Netherlands Institute for Space Research
+Copyright (c) 2019-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
 """
+import argparse
 import sqlite3
 
 from pathlib import Path
@@ -20,6 +21,7 @@ import h5py
 
 def cleanup_string(dset):
     """
+    Returns bytes as string
     """
     return dset[:].tobytes().decode('ascii').rstrip('\0')
 
@@ -119,8 +121,8 @@ def sql_write_basedirs(dbname):
     """
     list_paths = [
         {"host": 'shogun',
-         "path": '/array/slot1F/GOSAT-2/L1B_FTS',
-         "nfs": '/nfs/GOSAT2/L1B_FTS'}
+         "path": '/array/slot2B/GOSAT-2/FTS/L1B',
+         "nfs": '/nfs/GOSAT2/FTS/L1B'}
     ]
 
     str_sql = ('insert into rootPaths values'
@@ -177,7 +179,6 @@ class ArchiveGosat2():
                 grp = fid['/Metadata']
                 dset = grp['processingDate']
                 dict_gosat['creationDate'] = cleanup_string(dset)
-                                             
                 dset = grp['sensorName']
                 dict_gosat['sensorName'] = cleanup_string(dset)
                 dset = grp['algorithmVersion']
@@ -370,8 +371,6 @@ def main():
     """
     main function
     """
-    import argparse
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False,
                         help='show what will be done, but do nothing')
