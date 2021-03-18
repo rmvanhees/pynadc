@@ -3,9 +3,9 @@ This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
-Methods to query the NADC GOSAT-2 SQLite database
+Methods to query the NADC GOSAT-2 Level-2 SQLite database
 
-Copyright (c) 2019 SRON - Netherlands Institute for Space Research
+Copyright (c) 2019-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
@@ -62,15 +62,7 @@ def get_product_by_name(args=None, dbname=None, product=None,
 
     if product[0:11] != 'GOSAT2TFTS2':
         raise ValueError('expect an FTS L1B product')
-
-    if product[29:32] == '1BS':
-        table = 'swir_l1b'
-    elif product[29:32] == '1BT':
-        table = 'tir_l1b'
-    elif product[29:32] == '1BC':
-        table = 'common_l1b'
-    else:
-        raise ValueError('expect GOSAT-2 band SWIR, TIR or COMMON')
+    table = 'swpr'
 
     if dump:
         select_str = '*'
@@ -123,8 +115,7 @@ def get_product_by_name(args=None, dbname=None, product=None,
 
 # --------------------------------------------------
 def get_product_by_type(args=None, dbname=None, prod_type=None,
-                        date=None, rtime=None,
-                        band=None, prod_version=None,
+                        date=None, rtime=None, prod_version=None,
                         to_screen=False, debug=False):
     """
     Query NADC GOSAT-2 SQLite database on product type with data selections
@@ -137,8 +128,6 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
     prod_type : type of product, supported 1B_FTS [value required]
     date      : select on dateTimeStart [default: None]
     rtime     : select on receiveTime [default: None]
-    band      : select on band and observation mode, supported
-                SWIR_DAY, TIR_DAY, TIR_NIGHT, COMMON_DAY, COMMON_NIGHT
     prod_version : select on product version:
                 algorithmVersion + parameterVersion [default: None]
     to_screen  : print query result to standard output [default: False]
@@ -151,7 +140,6 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
     if args:
         dbname = args.dbname
         prod_type = args.type
-        band = args.band
         prod_version = args.prod_version
         date = args.date
         rtime = args.rtime
@@ -165,17 +153,8 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
         print('Fatal, can not find SQLite database: %s' % dbname)
         return []
 
-    if prod_type != '1B_FTS':
-        raise ValueError('not supported product type: {}'.format(prod_type))
-
-    if band.startswith('SWIR'):
-        table = 'swir_l1b'
-    elif band.startswith('TIR'):
-        table = 'tir_l1b'
-    elif band.startswith('COMMON'):
-        table = 'common_l1b'
-    else:
-        raise ValueError('expect GOSAT-2 band to be SWIR, TIR or COMMON')
+    # meta-Table name is productAlgo (lowe case)
+    table = args.type.lower()
 
     ## define query on meta-Table
     query_str = ['select pathID, name from {}'.format(table)]
@@ -233,27 +212,13 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
         else:
             query_str.append(mystr.format(rtime[:-1], 'day'))
 
-    if band:
-        if len(query_str) == 1:
-            query_str.append('where')
-        else:
-            query_str.append('and')
-
-        if band.endswith('DAY'):
-            query_str.append('operationMode == \'OB1D\'')
-        elif band.endswith('NIGHT'):
-            query_str.append('operationMode == \'OB1N\'')
-        else:
-            raise ValueError('expect GOSAT-2 band to contain DAY or NIGHT')
-
     if prod_version:
         if len(query_str) == 1:
             query_str.append('where')
         else:
             query_str.append('and')
 
-        query_str.append('algorithmVersion == \'%s\'' % prod_version[:3])
-        query_str.append('and paramVersion == \'%s\'' % prod_version[3:])
+        query_str.append('productVersion == \'%s\'' % prod_version)
 
     row_list = []
     if debug:

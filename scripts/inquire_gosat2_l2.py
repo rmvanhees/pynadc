@@ -30,10 +30,8 @@ def main() -> None:
 
     if Path('/data/gosat2/share/db/sron_gosat2_l2.db').is_file():
         db_name = '/data/gosat2/share/db/sron_gosat2_l2.db'
-    elif Path('/nfs/GOSAT2/share/db/sron_gosat2_l2.db').is_file():
-        db_name = '/nfs/GOSAT2/share/db/sron_gosat2_l2.db'
     else:
-        raise FileNotFoundError('sron_gosat2_l2.db')
+        db_name = '/nfs/GOSAT2/share/db/sron_gosat2_l2.db'
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--dbname', type=str, default=db_name,
@@ -55,7 +53,7 @@ def main() -> None:
     # define subparsers for queries on product type
     parser_type = subparsers.add_parser('type',
                                         help='options to select product type')
-    parser_type.add_argument('type', choices=type_opts, default='SWPR',
+    parser_type.add_argument('--type', choices=type_opts, default='SWPR',
                              help='Level-2 algorithm to select')
     parser_type.add_argument('--prod_version', type=str,
                              help='select entries on product version')
