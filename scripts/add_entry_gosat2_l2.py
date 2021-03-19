@@ -24,10 +24,8 @@ def cleanup_string(dset) -> str:
     Returns bytes as string
     """
     if len(dset) == 1:
-        print(dset.name, dset[0])
         return dset[0].decode('ascii').rstrip('\0')
 
-    print(dset.name, dset[:])
     return dset[:].tobytes().decode('ascii').rstrip('\0')
 
 
@@ -255,7 +253,6 @@ class ArchiveGosat2L2():
         cur.execute('PRAGMA foreign_keys = ON')
 
         # obtain pathID from table base-dirs
-        print('basedir ', basedir)
         cur.execute(str_path_sql % (basedir, basedir))
         row = cur.fetchone()
         if row is not None:
