@@ -205,8 +205,9 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
         else:
             query_str.append('and')
 
-        mystr = 'receiveDate between datetime(\'now\',\'-{} {}\')' \
-            + ' and datetime(\'now\')'
+        mystr = ("receiveDate between"
+                 " strftime('%Y-%m-%dT%H:%M:%S',\'now\',\'-{} {}\')"
+                 " and strftime('%Y-%m-%dT%H:%M:%S',\'now\')")
         if rtime[-1] == 'h':
             query_str.append(mystr.format(rtime[:-1], 'hour'))
         else:
