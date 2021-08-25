@@ -5,13 +5,13 @@ https://github.com/rmvanhees/pynadc
 
 Methods to query the NADC Sciamachy SQLite database
 
-Copyright (c) 2012 SRON - Netherlands Institute for Space Research
+Copyright (c) 2012-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
 """
-import sqlite3
 from pathlib import Path
+import sqlite3
 
 
 # --------------------------------------------------
@@ -63,6 +63,7 @@ def get_product_by_name(args=None, dbname=None, product=None,
     query_str = 'select {} from {} where name=\'{}\''.format(select_str,
                                                              table,
                                                              product)
+    # pylint: disable=no-member
     conn = sqlite3.connect(dbname)
     if dump:
         conn.row_factory = sqlite3.Row
@@ -247,6 +248,7 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
         print(''.join(query_str))
         return []
 
+    # pylint: disable=no-member
     row_list = []
     conn = sqlite3.connect(dbname)
     if dump:

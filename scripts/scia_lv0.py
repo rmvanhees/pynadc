@@ -3,16 +3,20 @@ This file is part of pynadc
 
 https://github.com/rmvanhees/pynadc
 
-Read Sciamachy level 0 products in ENVISAT format 
+Read Sciamachy level 0 products in ENVISAT format
 
-Copyright (c) 2016 SRON - Netherlands Institute for Space Research
+Copyright (c) 2016-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
 """
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from pathlib import Path
 
 import numpy as np
+
+from pynadc.scia import db, lv0
+
 
 # - global parameters ------------------------------
 
@@ -69,10 +73,6 @@ def main():
     """
     main function of module 'scia_lv0'
     """
-    from argparse import ArgumentParser, RawDescriptionHelpFormatter
-
-    from pynadc.scia import db, lv0
-
     parser = ArgumentParser(
         formatter_class=RawDescriptionHelpFormatter,
         description='read Sciamachy level 0 product'
@@ -117,10 +117,10 @@ def main():
 
     # show the ASCII headers of the level 0 product and exit
     if args.only_headers:
-        for key in fid.mph:
-            print('MPH: ', key, fid.mph[key])
-        for key in fid.sph:
-            print('SPH: ', key, fid.sph[key])
+        for key, value in fid.mph.items():
+            print('MPH: ', key, value)
+        for key, value in fid.sph.items():
+            print('SPH: ', key, value)
         for ni, dsd_rec in enumerate(fid.dsd):
             for key in dsd_rec:
                 print('DSD[{:02d}]: '.format(ni), key, dsd_rec[key])
@@ -136,6 +136,6 @@ def main():
     check_dsr_in_states(pmd_isp, verbose=False)
 
 
-#--------------------------------------------------
+# --------------------------------------------------
 if __name__ == '__main__':
     main()

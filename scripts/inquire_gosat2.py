@@ -5,7 +5,7 @@ https://github.com/rmvanhees/pynadc
 
 Perform pre-defined queries on the SQLite database of a GOSAT-2 product archive
 
-Copyright (c) 2019 SRON - Netherlands Institute for Space Research
+Copyright (c) 2019-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
@@ -14,6 +14,7 @@ import argparse
 from pathlib import Path
 
 from pynadc.gosat2 import db
+
 
 # - local functions --------------------------------------------
 def scia_orbit_range(string) -> list:

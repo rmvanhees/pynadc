@@ -5,15 +5,16 @@ https://github.com/rmvanhees/pynadc
 
 Methods to query the NADC GOSAT SQLite database
 
-Copyright (c) 2016 SRON - Netherlands Institute for Space Research
+Copyright (c) 2016-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
 """
-import socket
+import platform
 import sqlite3
 
 from pathlib import Path
+
 
 def date_subdir(name):
     """
@@ -51,19 +52,16 @@ def get_product_by_name(args=None, dbname=None, product=None,
     if dbname is None:
         print('Fatal, SQLite database is not specified')
         return []
-        
+
     if not Path(dbname).is_file():
         print('Fatal, can not find SQLite database: %s' % dbname)
         return []
 
-    level_1x = False
     if product[0:9] == 'GOSATTCAI':
         table = 'tcai__2P'
         select_str = 'pathID. name'
     else:
         table = 'tfts__1P'
-        if product.find('_1X') > 0:
-            level_1x = True
         select_str = 'pathID, observationMode, productVersion, name'
     if dump:
         select_str = '*'
@@ -71,7 +69,8 @@ def get_product_by_name(args=None, dbname=None, product=None,
     query_str = 'select {} from {} where name=\'{}\''.format(select_str,
                                                              table,
                                                              product)
-    ## perform query on database
+    # perform query on database
+    # pylint: disable=no-member
     conn = sqlite3.connect(dbname)
     if dump:
         conn.row_factory = sqlite3.Row
@@ -86,10 +85,10 @@ def get_product_by_name(args=None, dbname=None, product=None,
             conn.close()
             return []
 
-    ## obtain root directories (local or NFS)
+    # obtain root directories (local or NFS)
     if not dump:
         case_str = 'case when hostName == \'{}\''\
-            ' then localPath else nfsPath end'.format(socket.gethostname())
+            ' then localPath else nfsPath end'.format(platform.node())
         query_str = 'select {} from rootPaths where pathID={}'.format(case_str,
                                                                       row[0])
         if debug:
@@ -108,12 +107,13 @@ def get_product_by_name(args=None, dbname=None, product=None,
 
     if len(row) == 2:
         full_path = Path(root, row[1])
-    else:                    ## should check for len(row) equals 4
+    else:                               # should check for len(row) equals 4
         full_path = Path(root, row[1], row[2], date_subdir(row[3]))
 
     if to_screen:
         print(full_path)
     return str(full_path)
+
 
 # --------------------------------------------------
 def get_product_by_type(args=None, dbname=None, prod_type=None,
@@ -154,7 +154,7 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
     if dbname is None:
         print('Fatal, SQLite database is not specified')
         return []
-        
+
     if not Path(dbname).is_file():
         print('Fatal, can not find SQLite database: %s' % dbname)
         return []
@@ -166,16 +166,16 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
         table = 'tcai__2P'
         select_str = 'pathID, name'
 
-    ## define query on meta-Table
+    # define query on meta-Table
     query_str = ['select {} from {}'.format(select_str, table)]
 
-    ## define query to obtain root directories (local or NFS)
+    # define query to obtain root directories (local or NFS)
     case_str = 'case when hostName == \'{}\''\
-               ' then localPath else nfsPath end'.format(socket.gethostname())
+        ' then localPath else nfsPath end'.format(platform.node())
     query_str2 = \
-                'select {} from rootPaths where pathID={}'
+        'select {} from rootPaths where pathID={}'
 
-    ## perform selection on datetime
+    # perform selection on datetime
     if date:
         if len(query_str) == 1:
             query_str.append(' where')
@@ -241,6 +241,7 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
         print(query_str2.format(case_str, 1))
         return []
 
+    # pylint: disable=no-member
     conn = sqlite3.connect(dbname)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()

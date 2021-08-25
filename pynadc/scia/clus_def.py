@@ -5,12 +5,17 @@ https://github.com/rmvanhees/pynadc
 
 Definition of Sciamachy instrument and cluster configurations
 
-Copyright (c) 2012 SRON - Netherlands Institute for Space Research
+Copyright (c) 2012-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
 """
+from operator import itemgetter
+
+import h5py
 import numpy as np
+
+from .hk import get_det_vis_pet, get_det_ir_pet
 
 
 def clusdef_dtype():
@@ -30,6 +35,7 @@ def clusdef_dtype():
         ('start', 'u2'),
         ('length', 'u2')
     ])
+
 
 def state_dtype():
     """
@@ -56,6 +62,7 @@ def state_dtype():
         ('intg', 'u2', (56)),
         ('pet', 'f4', (56))
     ])
+
 
 def clus_conf(nclus):
     """
@@ -269,8 +276,6 @@ def state_conf_db(state_id, orbit,
     -------
     state configuration
     """
-    import h5py
-
     with h5py.File(db_name, 'r') as fid:
         grp = fid["State_{:02d}".format(state_id)]
         state_conf = grp['state_conf'][orbit]
@@ -292,10 +297,6 @@ def state_conf_data(det_isp):
     -------
     state configuration
     """
-    from operator import itemgetter
-
-    from .hk import get_det_vis_pet, get_det_ir_pet
-
     # check input data
     state_id = det_isp['data_hdr']['state_id']
     if not np.all(state_id == state_id[0]):

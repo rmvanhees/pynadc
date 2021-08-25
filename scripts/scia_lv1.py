@@ -5,12 +5,16 @@ https://github.com/rmvanhees/pynadc
 
 Read Sciamachy level 1b products in ENVISAT format
 
-Copyright (c) 2016 SRON - Netherlands Institute for Space Research
+Copyright (c) 2016-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
 """
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from pathlib import Path
+
+from pynadc.scia import db, lv1
+
 
 # - global parameters ------------------------------
 
@@ -23,10 +27,6 @@ def main():
     """
     main function of module 'scia_lv1'
     """
-    from argparse import ArgumentParser, RawDescriptionHelpFormatter
-
-    from pynadc.scia import db, lv1
-
     parser = ArgumentParser(
         formatter_class=RawDescriptionHelpFormatter,
         description='read Sciamachy level 1b product'
