@@ -91,15 +91,15 @@ def sql_write_basedirs(dbname):
     write names of directories where to find the GOSAT products
     """
     list_paths = [
-        {"host": 'shogun',
-         "path": '/array/slot1F/GOSAT/L1X_FTS',
-         "nfs": '/nfs/GOSAT/L1X_FTS'},
-        {"host": 'shogun',
-         "path": '/array/slot1F/GOSAT/L1B_FTS',
-         "nfs": '/nfs/GOSAT/LV1B_FTS'},
-        {"host": 'shogun',
-         "path": '/array/slot1F/GOSAT/L2_CAI',
-         "nfs": '/nfs/GOSAT/L2_CAI'}
+        {"host": 'poseidon',
+         "path": '/array/slot2B/GOSAT/FTS/L1X',
+         "nfs": '/nfs/GOSAT/FTS/L1X'},
+        {"host": 'poseidon',
+         "path": '/array/slot2B/GOSAT/FTS/L1B',
+         "nfs": '/nfs/GOSAT/FTS/L1B'},
+        {"host": 'poseidon',
+         "path": '/array/slot2B/GOSAT/CAI/L2',
+         "nfs": '/nfs/GOSAT/CAI/L2'}
     ]
 
     str_sql = ('insert into rootPaths values'
