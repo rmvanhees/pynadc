@@ -5,11 +5,12 @@ https://github.com/rmvanhees/pynadc
 
 Defines class ArchiveScia to add new entries to Sciamachy SQLite database
 
-Copyright (c) 2016 SRON - Netherlands Institute for Space Research
+Copyright (c) 2016-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
 """
+import argparse
 import gzip
 import sqlite3
 
@@ -529,8 +530,6 @@ def main():
     """
     main function
     """
-    import argparse
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False,
                         help='show what will be done, but do nothing')

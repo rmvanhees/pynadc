@@ -73,15 +73,20 @@ Bug reporting
 Please report issues at the pyNADC Github page:
 https://github.com/rmvanhees/pynadc.git
 
-Copyright (c) 2016 SRON - Netherlands Institute for Space Research
+Copyright (c) 2016-2021` SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
 """
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from pathlib import Path
+from time import gmtime, strftime
 
 import h5py
 import numpy as np
+
+from pynadc.scia import clus_def, db, lv1
+
 
 # - global parameters ------------------------------
 VERSION = '2.1.0'
@@ -1253,17 +1258,15 @@ class ClusDB:
         """
         Create and initialize the state definition database.
         """
-        from time import gmtime, strftime
-        from pynadc.scia import clus_def
-
         self.fid = h5py.File(self.db_name, 'w', libver='latest',
                              driver='core', backing_store=True)
         #
         # add global attributes
         #
-        self.fid.attrs['title'] = 'Sciamachy state-cluster definition database'
+        self.fid.attrs['title'] = \
+            'Sciamachy state-cluster definition database'
         self.fid.attrs['institution'] = \
-                        'SRON Netherlands Institute for Space Research (Earth)'
+            'SRON Netherlands Institute for Space Research (Earth)'
         self.fid.attrs['source'] = 'Sciamachy Level 1b (SCIA/8.01)'
         self.fid.attrs['program_version'] = VERSION
         self.fid.attrs['creation_date'] = strftime('%Y-%m-%d %T %Z', gmtime())
@@ -1360,10 +1363,6 @@ def main():
     """
     main function
     """
-    from argparse import ArgumentParser, RawDescriptionHelpFormatter
-
-    from pynadc.scia import db, lv1
-
     parser = ArgumentParser(
         formatter_class=RawDescriptionHelpFormatter,
         description='combine Sciamachy state cluster definitions into database')

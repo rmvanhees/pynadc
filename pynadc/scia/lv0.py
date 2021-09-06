@@ -18,7 +18,7 @@ Statistics on proc-stage
   46665 P
      52 S
 
-Copyright (c) 2012 SRON - Netherlands Institute for Space Research
+Copyright (c) 2012-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
@@ -26,6 +26,9 @@ License:  BSD-3-Clause
 from pathlib import Path
 
 import numpy as np
+
+from .hk import get_det_temp, mjd_to_datetime
+
 
 # - global parameters ------------------------------
 
@@ -332,73 +335,74 @@ class File():
         """
         read Sciamachy level 0 MPH header
         """
-        fp = open(self.filename, 'rt', encoding='latin-1')
+        def strip_unit(mystr: str, key: str) -> str:
+            indx = mystr.find(key)
+            if indx != -1:
+                return mystr[0:indx]
+            return None
 
-        for line in fp:
-            words = line[:-1].split('=')
-            # only process (key,value)
-            if len(words) != 2:
-                continue
+        with open(self.filename, 'rt', encoding='latin-1') as fp:
+            for line in fp:
+                words = line[:-1].split('=')
+                # only process (key,value)
+                if len(words) != 2:
+                    continue
 
-            # end of MPH header
-            if words[0] == 'SPH_DESCRIPTOR':
-                break
+                # end of MPH header
+                if words[0] == 'SPH_DESCRIPTOR':
+                    break
 
-            if words[1][0] == '\"':
-                self.mph[words[0]] = words[1].strip('\"').rstrip()
-            elif len(words[1]) == 1:
-                self.mph[words[0]] = words[1]
-            elif words[1].find('<s>') > 0:
-                self.mph[words[0]] = float(words[1][0:words[1].find('<s>')])
-            elif words[1].find('<m>') > 0:
-                self.mph[words[0]] = float(words[1][0:words[1].find('<m>')])
-            elif words[1].find('<m/s>') > 0:
-                self.mph[words[0]] = float(words[1][0:words[1].find('<m/s>')])
-            elif words[1].find('<ps>') > 0:
-                self.mph[words[0]] = int(words[1][0:words[1].find('<ps>')])
-            elif words[1].find('<bytes>') > 0:
-                self.mph[words[0]] = int(words[1][0:words[1].find('<bytes>')])
-            else:
-                self.mph[words[0]] = int(words[1])
-
-        fp.close()
+                if words[1][0] == '\"':
+                    self.mph[words[0]] = words[1].strip('\"').rstrip()
+                elif len(words[1]) == 1:
+                    self.mph[words[0]] = words[1]
+                elif words[1].find('>') == -1:
+                    self.mph[words[0]] = int(words[1])
+                else:
+                    for unit in ['<s>', '<m>', '<m/s>', '<ps>', '<bytes>']:
+                        buff = strip_unit(words[1], unit)
+                        if buff is None:
+                            continue
+                        self.mph[words[0]] = float(buff)
 
     def __get_sph__(self):
         """
         read Sciamachy level 0 SPH header
         """
-        fp = open(self.filename, 'rt', encoding='latin-1')
-        fp.seek(lv0_consts('mph_size'))     # skip MPH header
+        def strip_unit(mystr: str, key: str) -> str:
+            indx = mystr.find(key)
+            if indx != -1:
+                return mystr[0:indx]
+            return None
 
-        for line in fp:
-            words = line.split('=')
-            # only process (key,value)
-            if len(words) != 2:
-                continue
-            # end of SPH header
-            if words[0] == 'DS_NAME':
-                break
+        with open(self.filename, 'rt', encoding='latin-1') as fp:
+            fp.seek(lv0_consts('mph_size'))     # skip MPH header
 
-            if words[1][0] == '\"':
-                self.sph[words[0]] = words[1].strip("\"").rstrip()
-            elif len(words[1]) == 1:
-                self.sph[words[0]] = words[1]
-            elif words[1].find('<10-6degN>') > 0:
-                self.sph[words[0]] = int(
-                    words[1][0:words[1].find('<10-6degN>')]) * 1e-6
-            elif words[1].find('<10-6degE>') > 0:
-                self.sph[words[0]] = int(
-                    words[1][0:words[1].find('<10-6degE>')]) * 1e-6
-            elif words[1].find('<deg>') > 0:
-                self.sph[words[0]] = float(words[1][0:words[1].find('<deg>')])
-            elif words[1].find('<%>') > 0:
-                self.sph[words[0]] = float(words[1][0:words[1].find('<%>')])
-            elif words[1].find('<>') > 0:
-                self.sph[words[0]] = float(words[1][0:words[1].find('<>')])
-            else:
-                self.sph[words[0]] = int(words[1])
+            for line in fp:
+                words = line.split('=')
+                # only process (key,value)
+                if len(words) != 2:
+                    continue
 
-        fp.close()
+                # end of SPH header
+                if words[0] == 'DS_NAME':
+                    break
+
+                if words[1][0] == '\"':
+                    self.sph[words[0]] = words[1].strip("\"").rstrip()
+                elif len(words[1]) == 1:
+                    self.sph[words[0]] = words[1]
+                elif words[1].find('>') == -1:
+                    self.sph[words[0]] = int(words[1])
+                else:
+                    for unit in ['<10-6degE>', '<10-6degN>',
+                                 '<deg>', '<%>', '<>']:
+                        buff = strip_unit(words[1], unit)
+                        if buff is None:
+                            continue
+                        self.mph[words[0]] = float(buff)
+                        if unit in ('<10-6degE>', '<10-6degN>'):
+                            self.mph[words[0]] *= 1e-6
 
     def __get_dsd__(self):
         """
@@ -407,36 +411,33 @@ class File():
         num_dsd = 0
         self.dsd = [{}]
 
-        fp = open(self.filename, 'rt', encoding='latin-1')
-        # skip headers MPH & SPH
-        fp.seek(lv0_consts('mph_size') + self.mph['SPH_SIZE']
-                - self.mph['NUM_DSD'] * self.mph['DSD_SIZE'])
+        with open(self.filename, 'rt', encoding='latin-1') as fp:
+            # skip headers MPH & SPH
+            fp.seek(lv0_consts('mph_size') + self.mph['SPH_SIZE']
+                    - self.mph['NUM_DSD'] * self.mph['DSD_SIZE'])
 
-        for line in fp:
-            words = line[:-1].split('=')
-            # only process (key,value)
-            if len(words) != 2:
-                continue
+            for line in fp:
+                words = line[:-1].split('=')
+                # only process (key,value)
+                if len(words) != 2:
+                    continue
 
-            if words[1][0] == '\"':
-                self.dsd[num_dsd][words[0]] = words[1].strip('\"').rstrip()
-            elif len(words[1]) == 1:
-                self.dsd[num_dsd][words[0]] = words[1]
-            elif words[1].find('<bytes>') > 0:
-                self.dsd[num_dsd][words[0]] = \
-                    int(words[1][0:words[1].find('<bytes>')])
-            else:
-                self.dsd[num_dsd][words[0]] = int(words[1])
-
-            # end of DSD header
-            if words[0] == 'DSR_SIZE':
-                num_dsd += 1
-                if num_dsd+1 == self.mph['NUM_DSD']:
-                    break
+                if words[1][0] == '\"':
+                    self.dsd[num_dsd][words[0]] = words[1].strip('\"').rstrip()
+                elif len(words[1]) == 1:
+                    self.dsd[num_dsd][words[0]] = words[1]
+                elif words[1].find('<bytes>') > 0:
+                    self.dsd[num_dsd][words[0]] = \
+                        int(words[1][0:words[1].find('<bytes>')])
                 else:
-                    self.dsd.append({})
+                    self.dsd[num_dsd][words[0]] = int(words[1])
 
-        fp.close()
+                # end of DSD header
+                if words[0] == 'DSR_SIZE':
+                    num_dsd += 1
+                    if num_dsd+1 == self.mph['NUM_DSD']:
+                        break
+                    self.dsd.append({})
 
     def bytes_remain(self, isp, read_sofar=0):
         """
@@ -981,8 +982,6 @@ class File():
         """
         combines readouts of one science channel for a given state ID
         """
-        from .hk import get_det_temp, mjd_to_datetime
-
         if not isinstance(state_id, int):
             raise ValueError("state_id must be an integer")
 

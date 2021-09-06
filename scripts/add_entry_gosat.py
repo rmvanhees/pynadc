@@ -5,11 +5,12 @@ https://github.com/rmvanhees/pynadc
 
 Defines class ArchiveGosat to add new entries to GOSAT SQLite database
 
-Copyright (c) 2016 SRON - Netherlands Institute for Space Research
+Copyright (c) 2016-2021 SRON - Netherlands Institute for Space Research
    All Rights Reserved
 
 License:  BSD-3-Clause
 """
+import argparse
 import sqlite3
 
 from pathlib import Path
@@ -206,43 +207,43 @@ class ArchiveGosat():
                 dict_gosat['sensorName'] = dset[:].tobytes().decode('ascii')
                 dset = grp['algorithmName']
                 dict_gosat['algorithmName'] = \
-                                            dset[:].tobytes().decode('ascii')
+                    dset[:].tobytes().decode('ascii')
                 dset = grp['algorithmVersion']
                 dict_gosat['algorithmVersion'] = \
-                                            dset[:].tobytes().decode('ascii')
+                    dset[:].tobytes().decode('ascii')
                 dset = grp['parameterVersion']
                 dict_gosat['paramVersion'] = dset[:].tobytes().decode('ascii')
                 dset = grp['observationMode']
                 dict_gosat['observationMode'] = \
-                                            dset[:].tobytes().decode('ascii')
+                    dset[:].tobytes().decode('ascii')
 
                 grp = fid['/ancillary/OrbitData']
                 dset = grp['startDate']
                 dict_gosat['dateTimeStart'] = \
-                        "%04d-%02d-%02d %02d:%02d:%09.6f" % dset[0].tolist()
+                    "%04d-%02d-%02d %02d:%02d:%09.6f" % dset[0].tolist()
             elif '/globalAttribute' in fid:
                 grp = fid['/globalAttribute/metadata']
                 dset = grp['dateStamp']
                 dict_gosat['creationDate'] = \
-                                        np.string_(dset[...]).decode('ascii')
+                    np.string_(dset[...]).decode('ascii')
                 grp = fid['/globalAttribute/extensionMetadata']
                 dset = grp['algorithmName']
                 dict_gosat['algorithmName'] = \
-                                        np.string_(dset[...]).decode('ascii')
+                    np.string_(dset[...]).decode('ascii')
                 dset = grp['algorithmVersion']
                 dict_gosat['algorithmVersion'] = \
-                                        np.string_(dset[...]).decode('ascii')
+                    np.string_(dset[...]).decode('ascii')
                 dset = grp['parameterVersion']
                 dict_gosat['paramVersion'] = \
-                                        np.string_(dset[...]).decode('ascii')
+                    np.string_(dset[...]).decode('ascii')
                 dset = grp['sensorName']
                 dict_gosat['sensorName'] = \
-                                        np.string_(dset[...]).decode('ascii')
+                    np.string_(dset[...]).decode('ascii')
 
                 grp = fid['/ancillary/orbitData']
                 dset = grp['startDate']
                 dict_gosat['dateTimeStart'] = \
-                        "%04d-%02d-%02d %02d:%02d:%09.6f" % dset[0].tolist()
+                    "%04d-%02d-%02d %02d:%02d:%09.6f" % dset[0].tolist()
             else:
                 return {}
 
@@ -382,8 +383,6 @@ def main():
     """
     main function
     """
-    import argparse
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False,
                         help='show what will be done, but do nothing')

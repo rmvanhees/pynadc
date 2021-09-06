@@ -10,19 +10,20 @@ Copyright (c) 2019 SRON - Netherlands Institute for Space Research
 
 License:  BSD-3-Clause
 """
-import socket
+import platform
 import sqlite3
 
 from pathlib import Path
+
 
 def subdir_from_product(name):
     """
     Define function to construct date sub-directories from FTS product-name:
      1) observationName: [COMMON|SWIR|TIR]_[DAY|NIGHT]
-     2) productVersion: [6\d]
-     3) Year: [4\d]
-     4) Month: [2\d]
-     5) Day: [2\d]
+     2) productVersion: [xxxxxx]
+     3) Year: [yyyy]
+     4) Month: [mm]
+     5) Day: [dd]
     """
     obs_name = None
     if name[29:32] == '1BS':
@@ -99,7 +100,8 @@ def get_product_by_name(args=None, dbname=None, product=None,
     query_str = 'select {} from {} where name=\'{}\''.format(select_str,
                                                              table,
                                                              product)
-    ## perform query on database
+    # perform query on database
+    # pylint: disable=no-member
     conn = sqlite3.connect(dbname)
     if dump:
         conn.row_factory = sqlite3.Row
@@ -114,10 +116,10 @@ def get_product_by_name(args=None, dbname=None, product=None,
             conn.close()
             return []
 
-    ## obtain root directories (local or NFS)
+    # obtain root directories (local or NFS)
     if not dump:
         case_str = 'case when hostName == \'{}\''\
-            ' then localPath else nfsPath end'.format(socket.gethostname())
+            ' then localPath else nfsPath end'.format(platform.node())
         query_str = 'select {} from rootPaths where pathID={}'.format(case_str,
                                                                       row[0])
         if debug:
@@ -139,6 +141,7 @@ def get_product_by_name(args=None, dbname=None, product=None,
         print(full_path)
 
     return str(full_path)
+
 
 # --------------------------------------------------
 def get_product_by_type(args=None, dbname=None, prod_type=None,
@@ -196,15 +199,15 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
     else:
         raise ValueError('expect GOSAT-2 band to be SWIR, TIR or COMMON')
 
-    ## define query on meta-Table
+    # define query on meta-Table
     query_str = ['select pathID, name from {}'.format(table)]
 
-    ## define query to obtain root directories (local or NFS)
+    # define query to obtain root directories (local or NFS)
     case_str = 'case when hostName == \'{}\''\
-               ' then localPath else nfsPath end'.format(socket.gethostname())
+               ' then localPath else nfsPath end'.format(platform.node())
     query_str2 = 'select {} from rootPaths where pathID={}'
 
-    ## perform selection on datetime
+    # perform selection on datetime
     if date:
         if len(query_str) == 1:
             query_str.append('where')
@@ -274,6 +277,7 @@ def get_product_by_type(args=None, dbname=None, prod_type=None,
         query_str.append('algorithmVersion == \'%s\'' % prod_version[:3])
         query_str.append('and paramVersion == \'%s\'' % prod_version[3:])
 
+    # pylint: disable=no-member
     row_list = []
     if debug:
         print(' '.join(query_str))
