@@ -1,7 +1,60 @@
 # pyproject.toml
 [build-system]
-build-backend = "setuptools.build_meta"
-requires = ["setuptools", "wheel", "setuptools_scm[toml]"]
+requires = [
+   "hatchling",
+   "versioningit",
+]
+build-backend = "hatchling.build"
 
+dynamic = [
+  "version",
+]
 
-[tool.setuptools_scm]
+[tool.hatch.build.targets.sdist]
+
+[tool.hatch.version]
+source = "versioningit"
+
+[tool.versioningit]
+
+[tool.versioningit.next-version]
+method = "smallest"
+
+[tool.versioningit.format]
+distance = "{next_version}.dev{distance}+{vcs}{rev}"
+dirty = "{base_version}+d{build_date:%Y%m%d}"
+distance-dirty = "{next_version}.dev{distance}+{vcs}{rev}.d{build_date:%Y%m%d}"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = [
+        "pilots",
+        "tests",
+]
+
+[tool.ruff.lint]
+select = [
+  "D",    # pydocstyle
+  "E",    # pycodestyle
+  "F",    # pyflakes
+  "I",    # isort
+  "N",    # pep8-naming
+  "W",    # pycodestyle
+  "ANN",  # flake8-annotations
+  "B",    # flake8-bugbear
+  "ISC",  # flake8-implicit-str-concat
+  "PGH",  # flake8-pie
+  "Q",    # flake8-quotes
+  "SIM",  # flake8-simplify
+  "TID",  # flake8-tidy-imports
+  "TCH",  # flake8-type-checking
+  "NPY",  # NumPy-specific
+  "PERF", # Perflint
+  "RUF",  # Ruff Specific
+  "UP",   # pyupgrade
+]
+ignore = ["D203", "D213", "ISC001"]
+
+[lint.pydocstyle]
+convention = "pep257"
